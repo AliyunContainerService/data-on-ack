@@ -1,0 +1,145 @@
+global:
+  clusterProfile: Default
+
+dev-console:
+  replicaCount: 1
+  regionID: cn-beijing
+  image:
+    repository: registry-cn-beijing.ack.aliyuncs.com/acs/kubeai-dev-console
+    tag: v1.1.1-7731fc3d-aliyun
+    pullPolicy: Always
+    checkMysqlImageName: registry-cn-beijing.ack.aliyuncs.com/acs/busybox
+    checkMysqlImageTag: stable
+    commitAgentImageName: registry-cn-beijing.ack.aliyuncs.com/acs/commit-agent
+    commitAgentImageTag: v0.1.1-9d4e12d-aliyun
+  resources:
+    limits:
+      cpu: 2000m
+      memory: 500Mi
+    requests:
+      cpu: 500m
+      memory: 100Mi
+
+  imagePullSecrets: []
+  nameOverride: ""
+  fullnameOverride: ""
+
+  serviceAccount:
+    # Specifies whether a service account should be created
+    create: true
+    # Annotations to add to the service account
+    annotations: {}
+    # The name of the service account to use.
+    # If not set and create is true, a name is generated using the fullname template
+    name: ai-dev-console
+
+  podSecurityContext: {}
+    # fsGroup: 2000
+
+  securityContext: {}
+    # capabilities:
+    #   drop:
+    #   - ALL
+    # readOnlyRootFilesystem: true
+    # runAsNonRoot: true
+    # runAsUser: 1000
+
+  service:
+    type: ClusterIP
+    port: 80
+    constainerPort: 9090
+
+  console:
+    intlAccount: "false"
+    adminUid: ""
+    ingress:
+      enabled: false
+      annotations: {}
+      hosts:
+      - host: ai-dev-console.local
+        paths: []
+      tls: []
+
+  storage:
+    mysql:
+      enabled: true
+
+  nodeSelector: {}
+
+  tolerations: []
+
+  affinity: {}
+
+notebook:
+  replicaCount: 1
+
+  image:
+    repository: registry-cn-beijing.ack.aliyuncs.com/acs/notebook-controller
+    pullPolicy: Always
+    tag: v1.0.1-2d004d0-aliyun
+  imagePullSecrets: []
+  nameOverride: ""
+  fullnameOverride: ""
+  serviceAccount:
+    # Specifies whether a service account should be created
+    create: true
+    # Annotations to add to the service account
+    annotations: {}
+    # The name of the service account to use.
+    # If not set and create is true, a name is generated using the fullname template
+    name: "notebook-controller-service-account"
+
+labels:
+  app: notebook-controller
+
+
+persist:
+  replicaCount: 1
+
+  image:
+    repository: registry-cn-beijing.ack.aliyuncs.com/acs/kubeai-dev-console-operator
+    tag: v1.1.0-410e1db8-aliyun
+    pullPolicy: Always
+    checkMysqlImageName: registry-cn-beijing.ack.aliyuncs.com/acs/busybox
+    checkMysqlImageTag: stable
+  resources:
+    limits:
+      cpu: 2000m
+      memory: 500Mi
+    requests:
+      cpu: 500m
+      memory: 100Mi
+
+  imagePullSecrets: []
+  nameOverride: ""
+  fullnameOverride: ""
+
+  storage:
+    mysql:
+      enabled: true
+
+  serviceAccount:
+    # Specifies whether a service account should be created
+    create: true
+    # Annotations to add to the service account
+    annotations: {}
+    # The name of the service account to use.
+    # If not set and create is true, a name is generated using the fullname template
+    name: ai-dev-console-persist
+
+  podSecurityContext: {}
+    # fsGroup: 2000
+
+  securityContext: {}
+    # capabilities:
+    #   drop:
+    #   - ALL
+    # readOnlyRootFilesystem: true
+    # runAsNonRoot: true
+    # runAsUser: 1000
+
+  nodeSelector: {}
+
+  tolerations: []
+
+  affinity: {}

@@ -1,0 +1,97 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "admin-ui.fullname" . }}
+  labels:
+    {{- include "admin-ui.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "admin-ui.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "admin-ui.selectorLabels" . | nindent 8 }}
+    spec:
+    {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+      serviceAccountName: {{ include "admin-ui.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{ if .Values.storage.mysql.enabled }}
+      initContainers:
+        - name: check-mysql
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          image: "{{ .Values.image.checkMysqlImageName }}:{{ .Values.image.checkMysqlImageTag }}"
+          command: ['sh','-c','until nc -vz ack-mysql 3306 &> /dev/null; do echo mysql service is not ready,waiting...;sleep 2;done;']
+      {{ end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: MY_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: DASHBOARD_INGRESS_ENABLE
+              value: "{{ .Values.dashboard.ingress.enabled }}"
+            - name: DASHBOARD_ADMINUID
+              value: "{{ .Values.dashboard.adminUid }}"
+            - name: INTL_ACCOUNT
+              value: "{{ .Values.dashboard.intlAccount }}"
+            {{ if not .Values.storage.mysql.enabled }}
+            - name: MYSQL_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: kubeai-rds
+                  key: MYSQL_HOST
+            - name: MYSQL_DB_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: kubeai-rds
+                  key: MYSQL_DB_NAME
+            - name: MYSQL_USER
+              valueFrom:
+                secretKeyRef:
+                  name: kubeai-rds
+                  key: MYSQL_USER
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kubeai-rds
+                  key: MYSQL_PASSWORD
+            {{ end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.containerPort }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 20
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+    {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}

@@ -1,0 +1,345 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": "-- Grafana --",
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "gnetId": null,
+  "graphTooltip": 0,
+  "id": 5,
+  "iteration": 1628652150742,
+  "links": [
+    {
+      "icon": "external link",
+      "tags": [
+        "kube-ai-cluster-details"
+      ],
+      "type": "dashboards"
+    },
+    {
+      "icon": "external link",
+      "tags": [
+        "kube-ai-node-details"
+      ],
+      "type": "dashboards"
+    },
+    {
+      "icon": "external link",
+      "tags": [
+        "kube-ai-training-job-details"
+      ],
+      "type": "dashboards"
+    }
+  ],
+  "panels": [
+    {
+      "datasource": "KubeAICluster",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": null,
+            "filterable": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Max"
+            },
+            "properties": [
+              {
+                "id": "custom.displayMode",
+                "value": "auto"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Min"
+            },
+            "properties": [
+              {
+                "id": "custom.align",
+                "value": "left"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Used"
+            },
+            "properties": [
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.width",
+                "value": 149
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "User Group"
+            },
+            "properties": [
+              {
+                "id": "custom.align",
+                "value": "left"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 15,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 14,
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": false,
+            "displayName": "Organization"
+          },
+          {
+            "desc": false,
+            "displayName": "Quota Name"
+          },
+          {
+            "desc": false,
+            "displayName": "Resource Name"
+          }
+        ]
+      },
+      "pluginVersion": "7.3.5",
+      "targets": [
+        {
+          "expr": "max_over_time(arena_elastic_resource_quota_tree{user_group=~\"$QuotaName\",path=~\"$Organization\",resource_name=~\"$ResourceName\"}[20s])",
+          "format": "table",
+          "hide": false,
+          "instant": true,
+          "interval": "",
+          "legendFormat": "",
+          "refId": "B"
+        }
+      ],
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "ElasticQuota",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "Value": true,
+              "__name__": true,
+              "endpoint": true,
+              "instance": true,
+              "job": true,
+              "max": false,
+              "namespace": true,
+              "pod": true,
+              "pod_name": true,
+              "service": true,
+              "sort_key": true,
+              "user_group": false,
+              "user_name": true
+            },
+            "indexByName": {
+              "Time": 7,
+              "Value": 15,
+              "endpoint": 8,
+              "instance": 9,
+              "job": 10,
+              "max": 4,
+              "min": 5,
+              "namespace": 11,
+              "namespaces": 2,
+              "path": 0,
+              "pod": 12,
+              "pod_name": 13,
+              "resource_name": 3,
+              "service": 14,
+              "used": 6,
+              "user_group": 1
+            },
+            "renameByName": {
+              "max": "Max",
+              "min": "Min",
+              "namespaces": "Namespaces",
+              "path": "Organization",
+              "resource_name": "Resource Name",
+              "sort_key": "",
+              "used": "Used",
+              "user_group": "Quota Name"
+            }
+          }
+        }
+      ],
+      "type": "table"
+    }
+  ],
+  "refresh": "45s",
+  "schemaVersion": 26,
+  "style": "dark",
+  "tags": [
+    "kube-ai-resource-quota-details"
+  ],
+  "templating": {
+    "list": [
+      {
+        "allValue": null,
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "datasource": "KubeAICluster",
+        "definition": "label_values({__name__=~\"arena_elastic_resource_quota_tree\"},path)",
+        "error": null,
+        "hide": 0,
+        "includeAll": true,
+        "label": null,
+        "multi": true,
+        "name": "Organization",
+        "options": [],
+        "query": "label_values({__name__=~\"arena_elastic_resource_quota_tree\"},path)",
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "tagValuesQuery": "",
+        "tags": [],
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": true
+      },
+      {
+        "allValue": null,
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "datasource": "KubeAICluster",
+        "definition": "label_values({__name__=~\"arena_elastic_resource_quota_tree\",path=~\"$Organization\"},user_group)",
+        "error": null,
+        "hide": 0,
+        "includeAll": true,
+        "label": null,
+        "multi": true,
+        "name": "QuotaName",
+        "options": [],
+        "query": "label_values({__name__=~\"arena_elastic_resource_quota_tree\",path=~\"$Organization\"},user_group)",
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "tagValuesQuery": "",
+        "tags": [],
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": true
+      },
+      {
+        "allValue": null,
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "datasource": "KubeAICluster",
+        "definition": "label_values({__name__=~\"arena_elastic_resource_quota_tree\"},resource_name)",
+        "error": null,
+        "hide": 0,
+        "includeAll": true,
+        "label": null,
+        "multi": true,
+        "name": "ResourceName",
+        "options": [],
+        "query": "label_values({__name__=~\"arena_elastic_resource_quota_tree\"},resource_name)",
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "tagValuesQuery": "",
+        "tags": [],
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": true
+      }
+    ]
+  },
+  "time": {
+    "from": "now-30m",
+    "to": "now"
+  },
+  "timepicker": {
+    "refresh_intervals": [
+      "5s",
+      "10s",
+      "30s",
+      "45s",
+      "1m",
+      "5m",
+      "15m",
+      "30m",
+      "1h",
+      "2h",
+      "1d"
+    ]
+  },
+  "timezone": "",
+  "title": "Quota",
+  "uid": "lQlEV5aMk31",
+  "version": 2
+}

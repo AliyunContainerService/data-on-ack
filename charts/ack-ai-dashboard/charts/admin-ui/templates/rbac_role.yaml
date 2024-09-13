@@ -1,0 +1,211 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: kubeai:{{ .Release.Name }}
+  namespace: {{ .Release.Namespace }}
+rules:
+  - apiGroups:
+    - ""
+    resources:
+    - serviceaccounts
+    verbs:
+    - create
+    - get
+    - list
+    - update
+    - delete
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: kubeai:{{ .Release.Namespace }}:{{ .Release.Name }}
+rules:
+  - apiGroups:
+    - ""
+    resources:
+    - namespaces
+    - nodes
+    - nodes/*
+    - persistentvolumes
+    - persistentvolumeclaims
+    - events
+    - endpoints
+    verbs:
+    - get
+    - list
+  - apiGroups:
+    - ""
+    resources:
+    - configmaps #for arena role
+    - secrets
+    - pods
+    - pods/log
+    - pods/exec
+    - resourcequotas
+    verbs:
+    - '*'
+  - apiGroups:
+    - rbac.authorization.k8s.io
+    resources:
+    - clusterroles
+    - clusterrolebindings
+    - roles
+    - rolebindings
+    - serviceaccounts
+    verbs:
+    - get
+    - list
+    - create
+    - update
+    - delete
+  - apiGroups:
+    - apiextensions.k8s.io
+    resources:
+    - customresourcedefinitions
+    verbs:
+    - list
+    - get
+  - apiGroups:
+    - ""
+    - apps
+    - extensions
+    resources:
+    - deployments
+    - services
+    - services/proxy
+    - replicasets
+    - statefulsets
+    verbs:
+    - '*'
+  - apiGroups:
+    - batch
+    resources:
+    - '*'
+    verbs:
+    - '*'
+  - apiGroups:
+    - kubeflow.org
+    resources:
+    - tfjobs
+    - pytorchjobs
+    - mpijobs
+    verbs:
+    - '*'
+  - apiGroups:
+    - kai.alibabacloud.com
+    resources:
+    - '*'
+    verbs:
+    - '*'
+  - apiGroups:
+    - sparkoperator.k8s.io
+    resources:
+    - sparkapplications
+    verbs:
+    - '*'
+  - apiGroups:
+    - batch.volcano.sh
+    resources:
+    - '*'
+    verbs:
+    - '*'
+  - apiGroups:
+    - "apps.kubedl.io"
+    resources:
+    - crons
+    - crons/status
+    verbs:
+    - get
+    - list
+    - watch
+    - create
+    - update
+    - patch
+    - delete
+  - apiGroups:
+    - "data.kubeai.alibabacloud.com"
+    resources:
+    - users
+    - usergroups
+    verbs:
+    - '*'
+  - apiGroups:
+    - "data.fluid.io"
+    resources:
+    - '*'
+    verbs:
+    - '*'
+  - apiGroups:
+    - "scheduling.sigs.k8s.io"
+    resources:
+    - "elasticquotatrees"
+    verbs:
+    - '*'
+  - apiGroups:
+    - authentication.k8s.io
+    resources:
+    - tokenreviews
+    verbs:
+    - create
+  - apiGroups:
+    - "networking.k8s.io"
+    resources:
+    - ingresses
+    verbs:
+    - '*'
+  - apiGroups:
+    - ""
+    resources:
+    - serviceaccounts
+    verbs:
+    - create
+    - get
+    - list
+    - update
+    - delete
+  - apiGroups:
+    - argoproj.io
+    resources:
+    - workflows
+    verbs:
+    - '*'
+  - apiGroups:
+    - pipelines.kubeflow.org
+    resources:
+    - '*'
+    verbs:
+    - '*'             
+  - apiGroups:
+    - ""
+    resources:
+    - pipelines
+    verbs:
+    - '*'
+---
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: kubeai:{{ .Release.Name }}
+  namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: kubeai:{{ .Release.Name }}
+subjects:
+- kind: ServiceAccount
+  name: {{ include "admin-ui.serviceAccountName" . }}
+  namespace: {{ .Release.Namespace }}
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: kubeai:{{ .Release.Namespace }}:{{ .Release.Name }}
+  namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kubeai:{{ .Release.Namespace }}:{{ .Release.Name }}
+subjects:
+- kind: ServiceAccount
+  name: {{ include "admin-ui.serviceAccountName" . }}
+  namespace: {{ .Release.Namespace }}

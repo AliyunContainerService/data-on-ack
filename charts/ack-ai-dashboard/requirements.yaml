@@ -1,0 +1,7 @@
+dependencies:
+- name: admin-ui
+  repository: file://./subcharts/admin-ui
+  version: 0.1.0
+- name: grafana
+  repository: file://./subcharts/grafana
+  version: 0.1.0

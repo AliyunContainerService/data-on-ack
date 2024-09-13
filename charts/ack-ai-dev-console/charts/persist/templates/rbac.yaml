@@ -1,0 +1,143 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: kubeai:{{ .Release.Name }}:{{ .Chart.Name }}
+  namespace: {{ .Release.Namespace }}
+rules:
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  name: kubeai:{{ .Release.Namespace }}:{{ .Release.Name }}:{{ .Chart.Name }}
+rules:
+  - apiGroups:
+      - kubeflow.org
+    resources:
+      - tfjobs
+      - tfjobs/status
+      - pytorchjobs
+      - pytorchjobs/status
+    verbs:
+      - get
+      - list
+      - watch
+      - update
+      - patch
+  - apiGroups:
+      - xdl.kubedl.io
+    resources:
+      - xdljobs
+      - xdljobs/status
+    verbs:
+      - get
+      - list
+      - watch
+      - update
+      - patch
+  - apiGroups:
+      - xgboostjob.kubeflow.org
+    resources:
+      - xgboostjobs
+      - xgboostjobs/status
+    verbs:
+      - get
+      - list
+      - watch
+      - update
+      - patch
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - nodes
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - pods/status
+    verbs:
+      - get
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+  - apiGroups:
+    - kubeflow.org
+    resources:
+    - notebooks
+    - notebooks/status
+    verbs:
+    - get
+    - list
+    - watch
+    - update
+  - apiGroups:
+    - data.kubeai.alibabacloud.com
+    resources:
+    - users
+    verbs:
+    - get
+    - list
+  - apiGroups:
+    - "apps.kubedl.io"
+    resources:
+    - crons
+    - crons/status
+    verbs:
+    - get
+    - list
+    - watch
+  - apiGroups:
+    - batch
+    resources:
+    - jobs
+    verbs:
+    - get
+    - list
+    - watch
+    - update
+    - patch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: kubeai:{{ .Release.Name }}:{{ .Chart.Name }}
+  namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: kubeai:{{ .Release.Name }}:{{ .Chart.Name }}
+subjects:
+- kind: ServiceAccount
+  name: {{ include "dev-console-persist.serviceAccountName" . }}
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kubeai:{{ .Release.Namespace }}:{{ .Release.Name }}:{{ .Chart.Name }}
+  namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kubeai:{{ .Release.Namespace }}:{{ .Release.Name }}:{{ .Chart.Name }}
+subjects:
+- kind: ServiceAccount
+  name: {{ include "dev-console-persist.serviceAccountName" . }}
+  namespace: {{ .Release.Namespace }}

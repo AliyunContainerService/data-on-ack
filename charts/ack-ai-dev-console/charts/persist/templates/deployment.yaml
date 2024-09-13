@@ -1,0 +1,83 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "dev-console-persist.fullname" . }}
+  labels:
+    {{- include "dev-console-persist.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "dev-console-persist.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "dev-console-persist.selectorLabels" . | nindent 8 }}
+    spec:
+    {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+      serviceAccountName: {{ include "dev-console-persist.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{ if .Values.storage.mysql.enabled }}
+      initContainers:
+        - name: check-mysql
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          image: "{{ .Values.image.checkMysqlImageName }}:{{ .Values.image.checkMysqlImageTag }}"
+          command: ['sh','-c','until nc -vz ack-mysql 3306 &> /dev/null; do echo mysql service is not ready,waiting...;sleep 2;done;']
+      {{ end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: 
+            - --workloads=Persist
+            - --object-storage=mysql
+            - --enable-leader-election=false
+          env:
+            {{ if not .Values.storage.mysql.enabled }}
+            - name: MYSQL_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: kubeai-rds
+                  key: MYSQL_HOST
+            - name: MYSQL_DB_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: kubeai-rds
+                  key: MYSQL_DB_NAME
+            - name: MYSQL_USER
+              valueFrom:
+                secretKeyRef:
+                  name: kubeai-rds
+                  key: MYSQL_USER
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kubeai-rds
+                  key: MYSQL_PASSWORD
+            {{ end }}
+          ports:
+            - name: http
+              containerPort: 8443
+              protocol: TCP
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      nodeSelector:
+      {{- if eq (.Values.global.clusterProfile | default "Default") "Edge"  }}
+        alibabacloud.com/is-edge-worker: "false"
+      {{- end }}
+      tolerations:
+      {{- if eq (.Values.global.clusterProfile | default "Default") "Edge"  }}
+        - key: "node-role.alibabacloud.com/addon"
+          operator: "Exists"
+          effect: "NoSchedule"
+      {{- end }}
+    {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}

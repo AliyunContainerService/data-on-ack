@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "dev-console.fullname" . }}
+data:
+  aimasterConfig: |-
+    {
+    }
+  armsConfig: |-
+    {
+      "clusterId": "",
+      "armsUrl": "",
+      "armsRegion": ""
+    }
+  commonConfig: |-
+    {
+      "version": "2.0.0",
+      "namespace": "default",
+      "clusterId": "",
+      "default-tf-cpu-images": [],
+      "default-tf-gpu-images": [],
+      "default-pytorch-gpu-images": []
+    }
+  oauthConfig: |-
+    {
+      "aid": "",
+      "appId": "",
+      "appSecret": ""
+    }

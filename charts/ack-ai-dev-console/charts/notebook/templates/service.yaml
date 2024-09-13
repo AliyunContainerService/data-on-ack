@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: notebook-controller-service
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: notebook-controller
+spec:
+  ports:
+  - port: 8081
+  selector:
+    app: notebook-controller
+

@@ -1,0 +1,105 @@
+# Default values for ai-dashboard.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+grafana:
+  image:
+    repository: registry-cn-beijing.ack.aliyuncs.com/acs/grafana
+    tag: 7.3.5
+  adminUser: admin
+  adminPassword: "KubeAIGrafana12345"
+  datasources:
+    datasources.yaml:
+      apiVersion: 1
+      datasources:
+      - name: KubeAICluster
+        type: prometheus
+        url: ""
+        access: proxy
+        isDefault: true
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+      - name: 'default'
+        orgId: 1
+        folder: ''
+        type: file
+        disableDeletion: false
+        editable: true
+        options:
+          path: /var/lib/grafana/dashboards/default
+
+  downloadDashboardsImage:
+    repository: registry-cn-beijing.ack.aliyuncs.com/acs/curl
+    tag: 7.80.0
+
+  dashboards:
+    default:
+      kube-ai-node-details:
+        file: dashboards/kube-ai-node-details.json
+      kube-ai-cluster-details:
+        file: dashboards/kube-ai-cluster-details.json
+      kube-ai-job-details:
+        file: dashboards/kube-ai-job-details.json
+      kube-ai-resource-quota-details:
+        file: dashboards/kube-ai-resource-quota-details.json
+  grafana.ini:
+    server:
+      domain: arena-exporter-grafana
+      root_url: '%(protocol)s://%(domain)s:%(http_port)s/grafana/'
+      serve_from_sub_path: true
+    paths:
+      data: /var/lib/grafana/data
+      logs: /var/log/grafana
+      plugins: /var/lib/grafana/plugins
+      provisioning: /etc/grafana/provisioning
+    analytics:
+      check_for_updates: true
+    log:
+      mode: console
+    grafana_net:
+      url: https://grafana.net
+    auth:
+      disable_login_form: false
+    auth.anonymous:
+      enabled: true
+      org_name: Main Org.
+      org_role: Viewer
+    security:
+      allow_embedding: true
+    users:
+      default_theme: light
+
+admin-ui:
+  image:
+    repository: registry-cn-beijing.ack.aliyuncs.com/acs/ai-dashboard
+    tag: 1.0.14-ae0aaf6
+    pullPolicy: Always
+    initRdsImageName: registry-cn-beijing.ack.aliyuncs.com/acs/mysql-init
+    initRdsImageTag: 1.0.0
+    checkMysqlImageName: registry-cn-beijing.ack.aliyuncs.com/acs/busybox
+    checkMysqlImageTag: stable
+  resources:
+    limits:
+      cpu: 2000m
+      memory: 500Mi
+    requests:
+      cpu: 500m
+      memory: 100Mi
+  serviceAccount:
+    create: true
+    name: ai-dashboard-admin
+  dashboard:
+    intlAccount: "false"
+    adminUid: ""
+    ingress:
+      enabled: false
+      annotations: {}
+      hosts:
+      - host: ai-dashboard.local
+        paths: []
+      tls: []
+  storage:
+    mysql:
+      enabled: true

@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notebook-controller-deployment
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: notebook-controller
+spec:
+  selector:
+    matchLabels:
+      app: notebook-controller
+  template:
+    metadata:
+      labels:
+        app: notebook-controller
+    nodeSelector:
+    {{- if eq (.Values.global.clusterProfile | default "Default") "Edge"  }}
+      alibabacloud.com/is-edge-worker: "false"
+    {{- end }}
+    tolerations:
+    {{- if eq (.Values.global.clusterProfile | default "Default") "Edge"  }}
+      - key: "node-role.alibabacloud.com/addon"
+        operator: "Exists"
+        effect: "NoSchedule"
+    {{- end }}
+    spec:
+      serviceAccountName: {{ include "notebook.serviceAccountName" . }}
+      containers:
+        - name: manager
+          command:
+          - /manager
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+        
+

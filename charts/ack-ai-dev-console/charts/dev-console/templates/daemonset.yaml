@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: ack-commit-agent
+  labels:
+    {{- include "dev-console.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      component: ack-commit-agent
+      app: ack-ai-dev-console
+      name: ack-commit-agent-ds
+      {{- include "dev-console.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        component: ack-commit-agent
+        app: ack-ai-dev-console
+        name: ack-commit-agent-ds
+        {{- include "dev-console.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+      - image: "{{ .Values.image.commitAgentImageName }}:{{ .Values.image.commitAgentImageTag }}"
+        imagePullPolicy: Always
+        name: ack-commit-agent
+        resources:
+          limits:
+            memory: 100Mi
+            cpu: 200m
+        volumeMounts:
+          - mountPath: /host/run
+            name: run
+      dnsPolicy: ClusterFirst
+      hostNetwork: true
+      hostIPC: true
+      restartPolicy: Always
+      volumes:
+        - hostPath:
+            path: /run
+            type: DirectoryOrCreate
+          name: run
