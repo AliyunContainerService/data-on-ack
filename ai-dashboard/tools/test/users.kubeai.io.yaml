@@ -1,0 +1,23 @@
+apiVersion: data.kubeai.io/v1
+kind: User
+metadata:
+  name: "1983706117860305"
+  namespace: kube-ai
+spec:
+  aliuid: "1983706117860305"
+  apiRoles:
+  - admin
+  - researcher
+  deletable: false
+  k8sServiceAccount:
+    clusterRoleBindings:
+    - name: 1983706117860305:clusterRole:kubeai-researcher-clusterrole
+      roleName: kubeai-researcher-clusterrole
+    name: "1983706117860305"
+    namespace: kube-ai
+    roleBindings:
+    - name: 1983706117860305:soul-image-algorithm:kubeai-researcher-role
+      namespace: soul-image-algorithm
+      roleName: kubeai-researcher-role
+  userId: "1983706117860305"
+  userName: liuhuan@soulapp.onaliyun.com

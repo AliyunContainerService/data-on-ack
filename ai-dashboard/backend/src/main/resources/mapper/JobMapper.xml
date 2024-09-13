@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.aliyun.kubeai.mapper.JobMapper">
+
+    <resultMap id="baseResultMap" type="com.aliyun.kubeai.entity.JobEntity">
+        <id column="id" property="id" jdbcType="BIGINT"/>
+        <result column="uid" property="jobId" jdbcType="VARCHAR"/>
+        <result column="name" property="name" jdbcType="VARCHAR"/>
+        <result column="namespace" property="namespace" jdbcType="VARCHAR"/>
+        <result column="user_id" property="userId" jdbcType="VARCHAR"/>
+        <result column="status" property="status" jdbcType="VARCHAR"/>
+        <result column="gmt_created" property="createTime" jdbcType="TIMESTAMP"/>
+        <result column="gmt_modified" property="modifyTime" jdbcType="TIMESTAMP"/>
+    </resultMap>
+
+    <select id="findJob" parameterType="com.aliyun.kubeai.entity.JobSqlRequest" resultMap="baseResultMap">
+        select * from job WHERE
+        user_id in
+        <foreach item="item" index="index" collection="userIds"
+                 open="(" separator="," close=")">
+            #{item}
+        </foreach>
+        and namespace in
+        <foreach item="item" index="index" collection="namespaces"
+                 open="(" separator="," close=")">
+            #{item}
+        </foreach>
+        and status in
+        <foreach item="status" index="index" collection="statuses"
+                 open="(" separator="," close=")">
+            #{status}
+        </foreach>
+    </select>
+
+</mapper>

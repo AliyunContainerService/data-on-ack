@@ -4,3 +4,17 @@
 
 
 */vendor
+
+
+ai-dashboard/frontend/node_modules/
+ai-dashboard/frontend/dist/
+ai-dashboard/frontend/npm-debug.log*
+ai-dashboard/frontend/yarn-debug.log*
+ai-dashboard/frontend/yarn-error.log*
+ai-dashboard/frontend/package-lock.json
+ai-dashboard/frontend/tests/**/coverage/
+
+ai-dashboard/frontend/*.suo
+ai-dashboard/frontend/*.ntvs*
+ai-dashboard/frontend/*.njsproj
+ai-dashboard/frontend/*.sln

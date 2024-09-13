@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.aliyun.kubeai.mapper.JobInstanceMapper">
+
+    <resultMap id="baseResultMap" type="com.aliyun.kubeai.entity.JobInstance">
+        <id column="id" property="id" jdbcType="BIGINT"/>
+        <result column="job_id" property="jobId" jdbcType="VARCHAR"/>
+        <result column="name" property="name" jdbcType="VARCHAR"/>
+        <result column="namespace" property="namespace" jdbcType="VARCHAR"/>
+        <result column="duration" property="duration" jdbcType="VARCHAR"/>
+        <result column="status" property="status" jdbcType="VARCHAR"/>
+        <result column="node_name" property="nodeName" jdbcType="VARCHAR"/>
+        <result column="node_ip" property="nodeIp" jdbcType="VARCHAR"/>
+        <result column="instance_type" property="instanceType" jdbcType="VARCHAR"/>
+        <result column="resource_type" property="resourceType" jdbcType="VARCHAR"/>
+        <result column="cpu_core" property="cpuCore" jdbcType="FLOAT"/>
+        <result column="gpu" property="gpu" jdbcType="INTEGER"/>
+        <result column="is_spot" property="isSpot" jdbcType="BOOLEAN"/>
+        <result column="trade_price" property="tradePrice" jdbcType="FLOAT"/>
+        <result column="on_demand_price" property="onDemandPrice" jdbcType="FLOAT"/>
+        <result column="trade_cost" property="tradeCost" jdbcType="FLOAT"/>
+        <result column="on_demand_cost" property="onDemandCost" jdbcType="FLOAT"/>
+        <result column="saved_cost" property="savedCost" jdbcType="FLOAT"/>
+        <result column="create_time" property="createTime" jdbcType="TIMESTAMP"/>
+        <result column="modify_time" property="modifyTime" jdbcType="TIMESTAMP"/>
+    </resultMap>
+
+    <insert id="createJobInstance" parameterType="com.aliyun.kubeai.entity.ServingJob" useGeneratedKeys="true"
+            keyProperty="id">
+        INSERT INTO
+        ai_job_instance(job_id,name,namespace,duration,status,node_name,node_ip,instance_type,resource_type,cpu_core,gpu,is_spot,trade_price,on_demand_price,trade_cost,on_demand_cost,saved_cost,create_time,modify_time)
+        VALUES(#{jobId},#{name},#{namespace},#{duration},#{status},#{nodeName},#{nodeIp},#{instanceType},#{resourceType},#{cpuCore},#{gpu},#{isSpot},#{tradePrice},#{onDemandPrice},#{tradeCost},#{onDemandCost},#{savedCost},#{createTime},#{modifyTime})
+    </insert>
+
+    <update id="updateJobInstance" parameterType="com.aliyun.kubeai.entity.ServingJob">
+        UPDATE ai_job_instance
+        SET status=#{status}, duration=#{duration}, cpu_core=#{cpuCore}, gpu=#{gpu}, trade_price=#{tradePrice},
+        on_demand_price=#{onDemandPrice},
+        trade_cost=#{tradeCost}, on_demand_cost=#{onDemandCost}, saved_cost=#{savedCost}, modify_time=#{modifyTime}
+        WHERE id=#{id}
+    </update>
+
+    <select id="findByName" parameterType="java.lang.String" resultMap="baseResultMap">
+        SELECT * FROM ai_job_instance WHERE name=#{name}
+    </select>
+
+    <select id="findByJobId" parameterType="java.lang.String" resultMap="baseResultMap">
+        SELECT * FROM ai_job_instance WHERE job_id=#{jobId}
+    </select>
+
+    <select id="findJobInstance" resultMap="baseResultMap">
+        SELECT * FROM ai_job_instance WHERE job_id=#{jobId} AND namespace=#{namespace} AND name=#{name}
+    </select>
+
+    <select id="findRunningInstance" resultMap="baseResultMap">
+        SELECT * FROM ai_job_instance WHERE status in ('Running', 'Pending')
+    </select>
+</mapper>

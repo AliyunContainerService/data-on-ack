@@ -1,0 +1,9 @@
+apiVersion: data.kubeai.alibabacloud.com/v1
+kind: UserGroup
+metadata:
+  name: "default-user-group"
+  namespace: kube-ai
+spec:
+  groupName: defaultUserGroup
+  quotaNames:
+    - root.defaultQuotaGroup

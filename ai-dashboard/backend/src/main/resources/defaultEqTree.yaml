@@ -1,0 +1,37 @@
+apiVersion: scheduling.sigs.k8s.io/v1beta1
+kind: ElasticQuotaTree
+metadata:
+  name: elasticquotatree
+  namespace: kube-system
+spec:
+  root:
+    children:
+      - max:
+          cpu: "2147483647"
+          memory: "2147483647Gi"
+          nvidia.com/gpu: "2147483647"
+          aliyun.com/gpu: "2147483647"
+          aliyun.com/gpu-mem: "2147483647"
+        min:
+          cpu: "0"
+          memory: 0M
+          nvidia.com/gpu: "0"
+          aliyun.com/gpu: "0"
+          aliyun.com/gpu-mem: "0"
+        name: "root.defaultQuotaGroup"
+        namespaces:
+          - default-group
+    max:
+      cpu: "2147483647"
+      memory: "2147483647Gi"
+      nvidia.com/gpu: "2147483647"
+      aliyun.com/gpu: "2147483647"
+      aliyun.com/gpu-mem: "2147483647"
+    min:
+      cpu: "2147483647"
+      memory: "2147483647Gi"
+      nvidia.com/gpu: "2147483647"
+      aliyun.com/gpu: "2147483647"
+      aliyun.com/gpu-mem: "2147483647"
+    name: root
+    namespaces: []

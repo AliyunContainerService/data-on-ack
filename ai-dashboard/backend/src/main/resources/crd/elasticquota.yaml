@@ -1,0 +1,41 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: elasticquotatrees.scheduling.sigs.k8s.io
+  annotations:
+    api-approved.kubernetes.io: https://github.com/kubernetes-sigs/scheduler-plugins/pull/52
+    kubectl.kubernetes.io/last-applied-configuration: ""
+spec:
+  conversion:
+    strategy: None
+  group: scheduling.sigs.k8s.io
+  names:
+    kind: ElasticQuotaTree
+    listKind: ElasticQuotaTreeList
+    plural: elasticquotatrees
+    shortNames:
+      - eqtree
+      - eqtrees
+    singular: elasticquotatree
+  scope: Namespaced
+  versions:
+    - name: v1beta1
+      schema:
+        openAPIV3Schema:
+          properties:
+            spec:
+              properties:
+                root:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+              type: object
+            status:
+              properties:
+                root:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+              type: object
+          type: object
+      served: true
+      storage: true

@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.aliyun.kubeai.mapper.ServingJobMapper">
+
+    <resultMap id="baseResultMap" type="com.aliyun.kubeai.entity.ServingJob">
+        <id column="id" property="id" jdbcType="BIGINT"/>
+        <result column="job_id" property="jobId" jdbcType="VARCHAR"/>
+        <result column="name" property="name" jdbcType="VARCHAR"/>
+        <result column="namespace" property="namespace" jdbcType="VARCHAR"/>
+        <result column="duration" property="duration" jdbcType="VARCHAR"/>
+        <result column="type" property="type" jdbcType="VARCHAR"/>
+        <result column="status" property="status" jdbcType="VARCHAR"/>
+        <result column="endpoint" property="endpoint" jdbcType="VARCHAR"/>
+        <result column="replicas" property="replicas" jdbcType="INTEGER"/>
+        <result column="core_hour" property="coreHour" jdbcType="FLOAT"/>
+        <result column="gpu_hour" property="gpuHour" jdbcType="FLOAT"/>
+        <result column="trade_cost" property="tradeCost" jdbcType="FLOAT"/>
+        <result column="on_demand_cost" property="onDemandCost" jdbcType="FLOAT"/>
+        <result column="saved_cost" property="savedCost" jdbcType="FLOAT"/>
+        <result column="create_time" property="createTime" jdbcType="TIMESTAMP"/>
+        <result column="modify_time" property="modifyTime" jdbcType="TIMESTAMP"/>
+    </resultMap>
+
+    <insert id="createServingJob" parameterType="com.aliyun.kubeai.entity.ServingJob" useGeneratedKeys="true"
+            keyProperty="id">
+        INSERT INTO
+        ai_serving_job(job_id,name,namespace,duration,type,status,endpoint,replicas,core_hour,gpu_hour,trade_cost,on_demand_cost,saved_cost,create_time,modify_time)
+        VALUES(#{jobId},#{name},#{namespace},#{duration},#{type},#{status},#{endpoint},#{replicas},#{coreHour},#{gpuHour},#{tradeCost},#{onDemandCost},#{savedCost},#{createTime},#{modifyTime})
+    </insert>
+
+    <update id="updateServingJob" parameterType="com.aliyun.kubeai.entity.ServingJob">
+        UPDATE ai_serving_job
+        SET status=#{status}, replicas=#{replicas}, core_hour=#{coreHour}, gpu_hour=#{gpuHour}, duration=#{duration},
+        trade_cost=#{tradeCost}, on_demand_cost=#{onDemandCost}, saved_cost=#{savedCost}, modify_time=#{modifyTime}
+        WHERE id=#{id}
+    </update>
+
+    <select id="findByJobId" parameterType="java.lang.String" resultMap="baseResultMap">
+        SELECT * FROM ai_serving_job WHERE job_id=#{jobId}
+    </select>
+
+    <select id="findByName" parameterType="java.lang.String" resultMap="baseResultMap">
+        SELECT * FROM ai_serving_job WHERE name=#{name}
+    </select>
+
+    <select id="findServingJob" resultMap="baseResultMap">
+        SELECT * FROM ai_serving_job WHERE namespace=#{namespace} AND name=#{jobName}
+        ORDER BY create_time DESC
+    </select>
+
+    <select id="countServingJob" parameterType="java.lang.String" resultType="java.lang.Long">
+        SELECT count(id) FROM ai_serving_job WHERE 1=1
+        <if test="jobName != null and jobName != ''">
+            AND name = #{jobName}
+        </if>
+    </select>
+
+    <select id="findServingJobByPage" resultMap="baseResultMap">
+        SELECT * FROM ai_serving_job WHERE 1=1
+        <if test="jobName != null and jobName != ''">
+            AND name = #{jobName}
+        </if>
+        ORDER BY create_time DESC
+        LIMIT #{offset},#{limit}
+    </select>
+
+    <select id="findByStatus" parameterType="java.lang.String" resultMap="baseResultMap">
+        SELECT * FROM ai_serving_job WHERE status=#{status}
+    </select>
+
+    <select id="findRunningJob" resultMap="baseResultMap">
+        SELECT * FROM ai_serving_job WHERE status in ('Running', 'Pending')
+    </select>
+</mapper>
