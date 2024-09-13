@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+option go_package = "github.com/AliyunContainerService/data-on-ack/commit-agent/v1beta1";
+
+package v1beta1;
+
+// This service defines the public APIs for commit agent
+service ImageService {
+  // Version returns the image service version
+  rpc Version(VersionRequest) returns (VersionResponse) {}
+
+  // CommitImage in local
+  rpc CommitImage(CommitRequest) returns (CommitResponse) {}
+
+  // PushImage to ACR
+  rpc PushImage(PushRequest) returns (PushResponse) {}
+}
+
+message VersionRequest {
+  string version =1;
+}
+
+message VersionResponse {
+  string version = 1;
+}
+
+message CommitRequest {
+  string containerID = 1;
+  string image = 2;
+}
+
+message CommitResponse {
+  string result = 1;
+}
+
+message PushRequest {
+  string image = 1;
+  string username = 2;
+  string password = 3;
+}
+
+message PushResponse {
+  string result = 1;
+}

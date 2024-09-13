@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: ack-commit-agent
+  namespace: kube-ai
+spec:
+  selector:
+    matchLabels:
+      component: ack-commit-agent
+      app: ack-ai-dev-console
+      name: ack-commit-agent-ds
+  template:
+    metadata:
+      labels:
+        component: ack-commit-agent
+        app: ack-ai-dev-console
+        name: ack-commit-agent-ds
+    spec:
+      containers:
+        - image: registry-cn-beijing.ack.aliyuncs.com/acs/commit-agent:v0.1.1-9d4e12d-aliyun
+          imagePullPolicy: Always
+          name: ack-commit-agent
+          resources:
+            limits:
+              memory: 100Mi
+              cpu: 200m
+          volumeMounts:
+            - mountPath: /host/run
+              name: run
+      dnsPolicy: ClusterFirst
+      hostNetwork: true
+      hostIPC: true
+      restartPolicy: Always
+      volumes:
+        - hostPath:
+            path: /run
+            type: DirectoryOrCreate
+          name: run
