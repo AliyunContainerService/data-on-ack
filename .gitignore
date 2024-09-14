@@ -18,3 +18,5 @@ ai-dashboard/frontend/*.suo
 ai-dashboard/frontend/*.ntvs*
 ai-dashboard/frontend/*.njsproj
 ai-dashboard/frontend/*.sln
+
+ai-dashboard/backend/target/

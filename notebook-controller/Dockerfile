@@ -18,7 +18,5 @@ RUN if [ "$(uname -m)" = "aarch64" ]; then \
 FROM ubuntu:22.04
 WORKDIR /
 COPY --from=builder /workspace/notebook-controller/manager .
-COPY --from=builder /workspace/notebook-controller/third_party/license.txt third_party/license.txt
-COPY --from=builder /go/pkg/mod/github.com/hashicorp third_party/hashicorp
 RUN apt-get update && apt-get upgrade -y && rm -rf /var/cache/apt/
 ENTRYPOINT ["/manager"]

@@ -8,43 +8,6 @@ GOLANG_VERSION ?= 1.15
 
 USE_IMAGE_CACHE ?= true
 
-CRD_OPTIONS ?= "crd"
-
-ENVTEST_ASSETS_DIR=$(shell pwd)/testbin
-
-ifeq (,$(shell go env GOBIN))
-GOBIN=$(shell go env GOPATH)/bin
-else
-GOBIN=$(shell go env GOBIN)
-endif
-
-all: manager
-
-check-license:
-	./third_party/check-license.sh
-
-test: generate fmt vet manifests
-	mkdir -p ${ENVTEST_ASSETS_DIR}
-	test -f ${ENVTEST_ASSETS_DIR}/setup-envtest.sh || curl -sSLo ${ENVTEST_ASSETS_DIR}/setup-envtest.sh https://raw.githubusercontent.com/kubernetes-sigs/controller-runtime/a9bd9117a77a2f84bbc546e28991136fe0000dc0/hack/setup-envtest.sh
-	source ${ENVTEST_ASSETS_DIR}/setup-envtest.sh; fetch_envtest_tools $(ENVTEST_ASSETS_DIR); setup_envtest_env $(ENVTEST_ASSETS_DIR);
-	go test ./api/... ./controllers/... -coverprofile cover.out
-
-manager: generate fmt vet
-	go build -o bin/manager main.go
-
-run: generate fmt vet
-	go run ./main.go
-
-install: manifests
-	kubectl apply -f config/crd/bases
-
-deploy: manifests
-	kubectl apply -f config/crd/bases
-	kustomize build config/default | kubectl apply -f -
-
-manifests: controller-gen
-	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=role webhook paths="./..." output:crd:artifacts:config=config/crd/bases
-
 fmt:
 	go fmt ./...
 
