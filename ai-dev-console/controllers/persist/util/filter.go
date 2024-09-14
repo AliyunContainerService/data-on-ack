@@ -1,0 +1,44 @@
+/*
+Copyright 2020 The Alibaba Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package util
+
+import (
+	training "github.com/AliyunContainerService/data-on-ack/ai-dev-console/apis/training/v1alpha1"
+	apiv1 "github.com/AliyunContainerService/data-on-ack/ai-dev-console/pkg/job_controller/api/v1"
+
+	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+func IsKubeDLManagedJobKind(kind string) bool {
+
+	switch kind {
+	case training.TFJobKind, training.PyTorchJobKind, training.XDLJobKind, training.XGBoostJobKind, training.MarsJobKind, training.MPIJobKind:
+		return true
+	default:
+		return false
+	}
+}
+
+func IsKubeDLManagedPod(pod *corev1.Pod) bool {
+	controller := v1.GetControllerOf(pod)
+	if controller == nil || !IsKubeDLManagedJobKind(controller.Kind) {
+		return false
+	}
+	_, ok := pod.Labels[apiv1.GroupNameLabel]
+	return ok
+}

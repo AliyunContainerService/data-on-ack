@@ -1,0 +1,9 @@
+.git/
+.vscode/
+
+console/frontend/dist/
+console/frontend/node_modules/
+console/frontend/package-lock.json
+
+backend-server
+kubedl

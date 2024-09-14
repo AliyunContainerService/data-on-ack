@@ -1,0 +1,45 @@
+#FROM node:15.11.0 as frontend-builder
+
+#WORKDIR /workspace
+
+#COPY console/frontend/ .
+#RUN rm -rf ./dist && rm -rf ./node_modules && rm -f ./package-lock.json
+#RUN npm --registry=https://registry.npm.taobao.org install --no-optional --legacy-peer-deps
+#RUN npm run build
+
+#FROM golang:1.13 as backend-builder
+
+#WORKDIR /workspace
+
+#COPY . .
+
+#RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -mod=vendor -a -o backend-server console/backend/cmd/backend-server/main.go
+
+FROM alpine:3.12
+WORKDIR /
+
+ARG ARG_TZ=Etc/UTC
+ARG ARENA_TAR=arena-installer-0.9.11-c4d37ef-linux-amd64.tar.gz
+#COPY --from=frontend-builder /workspace/dist ./dist
+COPY ./.git-commit ./.git-commit
+COPY ./console/frontend/dist ./dist
+COPY ./console/backend-server ./backend-server
+#COPY --from=backend-builder /workspace/backend-server ./backend-server
+COPY ./bin/$ARENA_TAR  ./$ARENA_TAR
+
+ENV TZ=$ARG_TZ
+RUN echo -e "http://mirrors.tuna.tsinghua.edu.cn/alpine/v3.9/main/\nhttp://mirrors.tuna.tsinghua.edu.cn/alpine/v3.9/community/" > /etc/apk/repositories
+RUN apk add --no-cache bash
+RUN apk update
+RUN apk --no-cache add -U tzdata
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+RUN tar -xzvf $ARENA_TAR && \
+    cp ./arena-installer/bin/arena /usr/bin/arena && \
+    cp ./arena-installer/bin/helm /usr/bin/arena-helm && \
+    cp ./arena-installer/bin/kubectl /usr/bin/arena-kubectl && \
+    cp -r ./arena-installer/charts /charts && \
+    rm -rf ./arena-installer && \
+    rm -f $ARENA_TAR
+#RUN chmod +x ./startup.sh
+
+ENTRYPOINT ["/backend-server"]

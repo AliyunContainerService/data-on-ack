@@ -1,0 +1,54 @@
+# Build backend
+FROM registry-cn-hangzhou.ack.aliyuncs.com/dev/golang:1.18 as backend-builder
+
+WORKDIR /workspace
+
+COPY . .
+
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -mod=vendor -a -o backend-server console/backend/cmd/backend-server/main.go
+
+
+# Build frontend
+# FROM node:16.20.2 as frontend-builder
+
+# WORKDIR /workspace
+
+# COPY console/frontend/ .
+
+# RUN apt update && \
+#     apt install -y npm && \
+#     apt upgrade -y npm
+
+# RUN set -eux && \
+#     rm -rf dist && \
+#     rm -f package-lock.json && \
+#     npm install --legacy-peer-deps --registry=https://registry.npmmirror.com && \
+#     npm run build
+
+FROM registry-cn-hangzhou.ack.aliyuncs.com/dev/alpine:3.18-update
+
+ARG ARG_TZ=
+
+ARG ARENA_TAR=arena-installer-0.9.15-a031bae-linux-amd64.tar.gz
+
+WORKDIR /
+
+COPY --from=backend-builder /workspace/backend-server .
+
+COPY console/frontend/dist /dist
+
+RUN set -eux && \
+    apk upgrade --no-cache --update && \
+    apk add --no-cache bash tzdata && \
+    ln -snf /usr/share/zoneinfo/Etc/UTC /etc/localtime && \
+    echo "Etc/UTC" > /etc/timezone && \
+    wget https://aliacs-k8s-cn-hongkong.oss-cn-hongkong.aliyuncs.com/arena/${ARENA_TAR} && \
+    tar -xzvf ${ARENA_TAR} && \
+    cp arena-installer/bin/arena /usr/bin/arena && \
+    cp arena-installer/bin/helm /usr/bin/arena-helm && \
+    cp arena-installer/bin/kubectl /usr/bin/arena-kubectl && \
+    cp -r arena-installer/charts /charts && \
+    rm -rf arena-installer && \
+    rm -f ${ARENA_TAR}
+
+ENTRYPOINT ["/backend-server"]
