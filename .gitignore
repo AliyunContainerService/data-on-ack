@@ -20,3 +20,23 @@ ai-dashboard/frontend/*.njsproj
 ai-dashboard/frontend/*.sln
 
 ai-dashboard/backend/target/
+ai-dashboard/backend/src/main/resources/static/static/
+
+
+
+ai-dev-console/vendor/
+ai-dev-console/console/frontend/node_modules
+ai-dev-console/console/frontend/npm-debug.log*
+ai-dev-console/console/frontend/yarn-debug.log*
+ai-dev-console/console/frontend/yarn-error.log*
+ai-dev-console/console/frontend/package-lock.json
+ai-dev-console/console/frontend/dist/
+ai-dev-console/console/frontend/src/.umi/
+
+
+
+commit-agent/bin/
+**/.git-commit
+
+
+add_head.py

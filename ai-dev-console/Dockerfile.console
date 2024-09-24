@@ -1,5 +1,5 @@
 # Build backend
-FROM registry-cn-hangzhou.ack.aliyuncs.com/dev/golang:1.18 as backend-builder
+FROM registry-cn-hangzhou.ack.aliyuncs.com/dev/golang:1.22 as backend-builder
 
 WORKDIR /workspace
 
@@ -29,7 +29,7 @@ FROM registry-cn-hangzhou.ack.aliyuncs.com/dev/alpine:3.18-update
 
 ARG ARG_TZ=
 
-ARG ARENA_TAR=arena-installer-0.9.15-a031bae-linux-amd64.tar.gz
+ARG ARENA_TAR=arena-installer-0.9.16-6c2373d-linux-amd64.tar.gz
 
 WORKDIR /
 

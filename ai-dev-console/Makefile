@@ -1,6 +1,6 @@
 
 # Image URL to use all building/pushing image targets
-VERSION:=v1.1.1
+VERSION:=v1.1.2
 GIT_USER:=aliyun
 GIT_COMMIT:=$(shell git rev-parse --short HEAD)
 IMAGE_REGISTRY ?= registry.cn-beijing.aliyuncs.com
@@ -82,8 +82,7 @@ build-frontend:
 save-git-commit:
 	echo "${GIT_COMMIT}" > .git-commit
 
-#build-frontend
-console-build: save-git-commit
+console-build: build-frontend save-git-commit
 	$(DOCKERCMD) \
 		-f Dockerfile.console \
 		-t ${CONSOLE_IMG} \
