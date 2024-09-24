@@ -19,7 +19,7 @@ package resource_utils
 import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	"k8s.io/kubernetes/pkg/quota/v1"
+	quotav1 "k8s.io/apiserver/pkg/quota/v1"
 
 	apiv1 "github.com/AliyunContainerService/data-on-ack/ai-dev-console/pkg/job_controller/api/v1"
 )
@@ -32,8 +32,8 @@ func SumUpContainersResources(containers []v1.Container) v1.ResourceRequirements
 	}
 	for idx := range containers {
 		container := &containers[idx]
-		sum.Requests = quota.Add(sum.Requests, container.Resources.Requests)
-		sum.Limits = quota.Add(sum.Limits, container.Resources.Limits)
+		sum.Requests = quotav1.Add(sum.Requests, container.Resources.Requests)
+		sum.Limits = quotav1.Add(sum.Limits, container.Resources.Limits)
 	}
 	return sum
 }
@@ -47,8 +47,8 @@ func MaximumContainersResources(containers []v1.Container) v1.ResourceRequiremen
 	}
 	for idx := range containers {
 		container := &containers[idx]
-		max.Requests = quota.Max(max.Requests, container.Resources.Requests)
-		max.Limits = quota.Max(max.Limits, container.Resources.Limits)
+		max.Requests = quotav1.Max(max.Requests, container.Resources.Requests)
+		max.Limits = quotav1.Max(max.Limits, container.Resources.Limits)
 	}
 	return max
 }
@@ -62,15 +62,15 @@ func ComputePodResourceRequest(pod *v1.Pod) v1.ResourceList {
 func ComputePodSpecResourceRequest(spec *v1.PodSpec) v1.ResourceList {
 	result := v1.ResourceList{}
 	for _, container := range spec.Containers {
-		result = quota.Add(result, container.Resources.Requests)
+		result = quotav1.Add(result, container.Resources.Requests)
 	}
 	// take max_resource(sum_pod, any_init_container)
 	for _, container := range spec.InitContainers {
-		result = quota.Max(result, container.Resources.Requests)
+		result = quotav1.Max(result, container.Resources.Requests)
 	}
 	// If Overhead is being utilized, add to the total requests for the pod
 	if spec.Overhead != nil {
-		result = quota.Add(result, spec.Overhead)
+		result = quotav1.Add(result, spec.Overhead)
 	}
 	return result
 }

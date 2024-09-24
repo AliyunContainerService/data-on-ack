@@ -248,7 +248,8 @@ func genArenaSubmitJob(job *dmo.SubmitJobInfo) (*training.Job, error) {
 			TTLSecondsAfterFinished(job.TTLSecondsAfterFinished).
 			NodeSelectors(job.NodeSelectors).
 			Annotations(job.Annotations).
-			Labels(job.Labels)
+			Labels(job.Labels).
+			Devices(job.Devices)
 
 		if job.Toleration != nil {
 			tolerations := make([]string, 0)
@@ -315,7 +316,8 @@ func genArenaSubmitJob(job *dmo.SubmitJobInfo) (*training.Job, error) {
 			TTLSecondsAfterFinished(job.TTLSecondsAfterFinished).
 			NodeSelectors(job.NodeSelectors).
 			Annotations(job.Annotations).
-			Labels(job.Labels)
+			Labels(job.Labels).
+			Devices(job.Devices)
 
 		if job.LogDir != "" {
 			builder.LogDir(job.LogDir)

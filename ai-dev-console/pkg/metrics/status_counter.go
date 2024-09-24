@@ -17,32 +17,10 @@ limitations under the License.
 package metrics
 
 import (
-	"context"
-
 	training "github.com/AliyunContainerService/data-on-ack/ai-dev-console/apis/training/v1alpha1"
 	v1 "github.com/AliyunContainerService/data-on-ack/ai-dev-console/pkg/job_controller/api/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
-
-func JobStatusCounter(kind string, reader client.Reader, filter func(status v1.JobStatus) bool) (result int32, err error) {
-	var list runtime.Object
-	if obj, ok := listObjectMap[kind]; ok {
-		list = obj.DeepCopyObject()
-	}
-	err = reader.List(context.Background(), list)
-	if err != nil {
-		return 0, err
-	}
-	statuses := getJobStatusList(list, kind)
-	result = int32(0)
-	for _, status := range statuses {
-		if filter(*status) {
-			result++
-		}
-	}
-	return result, nil
-}
 
 var (
 	listObjectMap = map[string]runtime.Object{

@@ -11,8 +11,8 @@
 *WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 *See the License for the specific language governing permissions and
 *limitations under the License.
-*/
-    
+ */
+
 package handlers
 
 import (
@@ -35,11 +35,11 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/fields"
-	"k8s.io/apimachinery/pkg/runtime"
 	apitypes "k8s.io/apimachinery/pkg/types"
+	resources "k8s.io/apiserver/pkg/quota/v1"
 	"k8s.io/klog"
-	resources "k8s.io/kubernetes/pkg/quota/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	runtime "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (

@@ -31,8 +31,8 @@ import (
 
 	"github.com/kubeflow/arena/pkg/apis/types"
 	v1 "k8s.io/api/core/v1"
+	quotav1 "k8s.io/apiserver/pkg/quota/v1"
 	"k8s.io/klog"
-	quotav1 "k8s.io/kubernetes/pkg/quota/v1"
 )
 
 var (

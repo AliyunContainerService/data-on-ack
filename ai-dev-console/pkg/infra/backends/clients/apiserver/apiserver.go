@@ -17,15 +17,12 @@ limitations under the License.
 package apiserver
 
 import (
-	"context"
 	training "github.com/AliyunContainerService/data-on-ack/ai-dev-console/apis/training/v1alpha1"
 	"github.com/AliyunContainerService/data-on-ack/ai-dev-console/pkg/infra/backends"
 	clientmgr "github.com/AliyunContainerService/data-on-ack/ai-dev-console/pkg/infra/backends/clientmgr"
 	"github.com/AliyunContainerService/data-on-ack/ai-dev-console/pkg/infra/dmo"
 
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -84,18 +81,19 @@ func (a *apiServerBackend) SubmitJob(*dmo.SubmitJobInfo) error {
 	return nil
 }
 func (a *apiServerBackend) StopJob(ns, name, jobID, kind string) error {
-	job := initJobWithKind(kind)
-	err := a.client.Get(context.Background(), types.NamespacedName{
-		Namespace: ns,
-		Name:      name,
-	}, job)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			return nil
-		}
-		return err
-	}
-	return a.client.Delete(context.Background(), job)
+	//job := initJobWithKind(kind)
+	//err := a.client.Get(context.Background(), types.NamespacedName{
+	//	Namespace: ns,
+	//	Name:      name,
+	//}, job)
+	//if err != nil {
+	//	if errors.IsNotFound(err) {
+	//		return nil
+	//	}
+	//	return err
+	//}
+	//return a.client.Delete(context.Background(), job)
+	return nil
 }
 
 func (a *apiServerBackend) SuspendCron(ns, name, cronID string) error {

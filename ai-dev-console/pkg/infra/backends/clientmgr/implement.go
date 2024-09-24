@@ -1,19 +1,3 @@
-/*
-Copyright 2021 The Alibaba Authors.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-
 package clientmgr
 
 import (
@@ -66,14 +50,7 @@ func Init() {
 		klog.Fatal(err)
 	}
 
-	cmgr.ctrlClient = &client.DelegatingClient{
-		Reader: &client.DelegatingReader{
-			CacheReader:  ctrlCache,
-			ClientReader: c,
-		},
-		Writer:       c,
-		StatusClient: c,
-	}
+	cmgr.ctrlClient = c
 
 	cmgr.kubeClient = clientset.NewForConfigOrDie(cmgr.config)
 
@@ -95,12 +72,12 @@ func InitFromManager(mgr ctrl.Manager) {
 
 func Start() {
 	go func() {
-		stop := make(chan struct{})
+		stop := context.Background()
 		cmgr.ctrlCache.Start(stop)
 	}()
 }
 
-func (c *clientMgr) IndexField(obj runtime.Object, field string, extractValue client.IndexerFunc) error {
+func (c *clientMgr) IndexField(obj client.Object, field string, extractValue client.IndexerFunc) error {
 	return c.ctrlCache.IndexField(context.Background(), obj, field, extractValue)
 }
 
@@ -127,14 +104,7 @@ func (c *clientMgr) GetCtrlClientWithConfig(kubeConfig []byte) client.Client {
 		klog.Fatal(err)
 	}
 
-	return &client.DelegatingClient{
-		Reader: &client.DelegatingReader{
-			CacheReader:  c.ctrlCache,
-			ClientReader: cl,
-		},
-		Writer:       cl,
-		StatusClient: cl,
-	}
+	return cl
 }
 
 func (c *clientMgr) GetScheme() *runtime.Scheme {

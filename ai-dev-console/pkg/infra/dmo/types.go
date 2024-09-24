@@ -376,6 +376,8 @@ type SubmitJobInfo struct {
 	EvaluatorMemory string `json:"evaluatorMemory"`
 	EvaluatorGPU    int    `json:"evaluatorGPU"`
 
+	Devices map[string]string `json:"devices"`
+
 	Volumes map[string]string `json:"volumes"`
 
 	CodeType     string `json:"codeType"`

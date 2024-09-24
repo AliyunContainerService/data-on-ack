@@ -11,8 +11,8 @@
 *WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 *See the License for the specific language governing permissions and
 *limitations under the License.
-*/
-    
+ */
+
 package utils
 
 import (
@@ -22,11 +22,12 @@ import (
 	tfv1 "github.com/kubeflow/arena/pkg/operators/tf-operator/apis/tensorflow/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func InitJobRuntimeObjectByKind(kind string) runtime.Object {
+func InitJobRuntimeObjectByKind(kind string) client.Object {
 	var (
-		job runtime.Object
+		job client.Object
 	)
 
 	switch kind {

@@ -17,8 +17,6 @@ limitations under the License.
 package metrics
 
 import (
-	"strings"
-
 	v1 "github.com/AliyunContainerService/data-on-ack/ai-dev-console/pkg/job_controller/api/v1"
 	"github.com/AliyunContainerService/data-on-ack/ai-dev-console/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
@@ -26,8 +24,6 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/klog"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 var (
@@ -71,52 +67,6 @@ type JobMetrics struct {
 	restart             prometheus.Counter
 	firstPodLaunchDelay *prometheus.HistogramVec
 	allPodsLaunchDelay  *prometheus.HistogramVec
-}
-
-func NewJobMetrics(kind string, client client.Client) *JobMetrics {
-	lowerKind := strings.ToLower(kind)
-	label := prometheus.Labels{"kind": lowerKind}
-	metrics := &JobMetrics{
-		kind:                kind,
-		created:             created.With(label),
-		deleted:             deleted.With(label),
-		success:             success.With(label),
-		failure:             failure.With(label),
-		restart:             restart.With(label),
-		firstPodLaunchDelay: firstPodLaunchDelayHist,
-		allPodsLaunchDelay:  allPodsLaunchDelayHist,
-	}
-	// Register running gauge func on center prometheus demand pull.
-	// Different kinds of workload metrics share the same metric name and help info,
-	// but const labels varies.
-	promauto.NewGaugeFunc(prometheus.GaugeOpts{
-		Name:        "kubedl_jobs_running",
-		Help:        "Counts number of jobs running currently",
-		ConstLabels: label,
-	}, func() float64 {
-		running, err := JobStatusCounter(kind, client, util.IsRunning)
-		if err != nil {
-			klog.Errorf("failed to count running jobs, err: %v", err)
-			return 0
-		}
-		return float64(running)
-	})
-	// Register pending gauge func on center prometheus demand pull.
-	promauto.NewGaugeFunc(prometheus.GaugeOpts{
-		Name:        "kubedl_jobs_pending",
-		Help:        "Counts number of jobs pending currently",
-		ConstLabels: label,
-	}, func() float64 {
-		pending, err := JobStatusCounter(kind, client, func(status v1.JobStatus) bool {
-			return util.IsCreated(status) && len(status.Conditions) == 1
-		})
-		if err != nil {
-			klog.Errorf("failed to count pending jobs, err: %v", err)
-			return 0
-		}
-		return float64(pending)
-	})
-	return metrics
 }
 
 func (m *JobMetrics) CreatedInc() {

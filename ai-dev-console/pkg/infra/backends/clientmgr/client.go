@@ -49,7 +49,7 @@ type ClientManager interface {
 
 	// IndexFields adds an index with the given field name on the given object type
 	// by using the given function to extract the value for that field.
-	IndexField(obj runtime.Object, field string, extractValue client.IndexerFunc) error
+	IndexField(obj client.Object, field string, extractValue client.IndexerFunc) error
 }
 
 var clientManager ClientManager
@@ -110,7 +110,7 @@ func GetScheme() *runtime.Scheme {
 	return clientManager.GetScheme()
 }
 
-func IndexField(obj runtime.Object, field string, extractValue client.IndexerFunc) error {
+func IndexField(obj client.Object, field string, extractValue client.IndexerFunc) error {
 	if clientManager == nil {
 		klog.Fatal("get clientMgr fail, clientMgr is nil")
 	}

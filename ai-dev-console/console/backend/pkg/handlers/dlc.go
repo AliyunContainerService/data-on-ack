@@ -11,8 +11,8 @@
 *WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 *See the License for the specific language governing permissions and
 *limitations under the License.
-*/
-    
+ */
+
 package handlers
 
 import (
@@ -105,7 +105,7 @@ func (h *DLCHandler) ListAvailableNamespaces(userName string) ([]string, error) 
 
 func (h *DLCHandler) DetectJobsInNS(userName, ns, kind string) bool {
 	var (
-		list     runtime.Object
+		list     client.ObjectList
 		detector func(object runtime.Object) bool
 	)
 

@@ -11,8 +11,8 @@
 *WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 *See the License for the specific language governing permissions and
 *limitations under the License.
-*/
-    
+ */
+
 package handlers
 
 import (
@@ -24,7 +24,6 @@ import (
 	v1 "github.com/AliyunContainerService/data-on-ack/ai-dev-console/apis/notebook/v1"
 	"github.com/AliyunContainerService/data-on-ack/ai-dev-console/console/backend/pkg/auth"
 	utils2 "github.com/AliyunContainerService/data-on-ack/ai-dev-console/console/backend/pkg/utils"
-	notebookPersist "github.com/AliyunContainerService/data-on-ack/ai-dev-console/controllers/persist/object/Notebook"
 	"github.com/AliyunContainerService/data-on-ack/ai-dev-console/pkg/infra/backends"
 	"github.com/AliyunContainerService/data-on-ack/ai-dev-console/pkg/infra/backends/clientmgr"
 	"github.com/AliyunContainerService/data-on-ack/ai-dev-console/pkg/infra/backends/registry"
@@ -39,7 +38,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
@@ -235,7 +233,7 @@ func (nh *NotebookHandler) SyncNotebook(notebook *v1.Notebook) error {
 				return nh.storageBackend.WriteNotebook(notebook)
 			}
 
-			kubeConfig := notebookPersist.KubeConfig{}
+			kubeConfig := KubeConfig{}
 			err = json.Unmarshal(configJson, &kubeConfig)
 			if err != nil {
 				return nh.storageBackend.WriteNotebook(notebook)
@@ -441,6 +439,22 @@ func (nh *NotebookHandler) ListNotebook(namespace string) ([]NotebookMessage, er
 			bathPath = fmt.Sprintf("/notebook/%s/%s/lab", item.Namespace, item.Name)
 		}
 
+		errMessage := "{}"
+		if status == Starting {
+			notebookPod := &corev1.Pod{}
+			if err = nh.client.Get(context.Background(),
+				types.NamespacedName{
+					Name:      fmt.Sprintf("%s-0", item.Name),
+					Namespace: item.Namespace}, notebookPod); err == nil {
+				sort.Sort(ConditionsSorted(notebookPod.Status.Conditions))
+				if len(notebookPod.Status.Conditions) > 0 {
+					jsonMessageBytes, _ := json.Marshal(notebookPod.Status.Conditions)
+					errMessage = string(jsonMessageBytes)
+				}
+				status = NotebookStatus(notebookPod.Status.Phase)
+			}
+		}
+
 		tempNotebookMessage := NotebookMessage{
 			Name:       item.Name,
 			Namespace:  namespace,
@@ -453,6 +467,7 @@ func (nh *NotebookHandler) ListNotebook(namespace string) ([]NotebookMessage, er
 			Gpus:       gpuLimits.String(),
 			Status:     string(status),
 			Event:      event,
+			ErrMessage: errMessage,
 		}
 		notebookMessageList = append(notebookMessageList, tempNotebookMessage)
 	}
@@ -513,7 +528,7 @@ func (nh *NotebookHandler) SubmitNotebookByData(data NotebookSubmitData) error {
 	return nh.submitNotebook(tempNotebook)
 }
 
-func (nh *NotebookHandler) submitNotebook(notebook runtime.Object) error {
+func (nh *NotebookHandler) submitNotebook(notebook client.Object) error {
 	err := nh.client.Create(context.Background(), notebook)
 	if err != nil {
 		return err

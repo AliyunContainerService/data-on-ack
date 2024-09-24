@@ -35,11 +35,8 @@ import (
 	"github.com/AliyunContainerService/data-on-ack/ai-dev-console/pkg/infra/dmo"
 	"github.com/AliyunContainerService/data-on-ack/ai-dev-console/pkg/infra/dmo/converters"
 	apiv1 "github.com/AliyunContainerService/data-on-ack/ai-dev-console/pkg/job_controller/api/v1"
-	"github.com/AliyunContainerService/data-on-ack/ai-dev-console/pkg/util/workloadgate"
-
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -119,28 +116,29 @@ func (a *apiServerBackend) WriteNotebook(notebook *v1.Notebook) error {
 }
 
 func (a *apiServerBackend) Initialize() error {
-	var e error
-	once.Do(func() {
-		fn := func(obj runtime.Object) []string {
-			meta, err := apimeta.Accessor(obj)
-			if err != nil {
-				return []string{}
-			}
-			return []string{meta.GetName()}
-		}
-		for _, kind := range []string{training.TFJobKind, training.PyTorchJobKind, training.XDLJobKind, training.XGBoostJobKind} {
-			job := initJobWithKind(kind)
-			_, enabled := workloadgate.IsWorkloadEnable(job, clientmgr.GetScheme())
-			if !enabled {
-				continue
-			}
-			allKinds = append(allKinds, kind)
-			if err := clientmgr.IndexField(job, "metadata.name", fn); err != nil {
-				e = err
-			}
-		}
-	})
-	return e
+	//var e error
+	//once.Do(func() {
+	//	fn := func(obj runtime.Object) []string {
+	//		meta, err := apimeta.Accessor(obj)
+	//		if err != nil {
+	//			return []string{}
+	//		}
+	//		return []string{meta.GetName()}
+	//	}
+	//	for _, kind := range []string{training.TFJobKind, training.PyTorchJobKind, training.XDLJobKind, training.XGBoostJobKind} {
+	//		job := initJobWithKind(kind)
+	//		_, enabled := workloadgate.IsWorkloadEnable(job, clientmgr.GetScheme())
+	//		if !enabled {
+	//			continue
+	//		}
+	//		allKinds = append(allKinds, kind)
+	//		if err := clientmgr.IndexField(job, "metadata.name", fn); err != nil {
+	//			e = err
+	//		}
+	//	}
+	//})
+	//return e
+	return nil
 }
 
 func (a *apiServerBackend) Close() error {
@@ -227,22 +225,23 @@ func (a *apiServerBackend) WriteJob(job metav1.Object, kind string, specs map[ap
 }
 
 func (a *apiServerBackend) ReadJob(ns, name, jobID, kind, region string) (*dmo.Job, error) {
-	job := initJobWithKind(kind)
-	getter := initJobPropertiesWithKind(kind)
-	err := a.client.Get(context.Background(), types.NamespacedName{
-		Namespace: ns,
-		Name:      name,
-	}, job)
-	if err != nil {
-		return nil, err
-	}
-	metaObj, specs, runPolicy, jobStatus := getter(job)
-	enableGPUTopo := runPolicy.GPUTopologyPolicy != nil && runPolicy.GPUTopologyPolicy.IsTopologyAware
-	dmoJob, err := converters.ConvertJobToDMOJob(metaObj, kind, specs, jobStatus, region, enableGPUTopo)
-	if err != nil {
-		return nil, err
-	}
-	return dmoJob, nil
+	//job := initJobWithKind(kind)
+	//getter := initJobPropertiesWithKind(kind)
+	//err := a.client.Get(context.Background(), types.NamespacedName{
+	//	Namespace: ns,
+	//	Name:      name,
+	//}, job)
+	//if err != nil {
+	//	return nil, err
+	//}
+	//metaObj, specs, runPolicy, jobStatus := getter(job)
+	//enableGPUTopo := runPolicy.GPUTopologyPolicy != nil && runPolicy.GPUTopologyPolicy.IsTopologyAware
+	//dmoJob, err := converters.ConvertJobToDMOJob(metaObj, kind, specs, jobStatus, region, enableGPUTopo)
+	//if err != nil {
+	//	return nil, err
+	//}
+	//return dmoJob, nil
+	return nil, nil
 }
 
 func (a *apiServerBackend) ListJobs(query *backends.Query) ([]*dmo.Job, error) {
@@ -330,18 +329,19 @@ func (a *apiServerBackend) ListJobs(query *backends.Query) ([]*dmo.Job, error) {
 }
 
 func (a *apiServerBackend) UpdateJobRecordStopped(ns, name, jobID, kind, region string) error {
-	job := initJobWithKind(kind)
-	err := a.client.Get(context.Background(), types.NamespacedName{
-		Namespace: ns,
-		Name:      name,
-	}, job)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			return nil
-		}
-		return err
-	}
-	return a.client.Delete(context.Background(), job)
+	//job := initJobWithKind(kind)
+	//err := a.client.Get(context.Background(), types.NamespacedName{
+	//	Namespace: ns,
+	//	Name:      name,
+	//}, job)
+	//if err != nil {
+	//	if errors.IsNotFound(err) {
+	//		return nil
+	//	}
+	//	return err
+	//}
+	//return a.client.Delete(context.Background(), job)
+	return nil
 }
 
 func (a *apiServerBackend) RemoveJobRecord(ns, name, jobID, kind, region string) error {
@@ -374,36 +374,37 @@ func (a *apiServerBackend) ListCronHistories(ns, name, jobName, jobStatus, cronI
 }
 
 func (a *apiServerBackend) listJobsWithKind(kind string, nameLike, region string, options client.ListOptions, filters ...func(*dmo.Job) bool) ([]*dmo.Job, error) {
-	list, lister := initJobListWithKind(kind)
-	if err := a.client.List(context.Background(), list, &options); err != nil {
-		return nil, err
-	}
-	jobs := lister(list)
-	getter := initJobPropertiesWithKind(kind)
-	dmoJobs := make([]*dmo.Job, 0, len(jobs))
-	for _, job := range jobs {
-		metaObj, specs, runPolicy, jobStatus := getter(job)
-		if nameLike != "" && !strings.Contains(metaObj.GetName(), nameLike) {
-			continue
-		}
-		enableGPUTopo := runPolicy.GPUTopologyPolicy != nil && runPolicy.GPUTopologyPolicy.IsTopologyAware
-		dmoJob, err := converters.ConvertJobToDMOJob(metaObj, kind, specs, jobStatus, region, enableGPUTopo)
-		if err != nil {
-			return nil, err
-		}
-		skip := false
-		for _, filter := range filters {
-			if !filter(dmoJob) {
-				skip = true
-				break
-			}
-		}
-		if skip {
-			continue
-		}
-		dmoJobs = append(dmoJobs, dmoJob)
-	}
-	return dmoJobs, nil
+	//list, lister := initJobListWithKind(kind)
+	//if err := a.client.List(context.Background(), list, &options); err != nil {
+	//	return nil, err
+	//}
+	//jobs := lister(list)
+	//getter := initJobPropertiesWithKind(kind)
+	//dmoJobs := make([]*dmo.Job, 0, len(jobs))
+	//for _, job := range jobs {
+	//	metaObj, specs, runPolicy, jobStatus := getter(job)
+	//	if nameLike != "" && !strings.Contains(metaObj.GetName(), nameLike) {
+	//		continue
+	//	}
+	//	enableGPUTopo := runPolicy.GPUTopologyPolicy != nil && runPolicy.GPUTopologyPolicy.IsTopologyAware
+	//	dmoJob, err := converters.ConvertJobToDMOJob(metaObj, kind, specs, jobStatus, region, enableGPUTopo)
+	//	if err != nil {
+	//		return nil, err
+	//	}
+	//	skip := false
+	//	for _, filter := range filters {
+	//		if !filter(dmoJob) {
+	//			skip = true
+	//			break
+	//		}
+	//	}
+	//	if skip {
+	//		continue
+	//	}
+	//	dmoJobs = append(dmoJobs, dmoJob)
+	//}
+	//return dmoJobs, nil
+	return nil, nil
 }
 
 func initJobWithKind(kind string) (job runtime.Object) {

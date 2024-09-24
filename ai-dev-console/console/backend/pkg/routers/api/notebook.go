@@ -11,8 +11,8 @@
 *WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 *See the License for the specific language governing permissions and
 *limitations under the License.
-*/
-    
+ */
+
 package api
 
 import (
@@ -27,6 +27,7 @@ import (
 	"k8s.io/klog"
 	"net/http/httputil"
 	"net/url"
+	"os"
 	"reflect"
 	"strings"
 )
@@ -51,7 +52,12 @@ func (nc *NotebookAPIsController) RegisterRoutes(routes *gin.RouterGroup) {
 	routes.GET("/notebook/delete", nc.DeleteNotebookByName)
 	routes.GET("/notebook/maxGpu", nc.GetAvailableGpu)
 	routes.GET("/notebook/listPVC", nc.GetAvailablePVCList)
-	routes.GET("/notebook/listFromStorage", nc.GetNotebookListFromStorage)
+	if os.Getenv("LIST_ALL_NOTEBOOKS") == "true" {
+		routes.GET("/notebook/listFromStorage", nc.GetNotebookList)
+	} else {
+		routes.GET("/notebook/listFromStorage", nc.GetNotebookListFromStorage)
+	}
+
 	routes.GET("/notebook/sync", nc.SyncNotebooks)
 
 }

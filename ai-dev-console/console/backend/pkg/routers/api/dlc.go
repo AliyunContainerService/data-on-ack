@@ -11,18 +11,17 @@
 *WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 *See the License for the specific language governing permissions and
 *limitations under the License.
-*/
-    
+ */
+
 package api
 
 import (
 	"fmt"
+	training "github.com/AliyunContainerService/data-on-ack/ai-dev-console/apis/training/v1alpha1"
 	"github.com/AliyunContainerService/data-on-ack/ai-dev-console/console/backend/pkg/auth"
+	"github.com/AliyunContainerService/data-on-ack/ai-dev-console/console/backend/pkg/handlers"
 	"github.com/gin-contrib/sessions"
 	"github.com/spf13/pflag"
-
-	training "github.com/AliyunContainerService/data-on-ack/ai-dev-console/apis/training/v1alpha1"
-	"github.com/AliyunContainerService/data-on-ack/ai-dev-console/console/backend/pkg/handlers"
 
 	"github.com/AliyunContainerService/data-on-ack/ai-dev-console/console/backend/pkg/utils"
 	"github.com/gin-gonic/gin"

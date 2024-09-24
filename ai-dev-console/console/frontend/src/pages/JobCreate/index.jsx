@@ -200,12 +200,8 @@ const JobCreate = ({ globalConfig }) => {
             data.labels = form.labels.filter(d => d.key).reduce((p,c) => {p[c.key] = c.value; return p}, {})
         }
 
-        if (form.annotations) {
-            data.annotations = form.annotations.filter(d => d.key).reduce((p,c) => {p[c.key] = c.value; return p}, {})
-        }
-
-        if (form.nodeSelectors) {
-            data.nodeSelectors = form.nodeSelectors.reduce((p,c) => {p[c.key] = c.value; return p}, {})
+        if (form.devices) {
+            data.devices = form.devices.filter(d => d.key).reduce((p,c) => {p[c.key] = c.value; return p}, {})
         }
 
         if (form.tolerations) {
@@ -288,6 +284,7 @@ const JobCreate = ({ globalConfig }) => {
         //     user: usersInfo.loginId ? usersInfo.loginId : '',
         // });
         data.command=[form.command]
+        console.log(data)
 
         try {
             setSubmitLoading(true);
@@ -815,6 +812,36 @@ const JobCreate = ({ globalConfig }) => {
                             </Form.List>
                         </Card>
                         <Card title={intl.formatMessage({id: 'dlc-dashboard-training-advance-config'})} style={{ marginBottom: 12 }}>
+                            <Form.Item label="Device">
+                                <Form.List name="devices">
+                                    {(fields, {add, remove}) => (
+                                        <Fragment>
+                                            {fields.map(({key, name, fieldKey, ...restField}) => (
+                                                <Space key={key} align="baseline" size="small">
+                                                    <Form.Item
+                                                        {...restField}
+                                                        name={[name, 'key']}
+                                                        fieldKey={[fieldKey, 'key']}
+                                                    >
+                                                        <Input />
+                                                    </Form.Item>
+                                                    <Form.Item
+                                                        {...restField}
+                                                        name={[name, 'value']}
+                                                        fieldKey={[fieldKey, 'value']}
+                                                    >
+                                                        <Input />
+                                                    </Form.Item>
+                                                    <Button type="ghost" shape="circle" size="small" onClick={() => remove(name)} icon={<MinusOutlined />} />
+                                                </Space>
+                                            ))}
+                                            <Form.Item>
+                                                <Button type="ghost" shape="circle" size="small" onClick={() => add()} icon={<PlusOutlined />} />
+                                            </Form.Item>
+                                        </Fragment>
+                                    )}
+                                </Form.List>
+                            </Form.Item>
                             <Form.Item label="Label">
                                 <Form.List name="labels">
                                     {(fields, {add, remove}) => (

@@ -11,8 +11,8 @@
 *WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 *See the License for the specific language governing permissions and
 *limitations under the License.
-*/
-    
+ */
+
 package handlers
 
 import (
@@ -34,7 +34,6 @@ import (
 
 	"gopkg.in/yaml.v2"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -221,7 +220,7 @@ func (jh *JobHandler) SubmitJobWithKind(userName string, data []byte, kind strin
 	return jh.clientBackend.UserName(userName).SubmitJob(&job.SubmitJobInfo)
 }
 
-func (jh *JobHandler) submitJob(job runtime.Object) error {
+func (jh *JobHandler) submitJob(job client.Object) error {
 	for _, hook := range jh.preSubmitHooks {
 		hook(job)
 	}
