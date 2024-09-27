@@ -14,7 +14,7 @@ require (
 	github.com/gin-gonic/gin v1.9.0
 	github.com/go-sql-driver/mysql v1.4.1
 	github.com/jinzhu/gorm v1.9.12
-	github.com/kubeflow/arena v0.9.17-0.20240919123628-dfd3268cc65d
+	github.com/kubeflow/arena v0.9.17-0.20240927084536-223e534b9153
 	github.com/prometheus/client_golang v1.20.4
 	github.com/prometheus/common v0.59.1
 	github.com/sirupsen/logrus v1.9.3
@@ -72,7 +72,7 @@ require (
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/go-playground/validator/v10 v10.11.2 // indirect
-	github.com/go-resty/resty/v2 v2.15.1 // indirect
+	github.com/go-resty/resty/v2 v2.15.2 // indirect
 	github.com/goccy/go-json v0.10.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/glog v1.2.2 // indirect
