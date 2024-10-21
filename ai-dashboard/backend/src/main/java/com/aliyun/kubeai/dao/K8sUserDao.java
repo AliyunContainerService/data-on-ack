@@ -121,7 +121,7 @@ public class K8sUserDao {
         }
         UserList k8sUserList = userClient.inNamespace(namespace).list();
         for (User k8sUser : k8sUserList.getItems()) {
-            updateCache(k8sUser);
+//            updateCache(k8sUser);
             if (!Strings.isNullOrEmpty(userName)) {
                 if (!k8sUser.getSpec().getUserName().contains(userName)) {
                     continue;
@@ -180,7 +180,7 @@ public class K8sUserDao {
         res = userClient.inNamespace(DEFAULT_USER_NAMESPACE).withName(userId).get();
         if (res != null) {
             log.info("find user in k8s by id:{} {}", userId, res);
-            updateCache(res);
+//            updateCache(res);
         }
         return res;
     }
@@ -205,8 +205,8 @@ public class K8sUserDao {
         if (null == oldUser) {
             oldUser = user;
         }
-        invalidateCache(oldUser);
-        updateCache(user);
+//        invalidateCache(oldUser);
+//        updateCache(user);
         log.info("update user done req:{}", objJsonString);
         return true;
     }
@@ -251,7 +251,7 @@ public class K8sUserDao {
         }
         user = setNullWithDefaultValue(user);
         User res = client.inNamespace(user.getMetadata().getNamespace()).create(user);
-        updateCache(user);
+//        updateCache(user);
         log.info("create user done value:{}", res);
         return true;
     }
@@ -266,7 +266,7 @@ public class K8sUserDao {
         //delete user crd
         CustomResourceDefinitionContext ctx = kubeClient.buildCrdContext(KUBEAI_USER_CRD_NAME);
         kubeClient.getClient().customResource(ctx).delete(DEFAULT_USER_NAMESPACE, userName);
-        invalidateCache(user);
+//        invalidateCache(user);
         return true;
     }
 

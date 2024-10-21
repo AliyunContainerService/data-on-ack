@@ -147,6 +147,7 @@ public class AdminController {
         log.info("found user by id:{} ramUserPrincipleName:{}", aliuid, ramUserPrincipleName);
         try {
             user = userService.findUserByAliuid(aliuid);
+
             if (user == null) {
                 result.setCode(ResultCode.USER_NOT_FOUND);
                 result.setMessage("user not login");
