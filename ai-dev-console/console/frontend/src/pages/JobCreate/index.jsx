@@ -54,6 +54,10 @@ const JobCreate = ({ globalConfig }) => {
     const [usersInfo, setUsersInfo] = useState({});
     const [showCron, setShowCron] = useState(true);
 
+    const [selectedType, setSelectedType] = useState('GPUExclusive');
+    
+    const [gpuResource, setgpuResource] = useState(0);
+
     if (sessionStorage.getItem("job")) {
         setCloneInfo(JSON.parse(sessionStorage.getItem("job")));
         sessionStorage.removeItem('job');
@@ -157,6 +161,10 @@ const JobCreate = ({ globalConfig }) => {
             }
         }
         setNamespaces(newNamespaces);
+    }
+
+    const gpuResourceChange = (e) => {
+        setgpuResource(e)
     }
 
     const onFormSubmit = async form => {
@@ -265,6 +273,9 @@ const JobCreate = ({ globalConfig }) => {
             data[task.role.toLowerCase()+"CPU"]=task.resource.cpu+""
             data[task.role.toLowerCase()+"Memory"]=task.resource.memory+"Gi"
             data[task.role.toLowerCase()+"GPU"]=task.resource.gpu
+            if (gpuResource > 0 && selectedType == 'GPUExclusive') {
+                data[task.role.toLowerCase()+"GPU"] = gpuResource
+            }
         };
 
         form.tasks.forEach(task => {
@@ -277,6 +288,14 @@ const JobCreate = ({ globalConfig }) => {
 
         if (form.namespaces !== undefined && form.namespaces != null && form.namespaces.length !== 0) {
             data.namespace = form.namespaces[0]
+        }
+
+        if (gpuResource > 0 && selectedType == 'GPUShare') {
+            if (typeof data.devices == 'undefined') {
+                data.devices = {}
+            }
+            gpuMemResourceGib = Math.round(gpuResource * 1000 * 1000 * 1000 / (1024 * 1024 * 1024))
+            data.devices['aliyun.com/gpu-mem'] = gpuMemResourceGib
         }
 
         // data.annotations['kubeflow.org/tenancy'] = JSON.stringify({
@@ -804,6 +823,29 @@ const JobCreate = ({ globalConfig }) => {
                                                         precision={0}
                                                         style={{ width: "100%" }}
                                                     />
+                                                </Form.Item>
+                                                <Form.Item label="Type">
+                                                    <Radio.Group 
+                                                        value={selectedType}
+                                                        onChange={(e) => {
+                                                            setSelectedType(e.target.value);
+                                                            console.log(e)
+                                                        }}
+                                                    >
+                                                        <Radio value="GPUExclusive">Exclusive GPU</Radio>
+                                                        <Radio value="GPUShare">GPU Memory(GB)</Radio>
+                                                    </Radio.Group>
+                                                </Form.Item>
+                                                <Form.Item
+                                                    label="GPU Resource Number">
+                                                    <InputNumber
+                                                        value={gpuResource}
+                                                        onChange={gpuResourceChange}
+                                                        min={0}
+                                                        max={96}
+                                                        step={1}
+                                                        precision={0}
+                                                        style={{ width: "100%" }}/>
                                                 </Form.Item>
                                             </Tabs.TabPane>
                                         ))}
