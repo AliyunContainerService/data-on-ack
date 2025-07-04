@@ -5,25 +5,7 @@ WORKDIR /workspace
 
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -mod=vendor -a -o backend-server console/backend/cmd/backend-server/main.go
-
-
-# Build frontend
-# FROM node:16.20.2 as frontend-builder
-
-# WORKDIR /workspace
-
-# COPY console/frontend/ .
-
-# RUN apt update && \
-#     apt install -y npm && \
-#     apt upgrade -y npm
-
-# RUN set -eux && \
-#     rm -rf dist && \
-#     rm -f package-lock.json && \
-#     npm install --legacy-peer-deps --registry=https://registry.npmmirror.com && \
-#     npm run build
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o backend-server console/backend/cmd/backend-server/main.go
 
 FROM registry-cn-hangzhou.ack.aliyuncs.com/dev/alpine:3.18-update
 
