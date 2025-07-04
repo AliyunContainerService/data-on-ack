@@ -21,16 +21,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	v1 "github.com/AliyunContainerService/data-on-ack/ai-dev-console/apis/notebook/v1"
-	"github.com/AliyunContainerService/data-on-ack/ai-dev-console/console/backend/pkg/auth"
-	utils2 "github.com/AliyunContainerService/data-on-ack/ai-dev-console/console/backend/pkg/utils"
-	"github.com/AliyunContainerService/data-on-ack/ai-dev-console/pkg/infra/backends"
-	"github.com/AliyunContainerService/data-on-ack/ai-dev-console/pkg/infra/backends/clientmgr"
-	"github.com/AliyunContainerService/data-on-ack/ai-dev-console/pkg/infra/backends/registry"
-	"github.com/AliyunContainerService/data-on-ack/ai-dev-console/pkg/infra/backends/utils"
-	"github.com/AliyunContainerService/data-on-ack/ai-dev-console/pkg/infra/dmo"
-	"github.com/AliyunContainerService/data-on-ack/ai-dev-console/pkg/infra/dmo/converters"
-	"github.com/AliyunContainerService/data-on-ack/ai-dev-console/pkg/proxy"
+	"os"
+	"reflect"
+	"sort"
+	"strings"
+	"time"
+
 	"github.com/ghodss/yaml"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
@@ -42,13 +38,19 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/klog"
-	"os"
-	"reflect"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sort"
-	"strings"
-	"time"
+
+	v1 "github.com/AliyunContainerService/data-on-ack/ai-dev-console/apis/notebook/v1"
+	"github.com/AliyunContainerService/data-on-ack/ai-dev-console/console/backend/pkg/auth"
+	utils2 "github.com/AliyunContainerService/data-on-ack/ai-dev-console/console/backend/pkg/utils"
+	"github.com/AliyunContainerService/data-on-ack/ai-dev-console/pkg/infra/backends"
+	"github.com/AliyunContainerService/data-on-ack/ai-dev-console/pkg/infra/backends/clientmgr"
+	"github.com/AliyunContainerService/data-on-ack/ai-dev-console/pkg/infra/backends/registry"
+	"github.com/AliyunContainerService/data-on-ack/ai-dev-console/pkg/infra/backends/utils"
+	"github.com/AliyunContainerService/data-on-ack/ai-dev-console/pkg/infra/dmo"
+	"github.com/AliyunContainerService/data-on-ack/ai-dev-console/pkg/infra/dmo/converters"
+	"github.com/AliyunContainerService/data-on-ack/ai-dev-console/pkg/proxy"
 )
 
 type ConditionsSorted []corev1.PodCondition
@@ -796,11 +798,14 @@ func GetNotebookResource(data NotebookSubmitData) (*v1.Notebook, error) {
 							VolumeMounts:    volumeMounts,
 							Resources: corev1.ResourceRequirements{
 								Limits: corev1.ResourceList{
-									ResourceGPU: resource.MustParse(data.Gpus),
+									corev1.ResourceCPU:    resource.MustParse(data.Cpus),
+									corev1.ResourceMemory: resource.MustParse(data.Memory),
+									ResourceGPU:           resource.MustParse(data.Gpus),
 								},
 								Requests: corev1.ResourceList{
-									"cpu":    resource.MustParse(data.Cpus),
-									"memory": resource.MustParse(data.Memory),
+									corev1.ResourceCPU:    resource.MustParse(data.Cpus),
+									corev1.ResourceMemory: resource.MustParse(data.Memory),
+									ResourceGPU:           resource.MustParse(data.Gpus),
 								},
 							},
 						},
