@@ -1,1 +1,2 @@
 agentscope>=0.1.0
+ijson>=3.0

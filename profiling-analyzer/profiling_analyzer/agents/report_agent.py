@@ -107,7 +107,7 @@ class ReportAgent(AgentBase):
         return reply_msg
 
     async def observe(self, msg: Msg | list[Msg] | None = None) -> None:
-        pass
+        """No-op: this agent is stateless and does not observe messages."""
 
     async def handle_interrupt(self, *args: Any, **kwargs: Any) -> Msg:
         return Msg(self.name, "Interrupted.", "assistant")

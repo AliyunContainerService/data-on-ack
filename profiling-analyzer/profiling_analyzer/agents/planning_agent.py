@@ -182,7 +182,7 @@ class ProfilingPlanningAgent(AgentBase):
         return report_msg.metadata.get("report", report_msg.get_text_content())
 
     async def observe(self, msg: Msg | list[Msg] | None = None) -> None:
-        pass
+        """No-op: the orchestrator does not observe messages directly."""
 
     async def handle_interrupt(self, *args: Any, **kwargs: Any) -> Msg:
         return Msg(self.name, "Interrupted.", "assistant")
