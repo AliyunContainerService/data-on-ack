@@ -53,8 +53,8 @@ dashboard:
     tls: []
 
 storage:
-  rds:
-    enabled: false
+  mysql:
+    enabled: true
 
 ingress:
   enabled: false
