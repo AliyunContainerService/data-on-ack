@@ -1,2 +1,2 @@
 #!/bin/bash
-./backend-server --enable-auth=false
+./backend-server --enable-auth=true

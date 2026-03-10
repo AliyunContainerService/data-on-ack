@@ -70,7 +70,7 @@
       </el-table-column>
       <el-table-column :label="$t('dataset.dataSource')">
         <template slot-scope="{ row }">
-          <span v-html="row.mountPoints" />
+          <span>{{ row.mountPoints }}</span>
         </template>
       </el-table-column>
       <el-table-column :label="$t('dataset.isAccelerate')">

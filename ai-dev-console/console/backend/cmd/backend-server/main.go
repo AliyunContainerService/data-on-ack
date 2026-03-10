@@ -60,7 +60,6 @@ func main() {
 	if constants.IsCreateWebApp {
 		klog.Infof("defer to delete webapp")
 		defer auth.DeleteAppDefer()
-		time.Sleep(time.Second * 3)
 	}
 
 	clientmgr.Start()

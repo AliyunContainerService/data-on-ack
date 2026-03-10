@@ -175,7 +175,12 @@ public class UserService {
             return null;
         }
 
-        String secretName = serviceAccount.getSecrets().get(0).getName();
+        List<ObjectReference> secrets = serviceAccount.getSecrets();
+        if (secrets == null || secrets.isEmpty()) {
+            log.warn("no secrets found for service account:{}", serviceAccountName);
+            return null;
+        }
+        String secretName = secrets.get(0).getName();
         Secret secret = client.getClient().secrets().inNamespace(serviceAccountNamespace).withName(secretName).get();
         if (null == secret) {
             log.warn("can't find secret by sa:{}", secretName);
@@ -209,8 +214,17 @@ public class UserService {
             return null;
         }
 
-        String secretName = serviceAccount.getSecrets().get(0).getName();
+        List<ObjectReference> saSecrets = serviceAccount.getSecrets();
+        if (saSecrets == null || saSecrets.isEmpty()) {
+            log.warn("no secrets found for service account:{}", serviceAccountName);
+            return null;
+        }
+        String secretName = saSecrets.get(0).getName();
         Secret secret = client.getClient().secrets().inNamespace(serviceAccountNamespace).withName(secretName).get();
+        if (null == secret) {
+            log.warn("can't find secret by sa:{}", secretName);
+            return null;
+        }
         String secretCaCrtBase64 = secret.getData().get("ca.crt");
         String secretNamespaceBase64 = secret.getData().get("namespace");
         String secretNamespace = new String(Base64.decodeBase64(secretNamespaceBase64.getBytes()), StandardCharsets.UTF_8);
@@ -228,9 +242,15 @@ public class UserService {
             log.warn("endpoints name:{} not found in default", DEFAULT_KUBERNETES_ENDPOINT_NAME);
             return null;
         }
-        String portName = endpointSubsets.get(0).getPorts().get(0).getName();
-        Integer portNum = endpointSubsets.get(0).getPorts().get(0).getPort();
-        EndpointAddress epAddr = endpoints.getSubsets().get(0).getAddresses().get(0);
+        List<EndpointPort> epPorts = endpointSubsets.get(0).getPorts();
+        List<EndpointAddress> epAddresses = endpointSubsets.get(0).getAddresses();
+        if (epPorts == null || epPorts.isEmpty() || epAddresses == null || epAddresses.isEmpty()) {
+            log.warn("endpoint ports or addresses empty for:{}", DEFAULT_KUBERNETES_ENDPOINT_NAME);
+            return null;
+        }
+        String portName = epPorts.get(0).getName();
+        Integer portNum = epPorts.get(0).getPort();
+        EndpointAddress epAddr = epAddresses.get(0);
 
         String serverAddrs = String.format("%s://%s:%d/", portName, epAddr.getIp(), portNum);
         log.info("config serverAddrs:{}", serverAddrs);
@@ -339,11 +359,12 @@ public class UserService {
         totalItems.forEach(x->x.getMetadata().setCreationTimestamp(transUTCTime(x.getMetadata().getCreationTimestamp())));
         int total = totalItems.size();
         Collections.sort(totalItems);
-        List<User> resK8sItems = totalItems;
-        if (page * limit <= total) {
-            resK8sItems = totalItems.subList((page - 1) * limit, page * limit);
-        } else if ((page - 1) * limit >= total) {
-            resK8sItems = Arrays.asList();
+        List<User> resK8sItems;
+        int fromIndex = (page - 1) * limit;
+        if (fromIndex >= total) {
+            resK8sItems = Collections.emptyList();
+        } else {
+            resK8sItems = totalItems.subList(fromIndex, Math.min(fromIndex + limit, total));
         }
         res.setItems(resK8sItems);
         res.setTotal(total);

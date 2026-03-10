@@ -135,7 +135,7 @@ func (auth *AliCloudAuth) LoginByToken(c *gin.Context) error {
 	}
 	b, _ := json.Marshal(userInfo)
 	klog.Infof("logging in user info %s", string(b))
-	session.Set(SessionKeyAccountID, userInfo.Uid)
+	session.Set(SessionKeyAccountID, userInfo.Aid)
 	session.Set(SessionKeyLoginID, userInfo.Uid)
 	session.Set(SessionKeyName, userInfo.Name)
 	session.Set(SessionKeyLoginName, userInfo.LoginName)
@@ -226,8 +226,8 @@ func (auth *AliCloudAuth) Login(c *gin.Context) error {
 	}
 
 	session := sessions.Default(c)
-	session.Set(SessionKeyAccountID, userInfo.Name) //阿里云主账号ID
-	session.Set(SessionKeyLoginID, userInfo.Name)   //RAM子账号ID
+	session.Set(SessionKeyAccountID, userInfo.Aid)  //阿里云主账号ID
+	session.Set(SessionKeyLoginID, userInfo.Uid)    //RAM子账号ID
 	session.Set(SessionKeyName, userInfo.Name)      //RAM账号显示名称（可选）或自定义用户名
 	session.Set(SessionKeyLoginName, loginName)     //RAM账号登录名称或自定义用户名
 	session.Set(SessionKeyToken, k8sToken)
@@ -459,7 +459,10 @@ func getUserInfo(accessToken string) (userInfo model.UserInfo, err error) {
 		klog.Errorf("oauth response body is nil")
 		return userInfo, errors.New(fmt.Sprintf("oauth response body is nil"))
 	}
-	json.Unmarshal([]byte(body), &userInfo)
+	if err = json.Unmarshal([]byte(body), &userInfo); err != nil {
+		klog.Errorf("oauth failed to unmarshal userInfo, responseBody: %s, err: %v", body, err)
+		return userInfo, err
+	}
 	return userInfo, nil
 }
 

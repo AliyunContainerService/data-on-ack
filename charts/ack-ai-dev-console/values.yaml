@@ -47,7 +47,7 @@ dev-console:
   service:
     type: ClusterIP
     port: 80
-    constainerPort: 9090
+    containerPort: 9090
 
   console:
     intlAccount: "false"
