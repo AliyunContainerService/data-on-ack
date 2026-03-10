@@ -20,6 +20,7 @@ import lombok.extern.slf4j.Slf4j;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
+import okhttp3.ResponseBody;
 
 import java.io.IOException;
 import java.net.InetAddress;
@@ -54,13 +55,19 @@ public class HttpUtil {
         try {
             response = client.newCall(request).execute();
             if (response.code() == 200) {
-                return response.body().string();
+                ResponseBody responseBody = response.body();
+                if (responseBody != null) {
+                    return responseBody.string();
+                }
             }
         } catch (IOException e) {
             throw e;
         } finally {
             if (response != null) {
-                response.body().close();
+                ResponseBody responseBody = response.body();
+                if (responseBody != null) {
+                    responseBody.close();
+                }
             }
         }
         return null;

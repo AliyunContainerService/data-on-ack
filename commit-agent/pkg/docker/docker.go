@@ -51,7 +51,6 @@ func NewDockerClient() (_type.ContainerClient, error) {
 	if err != nil {
 		panic(err)
 	}
-	defer cli.Close()
 
 	return &Client{
 		Ctx:    context.Background(),
