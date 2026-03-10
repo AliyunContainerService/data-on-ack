@@ -1,66 +1,79 @@
-# ai-dashboard backend
+# ai-dashboard
 
-> AI Dashboard backend with spring boot.
+AI Dashboard is an operations console for cluster administrators. It provides cluster monitoring, dataset management, user-level resource quota allocation, job listings, and cost estimation to help users quickly set up and manage a machine learning environment on Kubernetes.
 
-## requirement
+## Components
+
+- **Backend** – Spring Boot application (JDK 11 + Maven 3.6+)
+- **Frontend** – Vue.js application with Element UI
+
+---
+
+## Backend
+
+### Requirements
+
 - JDK 11
 - Maven 3.6+
 
-## Build Setup
+### Build & Run
 
 ```bash
-# clone the project
+# Clone the project
 git clone https://github.com/AliyunContainerService/data-on-ack.git
 
-# enter the project directory
+# Enter the backend directory
 cd data-on-ack/ai-dashboard/backend
 
-# run
+# Run with Maven
 mvn spring-boot:run
-
 ```
 
-# ai-dashboard frontend
+---
 
-> AI Dashboard frontend with vue and element ui.
+## Frontend
 
-## Build Setup
+### Requirements
 
-# enter the project directory
-cd frondend
+- Node.js 12+
+- npm 6+
 
-# install dependency
+### Development
+
+```bash
+# Enter the frontend directory
+cd data-on-ack/ai-dashboard/frontend
+
+# Install dependencies
 npm install
 
-# develop
+# Start development server (opens http://localhost:9528 automatically)
 npm run dev
 ```
 
-This will automatically open http://localhost:9528
-
-## Build
+### Build
 
 ```bash
-# build for test environment
+# Build for staging environment
 npm run build:stage
 
-# build for production environment
+# Build for production environment
 npm run build:prod
 ```
 
-## Advanced
+### Advanced
 
 ```bash
-# preview the release environment effect
+# Preview the production build
 npm run preview
 
-# preview the release environment effect + static resource analysis
+# Preview with static resource analysis report
 npm run preview -- --report
 
-# code format check
+# Check code formatting
 npm run lint
 
-# code format check and auto fix
+# Check and auto-fix code formatting
 npm run lint -- --fix
 ```
 
