@@ -96,6 +96,10 @@ public class UserGroupService {
             log.warn("user not found name:{}", userName);
             return false;
         }
+        if (null == userToUpdate.getSpec()) {
+            log.warn("user spec is null for name:{}", userName);
+            return false;
+        }
         List<String> k8sGroups = userToUpdate.getSpec().getGroups();
         if (!StringListEqual(k8sGroups, oldGroupNames)) {
             log.warn("user's group not match in userName:{} ui:{} k8s:{}", userName, oldGroupNames, k8sGroups);
@@ -116,7 +120,8 @@ public class UserGroupService {
 
         ServiceAccount serviceAccount = k8sService.findServiceAccountByUser(userToUpdate);
         if (null == serviceAccount) {
-            log.warn("service account not found for user:{}", userToUpdate.getSpec().getUserName());
+            String userName4Log = userToUpdate.getSpec() != null ? userToUpdate.getSpec().getUserName() : "unknown";
+            log.warn("service account not found for user:{}", userName4Log);
             return false;
         }
 
