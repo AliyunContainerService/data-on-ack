@@ -1,13 +1,15 @@
-# Commit-Agent
-The usage of commit-agent can refer to the [documentation](https://help.aliyun.com/zh/ack/cloud-native-ai-suite/user-guide/create-and-use-a-jupyter-notebook?spm=a2c4g.11186623.0.0.434e4497kN54rC#acdef32034shm).
+# Commit Agent
 
-Run to build
+Commit Agent is a gRPC-based sidecar agent that runs inside Jupyter Notebook pods. It enables code synchronization between the notebook container and a remote Git repository. For usage details, refer to the [official documentation](https://help.aliyun.com/zh/ack/cloud-native-ai-suite/user-guide/create-and-use-a-jupyter-notebook?spm=a2c4g.11186623.0.0.434e4497kN54rC#acdef32034shm).
+
+## Build
+
 ```shell
-go mod tidy && do mod vendor
-make build && make build-client 
+go mod tidy && go mod vendor
+make build && make build-client
 ```
 
-## generate grpc code
+## Generate gRPC Code
 
 ```shell
 cd v1beta1
