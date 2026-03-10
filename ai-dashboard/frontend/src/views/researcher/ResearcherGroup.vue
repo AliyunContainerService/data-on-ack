@@ -269,7 +269,7 @@ export default {
       })
     },
     refresh() {
-      this.listQuery = rawQuery
+      this.listQuery = { ...rawQuery }
       this.userList = []
       this.fetchGroupAndUsers()
       this.getQuotas()

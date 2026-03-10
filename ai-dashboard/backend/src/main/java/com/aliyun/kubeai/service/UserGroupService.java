@@ -154,11 +154,12 @@ public class UserGroupService {
         List<UserGroup> totalItems = userGroupDao.listUserGroupByGroupName(userGroupName, null, false);
         int total = totalItems.size();
         Collections.sort(totalItems);
-        List<UserGroup> resK8sItems = totalItems;
-        if (page * limit <= total) {
-            resK8sItems = totalItems.subList((page - 1) * limit, page * limit);
-        } else if ((page - 1) * limit >= total) {
-            resK8sItems = Arrays.asList();
+        List<UserGroup> resK8sItems;
+        int fromIndex = (page - 1) * limit;
+        if (fromIndex >= total) {
+            resK8sItems = Collections.emptyList();
+        } else {
+            resK8sItems = totalItems.subList(fromIndex, Math.min(fromIndex + limit, total));
         }
         res.setItems(resK8sItems);
         res.setTotal(total);
@@ -181,7 +182,12 @@ public class UserGroupService {
         if (null == quotaNames) return true;
         List<UserGroup> userGroups = userGroupDao.listUserGroupByGroupName(null, null, false);
         Set<String> bindedQuotaNames = new HashSet<>();
-        userGroups.stream().map(x->bindedQuotaNames.addAll(x.getSpec().getQuotaNames()));
+        userGroups.forEach(x -> {
+            List<String> groupQuotaNames = x.getSpec().getQuotaNames();
+            if (groupQuotaNames != null) {
+                bindedQuotaNames.addAll(groupQuotaNames);
+            }
+        });
         ElasticQuotaTreeWithPrefix tree = quotaGroupService.getElasticQuotaTree(null, null);
         for (String quotaName: quotaNames) {
             if (bindedQuotaNames.contains(quotaName)) {
