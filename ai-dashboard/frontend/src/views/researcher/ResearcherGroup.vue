@@ -345,9 +345,7 @@ export default {
       })
     },
     getUsersByGroup(groupName, userList) {
-      console.log('group ', groupName, ' userList:', userList)
       var res = userList.filter(d => d.spec && (d.spec.groups || []).includes(groupName)).map(d => d.spec.userName)
-      console.log('group ' + groupName + ' users:', res)
       return res
     },
     updateData() {
@@ -356,7 +354,6 @@ export default {
           this.dialogFormVisible = false
           return
         }
-        console.log('group to update:', this.formTemplate, this.userList)
         const userNamesSet = this.formTemplate.userNames.filter((v, i, self) => self.indexOf(v) === i)
         const newUsers = this.userList.filter(x => x.spec && userNamesSet.indexOf(x.spec.userName) >= 0)
         updateUserGroup(this.formTemplate, newUsers).then(response => {
@@ -394,7 +391,6 @@ export default {
           this.dialogFormVisible = false
           return
         }
-        console.log('group to delete:', this.formTemplate)
         deleteUserGroup(this.formTemplate).then(response => {
           if (response !== null && response.code === 10000) {
             this.refresh()
@@ -436,7 +432,6 @@ export default {
     handleDelete(userGroup) {
       var users = this.getUsersByGroup(userGroup.metadata.name, this.userList)
       this.resetFormTemplate(fromK8sUserGroup(userGroup, users))
-      console.log('group to delete:', this.formTemplate)
       this.listLoading = true
       deleteUserGroup(this.formTemplate).then(response => {
         if (response !== null && response.code === 10000) {

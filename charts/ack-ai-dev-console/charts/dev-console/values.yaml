@@ -32,16 +32,18 @@ serviceAccount:
   # If not set and create is true, a name is generated using the fullname template
   name: ai-dev-console-ui
 
-podSecurityContext: {}
-  # fsGroup: 2000
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
 
-securityContext: {}
-  # capabilities:
-  #   drop:
-  #   - ALL
-  # readOnlyRootFilesystem: true
-  # runAsNonRoot: true
-  # runAsUser: 1000
+securityContext:
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
 
 service:
   type: ClusterIP
@@ -62,6 +64,7 @@ console:
 storage:
   mysql:
     enabled: true
+    host: ""
 
 ingress:
   enabled: false

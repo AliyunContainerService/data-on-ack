@@ -16,7 +16,6 @@
 package utils
 
 import (
-	"crypto/tls"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -44,7 +43,6 @@ func IsDomainNameAvailable(domain string) bool {
 // getClient is get a default httpClient
 func getClient() *http.Client {
 	tr := &http.Transport{
-		TLSClientConfig:    &tls.Config{InsecureSkipVerify: true},
 		DisableCompression: true,
 		DisableKeepAlives:  true,
 	}

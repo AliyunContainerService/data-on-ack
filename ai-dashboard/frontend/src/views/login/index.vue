@@ -70,8 +70,8 @@ export default {
     // }
     return {
       loginForm: {
-        clientId: 'admin',
-        clientSecret: '123456'
+        clientId: '',
+        clientSecret: ''
       },
       loginRules: {
         clientId: [{ required: true, trigger: 'blur', type: 'string' }],
@@ -119,7 +119,6 @@ export default {
             // dynamically add accessible routes
             this.$router.addRoutes(accessRoutes)
           }).catch(error => {
-            console.log('genereate route error:', error)
             throw new Error(error)
           })
 

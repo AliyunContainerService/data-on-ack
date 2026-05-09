@@ -16,6 +16,10 @@
 package routers
 
 import (
+	"crypto/rand"
+	"encoding/hex"
+	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"path"
@@ -53,7 +57,20 @@ type APIController interface {
 	RegisterRoutes(routes *gin.RouterGroup)
 }
 
-func InitRouter() *gin.Engine {
+func getCookieSecret() []byte {
+	secret := os.Getenv("COOKIE_SECRET")
+	if secret != "" {
+		return []byte(secret)
+	}
+	bytes := make([]byte, 32)
+	if _, err := rand.Read(bytes); err != nil {
+		panic(fmt.Sprintf("failed to generate random cookie secret: %v", err))
+	}
+	log.Println("WARNING: COOKIE_SECRET not set, using randomly generated secret (sessions will not survive restarts)")
+	return []byte(hex.EncodeToString(bytes))
+}
+
+func InitRouter() (*gin.Engine, error) {
 	gin.SetMode(gin.ReleaseMode)
 
 	r := gin.New()
@@ -72,7 +89,7 @@ func InitRouter() *gin.Engine {
 		utils.Redirect1000,
 	)
 
-	store := cookie.NewStore([]byte("secret"))
+	store := cookie.NewStore(getCookieSecret())
 	store.Options(sessions.Options{
 		Path:     "/",
 		HttpOnly: true,
@@ -84,7 +101,7 @@ func InitRouter() *gin.Engine {
 
 	aliCloudAuth, err := auth.NewAliCloudAuth()
 	if err != nil {
-		panic(err)
+		return nil, fmt.Errorf("new alicloud auth: %w", err)
 	}
 	if md.EnableAuth() {
 		r.Use(
@@ -94,8 +111,7 @@ func InitRouter() *gin.Engine {
 	// notebook after auth but must before others or browser will render dev-console index.html
 	notebookHandler, err := handlers.NewNotebookHandler(objectStorage)
 	if err != nil {
-		klog.Errorf("NewNotebookHandler error: %v", err)
-		panic(err)
+		return nil, fmt.Errorf("new notebook handler: %w", err)
 	}
 	jupyterReserveProxy := r.Group("/notebook")
 	notebookController := api.NewNotebookAPIsController(notebookHandler)
@@ -133,20 +149,17 @@ func InitRouter() *gin.Engine {
 
 	logHandler, err := handlers.NewLogHandler(eventStorage)
 	if err != nil {
-		klog.Error("Fail to new log handler:" + err.Error())
-		panic(err)
+		return nil, fmt.Errorf("new log handler: %w", err)
 	}
 
 	jobHandler, err := handlers.NewJobHandler(objectStorage, clientType, logHandler)
 	if err != nil {
-		klog.Error("Fail to NewJobHandler:" + err.Error())
-		panic(err)
+		return nil, fmt.Errorf("new job handler: %w", err)
 	}
 
 	cronHandler, err := handlers.NewCronHandler(objectStorage, clientType)
 	if err != nil {
-		klog.Error("Fail to NewCronHandlerr:" + err.Error())
-		panic(err)
+		return nil, fmt.Errorf("new cron handler: %w", err)
 	}
 
 	dataHandler := handlers.NewDataHandler()
@@ -157,14 +170,12 @@ func InitRouter() *gin.Engine {
 
 	evaluateHandler, err := handlers.NewEvaluateHandler(objectStorage, clientType)
 	if err != nil {
-		klog.Error("Fail to NewEvaluateHandler:" + err.Error())
-		panic(err)
+		return nil, fmt.Errorf("new evaluate handler: %w", err)
 	}
 
 	modelsHandler, err := handlers.NewModelsHandler(objectStorage)
 	if err != nil {
-		klog.Error("Fail to NewModelsHandler:" + err.Error())
-		panic(err)
+		return nil, fmt.Errorf("new models handler: %w", err)
 	}
 
 	mlMetadataController := api.NewMLMetadataController()
@@ -183,5 +194,5 @@ func InitRouter() *gin.Engine {
 	for _, ctrl := range ctrls {
 		ctrl.RegisterRoutes(apiV1Routes)
 	}
-	return r
+	return r, nil
 }

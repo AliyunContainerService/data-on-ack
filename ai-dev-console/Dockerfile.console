@@ -7,11 +7,12 @@ COPY . .
 
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o backend-server console/backend/cmd/backend-server/main.go
 
-FROM registry-cn-hangzhou.ack.aliyuncs.com/dev/alpine:3.18-update
+FROM registry-cn-hangzhou.ack.aliyuncs.com/dev/alpine:3.20
 
 ARG ARG_TZ=
 
 ARG ARENA_TAR=arena-installer-0.9.16-6c2373d-linux-amd64.tar.gz
+ARG ARENA_SHA256=
 
 WORKDIR /
 
@@ -25,6 +26,9 @@ RUN set -eux && \
     ln -snf /usr/share/zoneinfo/Etc/UTC /etc/localtime && \
     echo "Etc/UTC" > /etc/timezone && \
     wget https://aliacs-k8s-cn-hongkong.oss-cn-hongkong.aliyuncs.com/arena/${ARENA_TAR} && \
+    if [ -n "${ARENA_SHA256}" ]; then \
+      echo "${ARENA_SHA256}  ${ARENA_TAR}" | sha256sum -c -; \
+    fi && \
     tar -xzvf ${ARENA_TAR} && \
     cp arena-installer/bin/arena /usr/bin/arena && \
     cp arena-installer/bin/helm /usr/bin/arena-helm && \

@@ -15,7 +15,7 @@
     
 package com.aliyun.kubeai.cluster;
 
-import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson2.JSON;
 import com.aliyun.kubeai.model.auth.RoleAuth;
 import com.aliyun.kubeai.utils.HttpUtil;
 import com.google.common.base.Strings;

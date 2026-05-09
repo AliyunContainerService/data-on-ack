@@ -25,17 +25,17 @@ function handleLogin() {
     if (roles.length < 1) {
       throw new Error('auth roles empty')
     }
-    this.$store.dispatch('user/updateUser', { roles: roles, userName: user.userName, token: response.data.token, clusterInfo: clusterInfo }).then(() => {
-      this.$store.dispatch('permission/generateRoutes', [roles, clusterInfo]).then((accessRoutes) => {
+    store.dispatch('user/updateUser', { roles: roles, userName: user.userName, token: response.data.token, clusterInfo: clusterInfo }).then(() => {
+      store.dispatch('permission/generateRoutes', [roles, clusterInfo]).then((accessRoutes) => {
         // dynamically add accessible routes
-        this.$router.addRoutes(accessRoutes)
+        router.addRoutes(accessRoutes)
       }).catch(error => {
         throw new Error(error)
       })
 
       // hack method to ensure that addRoutes is complete
       // set the replace: true, so the navigation will not leave a history record
-      this.$router.push({ path: this.redirect || '/' })
+      router.push({ path: '/' })
     }).catch(error => {
       throw new Error(error)
     })
@@ -60,7 +60,9 @@ router.beforeEach(async(to, from, next) => {
   document.title = getPageTitle(to.meta.title)
   // determine whether the user has logged in
   var hasToken = !isEmpty(getToken())
-  console.log('token:', hasToken)
+  if (process.env.NODE_ENV === 'development') {
+    console.log('token:', hasToken)
+  }
   // const hasToken = true
   if (hasToken) {
     if (to.path === '/login/') {
@@ -70,7 +72,9 @@ router.beforeEach(async(to, from, next) => {
       // determine whether the user has obtained his permission roles through getInfo
       const hasRoles = store.getters.roles && store.getters.roles.length > 0
       // const hasRoles = true
-      console.log('roles:', hasRoles)
+      if (process.env.NODE_ENV === 'development') {
+        console.log('roles:', hasRoles)
+      }
       if (hasRoles) {
         next()
       } else {

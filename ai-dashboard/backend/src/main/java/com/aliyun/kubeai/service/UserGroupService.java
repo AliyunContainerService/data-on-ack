@@ -15,7 +15,7 @@
     
 package com.aliyun.kubeai.service;
 
-import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson2.JSON;
 import com.aliyun.kubeai.dao.K8sUserDao;
 import com.aliyun.kubeai.dao.K8sUserGroupDao;
 import com.aliyun.kubeai.model.common.Pagination;

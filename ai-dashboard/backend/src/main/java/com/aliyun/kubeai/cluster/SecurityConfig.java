@@ -37,6 +37,7 @@ import org.springframework.security.oauth2.client.token.grant.code.Authorization
 import org.springframework.security.oauth2.common.AuthenticationScheme;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
 import org.springframework.security.web.authentication.www.BasicAuthenticationFilter;
+import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 
 import javax.annotation.PreDestroy;
 import javax.annotation.Resource;
@@ -106,7 +107,7 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter  {
                 .anyRequest().authenticated()
                 .and().exceptionHandling().authenticationEntryPoint(new LoginUrlAuthenticationEntryPoint("/"))
                 .and().logout().invalidateHttpSession(true).clearAuthentication(true).logoutSuccessUrl("/login").permitAll()
-                .and().csrf().disable()
+                .and().csrf().csrfTokenRepository(new CookieCsrfTokenRepository()).ignoringAntMatchers("/api/**")
                 .addFilterBefore(ssoFilter(), BasicAuthenticationFilter.class)
                 .headers().frameOptions().sameOrigin();
         // @formatter:on
@@ -127,8 +128,8 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter  {
             return aliyunFilter;
         } catch (Exception e) {
             log.error("add ssoFilter exception", e);
+            throw new RuntimeException("Failed to initialize SSO filter", e);
         }
-        return null;
     }
 
     public AuthorizationCodeResourceDetails aliyun() throws Exception{

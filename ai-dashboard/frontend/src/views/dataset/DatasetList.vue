@@ -116,8 +116,8 @@
       </el-table-column>
     </el-table>
     <pagination
-      v-show="list.length > 0"
-      :total="list.length"
+      v-show="total > 0"
+      :total="total"
       :page.sync="listQuery.page"
       :limit.sync="listQuery.limit"
       @pagination="getList"
@@ -392,7 +392,7 @@
                       <i
                         class="el-icon-delete"
                         style="color: red; margin-top: 12px"
-                        @click="removeMountPointOption(index)"
+                        @click="removeMountPointOption(index, otherOptionsIndex)"
                       />
                     </el-col>
                   </el-row>
@@ -832,6 +832,7 @@ export default {
   data() {
     return {
       list: [],
+      total: 0,
       isInYaml: false,
       dataSetList: [],
       listLoading: true,
@@ -1081,6 +1082,7 @@ export default {
             this.availablePvcList = [...this.allPvcList]
             this.dataSetList = this.parseDataset(datasetResponse)
             this.refreshTableList()
+            this.total = datasetResponse.data.total || this.list.length
             this.filterPvcByNamespace(this.curNamespace)
             this.listLoading = false
           })
@@ -1310,11 +1312,10 @@ export default {
       ];
       mountPoint.otherOptions = [];
     },
-    removeMountPointOption(index) {
-      var mountPointList = this.dataset.mountPointList[index];
-      var sourceType = this.dataset.mountPointList[index].sourceType;
+    removeMountPointOption(mountPointIndex, optionIndex) {
+      var sourceType = this.dataset.mountPointList[mountPointIndex].sourceType;
       if (sourceType === "其他") {
-        mountPointList.otherOptions.splice(index, 1);
+        this.dataset.mountPointList[mountPointIndex].otherOptions.splice(optionIndex, 1);
       }
     },
     parsePvcList(response) {
@@ -1594,7 +1595,7 @@ export default {
           operator: toleration.operator,
           value: toleration.value,
           effect: toleration.effect,
-          tolerationSeconds: !Number.isInteger(toleration.tolerationSeconds)?toleration.tolerationSeconds.parseInt():toleration.tolerationSeconds
+          tolerationSeconds: !Number.isInteger(toleration.tolerationSeconds) ? Math.floor(toleration.tolerationSeconds) : toleration.tolerationSeconds
         })
       }
       uiDataset.mountPointList = uiMountPointList || []

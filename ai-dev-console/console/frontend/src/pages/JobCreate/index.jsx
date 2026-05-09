@@ -58,11 +58,6 @@ const JobCreate = ({ globalConfig }) => {
     
     const [gpuResource, setgpuResource] = useState(0);
 
-    if (sessionStorage.getItem("job")) {
-        setCloneInfo(JSON.parse(sessionStorage.getItem("job")));
-        sessionStorage.removeItem('job');
-    }
-
     const formInitialTF = {
         name: "",
         kind: "TFJob",
@@ -134,6 +129,10 @@ const JobCreate = ({ globalConfig }) => {
     useEffect(() => {
         fetchSource();
         fetchUser();
+        if (sessionStorage.getItem("job")) {
+            setCloneInfo(JSON.parse(sessionStorage.getItem("job")));
+            sessionStorage.removeItem('job');
+        }
     }, []);
 
     const fetchSource = async () => {

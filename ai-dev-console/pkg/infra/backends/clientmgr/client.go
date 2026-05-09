@@ -60,25 +60,25 @@ func InstallClientManager(mgr ClientManager) {
 
 func GetKubeClient() clientset.Interface {
 	if clientManager == nil {
-		klog.Fatal("get clientMgr fail, clientMgr is nil")
+		panic("clientManager not initialized")
 	}
 	return clientManager.GetKubeClient()
 }
 
 func GetCtrlClient() client.Client {
 	if clientManager == nil {
-		klog.Fatal("get clientMgr fail, clientMgr is nil")
+		panic("clientManager not initialized")
 	}
 	return clientManager.GetCtrlClient()
 }
 
 func GetCtrlClientWithConfig(kubeConfig []byte) client.Client {
 	if kubeConfig == nil {
-		klog.Fatal("get clientMgr fail, kube config is empty")
+		panic("kube config is empty")
 	}
 
 	if clientManager == nil {
-		klog.Fatal("get clientMgr fail, clientMgr is nil")
+		panic("clientManager not initialized")
 	}
 
 	return clientManager.GetCtrlClientWithConfig(kubeConfig)
@@ -86,18 +86,18 @@ func GetCtrlClientWithConfig(kubeConfig []byte) client.Client {
 
 func GetArenaClient() *arenaclient.ArenaClient {
 	if clientManager == nil {
-		klog.Fatal("get clientMgr fail, clientMgr is nil")
+		panic("clientManager not initialized")
 	}
 	return clientManager.GetArenaClient()
 }
 
 func GetArenaClientWithConfig(kubeConfigFile string) (*arenaclient.ArenaClient, error) {
 	if clientManager == nil {
-		klog.Fatal("get clientMgr fail, clientMgr is nil")
+		return nil, fmt.Errorf("clientManager not initialized")
 	}
 
 	if kubeConfigFile == "" {
-		klog.Fatal("get clientMgr fail, kube config file is empty")
+		return nil, fmt.Errorf("kube config file is empty")
 	}
 
 	return clientManager.GetArenaClientWithConfig(kubeConfigFile)
@@ -105,14 +105,14 @@ func GetArenaClientWithConfig(kubeConfigFile string) (*arenaclient.ArenaClient, 
 
 func GetScheme() *runtime.Scheme {
 	if clientManager == nil {
-		klog.Fatal("get clientMgr fail, clientMgr is nil")
+		panic("clientManager not initialized")
 	}
 	return clientManager.GetScheme()
 }
 
 func IndexField(obj client.Object, field string, extractValue client.IndexerFunc) error {
 	if clientManager == nil {
-		klog.Fatal("get clientMgr fail, clientMgr is nil")
+		panic("clientManager not initialized")
 	}
 	return clientManager.IndexField(obj, field, extractValue)
 }

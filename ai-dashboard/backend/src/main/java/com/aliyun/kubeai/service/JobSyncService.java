@@ -35,6 +35,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import javax.annotation.PostConstruct;
+import javax.annotation.PreDestroy;
 import javax.annotation.Resource;
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -61,6 +63,18 @@ public class JobSyncService {
     @Resource
     private KubeClient kubeClient;
 
+    private ArenaClient arenaClient;
+
+    @PostConstruct
+    public void init() {
+        arenaClient = new ArenaClient();
+    }
+
+    @PreDestroy
+    public void destroy() {
+        // ArenaClient cleanup if needed
+    }
+
     @Scheduled(fixedDelay = 30000)
     private void checkJobs() throws ArenaException, IOException {
         checkRunningJobs();
@@ -85,9 +99,8 @@ public class JobSyncService {
     }
 
     private void checkRunningJobs() throws ArenaException, IOException {
-        ArenaClient client = new ArenaClient();
         // training job
-        List<TrainingJobInfo> trainingJobInfos = client.training().list(TrainingJobType.AllTrainingJob, true);
+        List<TrainingJobInfo> trainingJobInfos = arenaClient.training().list(TrainingJobType.AllTrainingJob, true);
         if (!trainingJobInfos.isEmpty()) {
             for (TrainingJobInfo info : trainingJobInfos) {
                 TrainingJob trainingJob = trainingJobMapper.findByJobId(info.getUuid());
@@ -154,8 +167,6 @@ public class JobSyncService {
 
 
     private void checkFinishedJobs() throws ArenaException, IOException {
-        ArenaClient arenaClient = new ArenaClient();
-
         boolean success = false;
 
         // training job
@@ -377,6 +388,10 @@ public class JobSyncService {
 
         float tradePrice = instanceInfo.getTradePrice();
         float onDemandPrice = instanceInfo.getOnDemandPrice();
+        if (gpu <= 0) {
+            log.warn("GPU count is 0 for instance {}, skipping price calculation", training.getName());
+            return null;
+        }
         if (requestGpus > 0) {
             tradePrice = tradePrice * ((float)requestGpus / gpu);
             onDemandPrice = onDemandPrice * ((float)requestGpus / gpu);
@@ -567,6 +582,9 @@ public class JobSyncService {
     }
 
     private String formatStatus(String status) {
+        if (status == null || status.isEmpty()) {
+            return "Unknown";
+        }
         String firstLetter = status.substring(0, 1).toUpperCase();
         String restLetters = status.substring(1).toLowerCase();
         return firstLetter + restLetters;

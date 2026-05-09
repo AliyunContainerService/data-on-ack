@@ -147,7 +147,6 @@ export function doRemovedTableData(root, dName, dPrefix = '') {
   }
   const fIndex = d.findIndex(e => e.name === dName)
   if (fIndex < 0) {
-    console.log('not found node name:', dName, dPrefix)
     return root
   }
   d.splice(fIndex, 1)

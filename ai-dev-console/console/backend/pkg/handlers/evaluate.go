@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"github.com/AliyunContainerService/data-on-ack/ai-dev-console/console/backend/pkg/model"
 	"github.com/AliyunContainerService/data-on-ack/ai-dev-console/pkg/infra/backends"
 	"github.com/AliyunContainerService/data-on-ack/ai-dev-console/pkg/infra/backends/clientmgr"
@@ -99,8 +100,15 @@ func (eh *EvaluateHandler) SubmitEvaluateJob(userName string, data []byte) error
 
 	evaluateJob.Envs["MYSQL_HOST"] = mysqlIP
 	evaluateJob.Envs["MYSQL_PORT"] = "3306"
-	evaluateJob.Envs["MYSQL_USERNAME"] = "kubeai"
-	evaluateJob.Envs["MYSQL_PASSWORD"] = "kubeai@ACK"
+	evaluateJob.Envs["MYSQL_USERNAME"] = os.Getenv("MYSQL_USER")
+	if evaluateJob.Envs["MYSQL_USERNAME"] == "" {
+		evaluateJob.Envs["MYSQL_USERNAME"] = "kubeai"
+	}
+	mysqlPassword := os.Getenv("MYSQL_PASSWORD")
+	if mysqlPassword == "" {
+		return errors.New("MYSQL_PASSWORD environment variable is required")
+	}
+	evaluateJob.Envs["MYSQL_PASSWORD"] = mysqlPassword
 	evaluateJob.Envs["ENABLE_MYSQL"] = "True"
 
 	return eh.clientBackend.UserName(userName).SubmitEvaluateJob(evaluateJob)

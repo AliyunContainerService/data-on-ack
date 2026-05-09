@@ -193,7 +193,11 @@ func DeleteAppDefer() {
 		klog.Errorf("to delete web app failed get ram client failed")
 		return
 	}
-	oauthApplicationConfig := GetOauthAppConfig()
+	oauthApplicationConfig, err := GetOauthAppConfig()
+	if err != nil {
+		klog.Errorf("to delete web app failed get oauth app config failed: %v", err)
+		return
+	}
 	if oauthApplicationConfig == nil {
 		klog.Errorf("to delete web app failed get oauth config failed")
 		return

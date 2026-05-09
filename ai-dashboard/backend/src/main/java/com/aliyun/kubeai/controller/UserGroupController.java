@@ -15,7 +15,7 @@
     
 package com.aliyun.kubeai.controller;
 
-import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson2.JSON;
 import com.aliyun.kubeai.model.CreateUserGroupRequest;
 import com.aliyun.kubeai.model.UpdateUserGroupRequest;
 import com.aliyun.kubeai.model.common.Pagination;
