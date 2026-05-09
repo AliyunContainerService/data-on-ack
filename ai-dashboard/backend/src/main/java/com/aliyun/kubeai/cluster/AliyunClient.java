@@ -15,9 +15,9 @@
     
 package com.aliyun.kubeai.cluster;
 
-import com.alibaba.fastjson.JSON;
-import com.alibaba.fastjson.JSONArray;
-import com.alibaba.fastjson.JSONObject;
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONArray;
+import com.alibaba.fastjson2.JSONObject;
 import com.aliyun.ims20190815.Client;
 import com.aliyun.ims20190815.models.*;
 import com.aliyun.kubeai.model.InstanceInfo;

@@ -42,7 +42,7 @@ export const getTensorboard = (info) => {
   const tensorboard = info?.metadata?.annotations?.['kubedl.io/tensorboard-config'];
   return {
     enabled: !!tensorboard,
-    logDir: eval(`(${tensorboard})`)?.logDir ?? '',
+    logDir: JSON.parse(tensorboard)?.logDir ?? '',
   };
 };
 

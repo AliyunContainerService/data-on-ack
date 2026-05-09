@@ -44,18 +44,14 @@ const actions = {
     const { roles, userName, token, clusterInfo } = userInfo
     // roles must be a non-empty array
     if (!roles || roles.length <= 0) {
-      this.this.$notify({
-        title: '角色格式错误',
-        message: '必须为数组',
-        type: 'error'
-      })
+      console.error('角色格式错误: 必须为数组')
       return
     }
     commit('SET_TOKEN', token)
     commit('SET_ROLES', roles)
     commit('SET_NAME', userName)
     commit('SET_CLUSTER_INFO', clusterInfo)
-    const avatar = 'https://oss.aliyuncs.com/aliyun_id_photo_bucket/default_handsome.jpg'
+    const avatar = require('@/assets/default-avatar.svg')
     commit('SET_AVATAR', avatar)
   },
 
@@ -94,7 +90,6 @@ const actions = {
         }
         resolve(user)
       }).catch(error => {
-        console.log('get user info error:', error)
         reject(error)
       })
     })

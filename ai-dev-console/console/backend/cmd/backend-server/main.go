@@ -49,14 +49,19 @@ func main() {
 			auth.DeleteAppDefer()
 		}
 		time.Sleep(time.Second * 3)
-		os.Exit(1)
+		os.Exit(0)
 	}()
 
 	pflag.Parse()
-	clientmgr.Init()
+	if err := clientmgr.Init(); err != nil {
+		klog.Fatalf("failed to init client manager: %v", err)
+	}
 	client.Init()
 	registry.RegisterStorageBackends()
-	r := routers.InitRouter()
+	r, err := routers.InitRouter()
+	if err != nil {
+		klog.Fatalf("failed to init router: %v", err)
+	}
 	if constants.IsCreateWebApp {
 		klog.Infof("defer to delete webapp")
 		defer auth.DeleteAppDefer()

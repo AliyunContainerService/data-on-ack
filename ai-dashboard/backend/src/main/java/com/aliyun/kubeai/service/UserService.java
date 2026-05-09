@@ -15,7 +15,7 @@
     
 package com.aliyun.kubeai.service;
 
-import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson2.JSON;
 import com.aliyun.kubeai.cluster.KubeClient;
 import com.aliyun.kubeai.dao.K8sUserDao;
 import com.aliyun.kubeai.dao.K8sUserGroupDao;
@@ -37,6 +37,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
+import java.security.SecureRandom;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
@@ -167,8 +168,12 @@ public class UserService {
             log.warn("gen kube config not found user id:{}", userId);
             return null;
         }
-        String serviceAccountName = user.getSpec().getK8sServiceAccount().getName();
-        String serviceAccountNamespace = user.getSpec().getK8sServiceAccount().getNamespace();
+        String serviceAccountName = user.getSpec().getK8sServiceAccount() != null ? user.getSpec().getK8sServiceAccount().getName() : null;
+        String serviceAccountNamespace = user.getSpec().getK8sServiceAccount() != null ? user.getSpec().getK8sServiceAccount().getNamespace() : null;
+        if (serviceAccountName == null || serviceAccountNamespace == null) {
+            log.warn("getBearerTokenByUserId: K8sServiceAccount is null for user {}", userId);
+            return null;
+        }
         ServiceAccount serviceAccount = findServiceAccountByName(serviceAccountName, serviceAccountNamespace);
         if (serviceAccount == null) {
             log.warn("can't find service account by name:{}", serviceAccountNamespace);
@@ -689,7 +694,7 @@ public class UserService {
             }
             spec.setApiRoles(Arrays.asList(ApiRole.ADMIN.toString()));
             spec.setUserName(userName);
-            spec.setPassword("123456");
+            spec.setPassword(generateAdminPassword());
             spec.setGroups(Arrays.asList("defaultUserGroup"));
             spec.setAliuid(uid);
             spec.setDeletable(false);
@@ -709,6 +714,20 @@ public class UserService {
             }
         }
         return userDao.findUserByAliuid(aliuid);
+    }
+
+    private String generateAdminPassword() {
+        String envPassword = System.getenv("ADMIN_DEFAULT_PASSWORD");
+        if (!Strings.isNullOrEmpty(envPassword)) {
+            return envPassword;
+        }
+        String chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+        SecureRandom random = new SecureRandom();
+        StringBuilder sb = new StringBuilder(16);
+        for (int i = 0; i < 16; i++) {
+            sb.append(chars.charAt(random.nextInt(chars.length())));
+        }
+        return sb.toString();
     }
 
 }

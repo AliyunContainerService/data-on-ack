@@ -68,7 +68,7 @@ const MetricsList = ({ globalConfig }) => {
         if (response.data.metrics == "") {
             return
         }
-        let metrics = eval("(" + response.data.metrics + ")")
+        let metrics = JSON.parse(response.data.metrics)
         let metricsData = []
         for(let metricsKey in metrics) {
             let temp = {

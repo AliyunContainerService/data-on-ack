@@ -466,19 +466,17 @@ func getUserInfo(accessToken string) (userInfo model.UserInfo, err error) {
 	return userInfo, nil
 }
 
-func GetOauthAppConfig() *model.OAuthApp {
+func GetOauthAppConfig() (*model.OAuthApp, error) {
 	appConfigLock.RLock()
 	if oauthAppConfig == nil {
 		appConfigLock.RUnlock()
 		ramClient, err := cli.GetAliyunRamClient().GetRamClient()
 		if err != nil {
-			klog.Fatalf("get ram client error:%v", err)
-			return nil
+			return nil, fmt.Errorf("get ram client: %w", err)
 		}
 		oauthApp, err := GenOAuthApp(ramClient)
 		if err != nil {
-			klog.Fatal("gen oauth app config failed")
-			return nil
+			return nil, fmt.Errorf("gen oauth app config: %w", err)
 		}
 		appConfigLock.Lock()
 		defer appConfigLock.Unlock()
@@ -486,7 +484,7 @@ func GetOauthAppConfig() *model.OAuthApp {
 	} else {
 		appConfigLock.RUnlock()
 	}
-	return oauthAppConfig
+	return oauthAppConfig, nil
 }
 
 func GetOauthInfo() (model.OAuthInfo, error) {
@@ -512,9 +510,9 @@ func GetOauthInfo() (model.OAuthInfo, error) {
 			klog.Errorf("get ram client for create web app error:%v", err)
 			return model.OAuthInfo{}, err
 		}
-		oauthApplicationConfig := GetOauthAppConfig()
-		if oauthApplicationConfig == nil {
-			return model.OAuthInfo{}, errors.New("get app config failed")
+		oauthApplicationConfig, err := GetOauthAppConfig()
+		if err != nil {
+			return model.OAuthInfo{}, fmt.Errorf("get oauth app config: %w", err)
 		}
 		app, err := GetOrCreateApplication(ramClient, oauthApplicationConfig)
 		if err != nil {

@@ -55,7 +55,7 @@ public class KubeClient {
             log.info("init kubernetes client success");
         } catch (Exception e) {
             log.error("init kubernetes client failed", e);
-            System.exit(-1);
+            throw new RuntimeException("Failed to initialize Kubernetes client", e);
         }
     }
 
@@ -69,6 +69,10 @@ public class KubeClient {
         Resource<ConfigMap> configMapResource = kubernetesClient.configMaps().inNamespace(namespace).withName(name);
 
         ConfigMap configMap = configMapResource.get();
+        if (configMap == null) {
+            log.error("ConfigMap 'ack-cluster-profile' not found in namespace kube-system");
+            return null;
+        }
         Map<String, String> data = configMap.getData();
         log.info("clusterId: " + data.get("clusterid"));
         return data.get("clusterid");
@@ -80,8 +84,8 @@ public class KubeClient {
             NamespaceList namespaceList = kubernetesClient.namespaces().list();
             res = namespaceList.getItems().stream().map(x -> x.getMetadata().getName()).collect(toList());
         } catch (Exception e) {
-            log.warn("list group failed:{}", e.toString());
-            System.exit(-1);
+            log.error("list namespace failed", e);
+            throw new RuntimeException("Failed to list namespaces", e);
         }
         return res;
     }

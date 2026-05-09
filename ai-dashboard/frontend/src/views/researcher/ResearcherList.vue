@@ -122,8 +122,8 @@
       </el-table-column>
     </el-table>
     <pagination
-      v-show="list.length > 0"
-      :total="list.length"
+      v-show="total > 0"
+      :total="total"
       :page.sync="listQuery.page"
       :limit.sync="listQuery.limit"
       @pagination="fetchData"
@@ -266,6 +266,7 @@ export default {
         callback()
       },
       list: [],
+      total: 0,
       listLoading: true,
       listQuery: {
         page: 1,
@@ -287,7 +288,6 @@ export default {
     }
   },
   created() {
-    console.log('researcher created')
     this.fetchData()
     this.fetchQuotaNamespaces()
     this.fetchUserNameList()
@@ -304,6 +304,7 @@ export default {
           this.userGroupList = userGroupResponse.data.items || []
           const nameMap = new Map(this.userGroupList.map(x => [x.metadata.name, x.spec.groupName]))
           this.list = reseacherListResponse.data.items.map(x => deserializeK8sUser(x)).map(x => this.groupNameToSpecName(x, nameMap)).map(x => this.addRoleNamespaces(x))
+          this.total = reseacherListResponse.data.total || this.list.length
           this.refreshUserNameList(this.ramUserList, this.list)
         }
       })).catch((error) => {
@@ -347,7 +348,6 @@ export default {
       fetchRamUserList().then((response) => {
         this.userNameList = response.data
       }).catch((error) => {
-        console.log('fetch user name list error', error)
         this.userNameList = []
       })
     },

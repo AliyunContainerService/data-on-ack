@@ -154,7 +154,13 @@ rules:
     resources:
     - "elasticquotatrees"
     verbs:
-    - '*'
+    - get
+    - list
+    - watch
+    - create
+    - update
+    - patch
+    - delete
   - apiGroups:
     - "kubeflow.org"
     resources:

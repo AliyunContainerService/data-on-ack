@@ -50,7 +50,6 @@ const actions = {
   generateRoutes({ commit }, [roles, clusterInfo]) {
     return new Promise(resolve => {
       let accessedRoutes
-      console.log('clusterInfo:', roles, clusterInfo)
       var newRoutes = asyncRoutes
       if (roles.includes('admin')) {
         accessedRoutes = newRoutes || []

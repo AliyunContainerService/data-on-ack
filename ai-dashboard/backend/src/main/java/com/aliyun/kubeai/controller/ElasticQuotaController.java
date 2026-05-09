@@ -15,7 +15,7 @@
     
 package com.aliyun.kubeai.controller;
 
-import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson2.JSON;
 import com.aliyun.kubeai.cluster.KubeClient;
 import com.aliyun.kubeai.exception.K8sCRDNotFoundException;
 import com.aliyun.kubeai.model.common.RequestResult;
