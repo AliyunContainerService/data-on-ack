@@ -36,6 +36,7 @@ find the configuration reference for [Spark](https://spark.apache.org/docs/3.5.8
 - `./deploy/conf/spark-defaults.conf`:
     - `spark.kubernetes.container.image`: replace it with your own {SPARK_IMAGE} url.
     - `spark.kubernetes.file.upload.path`: a upload path needed for spark engine running in cluster deploy mode. See ["Running Spark on Kubernetes - Dependency Management"](https://spark.apache.org/docs/3.5.8/running-on-kubernetes.html#dependency-management) for more information.
+    - `spark.hadoop.fs.oss.endpoint`: replace it with your OSS endpoint url. e.g. oss-cn-beijing-internal.aliyuncs.com.
 
 ```bash
 kubectl apply -k ./deploy/
@@ -135,7 +136,7 @@ SELECT * FROM demo_table;
 
 3. Delete Kyuubi and Spark configurations
 
-    ```
-    kubectl delete -k ./deploy
-    ```
+```
+kubectl delete -k ./deploy
+```
 
