@@ -107,7 +107,7 @@ export default {
   data() {
     return {
       tableKey: 0,
-      list: null,
+      list: [],
       total: 0,
       listLoading: true,
       listQuery: {
@@ -133,7 +133,10 @@ export default {
       this.listLoading = true
       fetchServingJobList(this.listQuery).then(response => {
         this.total = response.data.total
-        this.list = response.data.items
+        this.list = response.data.items || []
+        this.listLoading = false
+      }).catch(() => {
+        this.list = []
         this.listLoading = false
       })
     },

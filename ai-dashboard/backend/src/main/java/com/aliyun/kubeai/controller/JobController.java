@@ -43,7 +43,7 @@ public class JobController {
                                                                   @RequestParam(name = "limit", required = false) Integer limit) {
         log.info("list training job, name:{} page:{} limit:{}", name, page, limit);
         RequestResult<Pagination<TrainingJob>> result = new RequestResult<>();
-        Pagination<TrainingJob> pagination = jobService.listTrainingJobByPage(name, page, limit);
+        Pagination<TrainingJob> pagination = jobService.listTrainingJobByPage(name, normalizePage(page), normalizeLimit(limit));
         result.setData(pagination);
         return result;
     }
@@ -54,9 +54,17 @@ public class JobController {
                                                                 @RequestParam(name = "limit", required = false) Integer limit) {
         log.info("list serving job, name:{} page:{} limit:{}", name, page, limit);
         RequestResult<Pagination<ServingJob>> result = new RequestResult<>();
-        Pagination<ServingJob> pagination = jobService.listServingJobByPage(name, page, limit);
+        Pagination<ServingJob> pagination = jobService.listServingJobByPage(name, normalizePage(page), normalizeLimit(limit));
         result.setData(pagination);
         return result;
+    }
+
+    private int normalizePage(Integer page) {
+        return (page == null || page < 1) ? 1 : page;
+    }
+
+    private int normalizeLimit(Integer limit) {
+        return (limit == null || limit < 1) ? 20 : limit;
     }
 
     @GetMapping("/cost")

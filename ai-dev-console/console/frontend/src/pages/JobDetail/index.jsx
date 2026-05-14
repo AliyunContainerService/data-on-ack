@@ -135,7 +135,7 @@ class JobDetail extends Component {
                 detail: res.data ? res.data.jobInfo : {},
                 total: res.data ? res.data.total : 0,
             }, () => {
-                const newResources = this.state.detail && this.state.detail.resources ? eval('('+ this.state.detail?.resources +')') : {};
+                const newResources = this.state.detail && this.state.detail.resources ? JSON.parse(this.state.detail?.resources) : {};
                 this.setState({
                     resourceConfigKey: JSON.stringify(newResources) !== '{}' ? Object.keys(newResources)[0] : '',
                 });
@@ -286,8 +286,8 @@ class JobDetail extends Component {
     }
 
     description = detail => {
-        const jobConfig = eval('('+ detail.jobConfig +')');
-        const jobResources = eval('('+ detail.resources +')');
+        const jobConfig = JSON.parse(detail.jobConfig);
+        const jobResources = JSON.parse(detail.resources);
         let descriptions = (
             <div>
                 <Descriptions bordered className={styles.headerList} size="small">

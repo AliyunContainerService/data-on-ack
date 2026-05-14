@@ -27,6 +27,13 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           image: "{{ .Values.image.checkMysqlImageName }}:{{ .Values.image.checkMysqlImageTag }}"
           command: ['sh','-c','until nc -vz ack-mysql 3306 &> /dev/null; do echo mysql service is not ready,waiting...;sleep 2;done;']
+          resources:
+            limits:
+              cpu: 100m
+              memory: 64Mi
+            requests:
+              cpu: 50m
+              memory: 32Mi
       {{ end }}
       containers:
         - name: {{ .Chart.Name }}
@@ -65,6 +72,22 @@ spec:
             - name: http
               containerPort: 8443
               protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 20
+            timeoutSeconds: 5
+            periodSeconds: 15
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 20
+            timeoutSeconds: 5
+            periodSeconds: 15
+            failureThreshold: 3
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
       nodeSelector:

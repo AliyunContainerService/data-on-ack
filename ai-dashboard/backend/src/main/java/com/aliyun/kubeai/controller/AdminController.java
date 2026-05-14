@@ -15,7 +15,7 @@
     
 package com.aliyun.kubeai.controller;
 
-import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson2.JSON;
 import com.aliyun.kubeai.cluster.KubeClient;
 import com.aliyun.kubeai.model.auth.RamUser;
 import com.aliyun.kubeai.model.common.RequestResult;
@@ -132,6 +132,10 @@ public class AdminController {
         String aliyunAccessToken = auth2AuthenticationDetails.getTokenValue();
         Map<String, String> userProfileDetails = (Map<String, String>) userAuthentication.getDetails();
         log.info("accessToken:{}", aliyunAccessToken);
+        if (userProfileDetails == null) {
+            result.setFailed(ResultCode.USER_AUTH_FAILED, "user auth details not found");
+            return result;
+        }
         String aliuid = userProfileDetails.get("uid");
         String ramUserPrincipleName = userProfileDetails.get("upn"); // aidashboard@1323.com
         if (Strings.isNullOrEmpty(ramUserPrincipleName)) {

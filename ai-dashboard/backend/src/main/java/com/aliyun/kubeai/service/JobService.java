@@ -79,6 +79,10 @@ public class JobService {
 
         if (jobType.equals(TRAINING_JOB)) {
             TrainingJob trainingJob = trainingJobMapper.findByJobId(jobId);
+            if (trainingJob == null) {
+                log.warn("training job not found for jobId:{}", jobId);
+                return jobCost;
+            }
             jobCost.setDuration(trainingJob.getDuration());
             jobCost.setTradeCost(trainingJob.getTradeCost());
             jobCost.setOnDemandCost(trainingJob.getOnDemandCost());
@@ -86,6 +90,10 @@ public class JobService {
             jobCost.setCoreHour(trainingJob.getCoreHour());
         } else {
             ServingJob servingJob = servingJobMapper.findByJobId(jobId);
+            if (servingJob == null) {
+                log.warn("serving job not found for jobId:{}", jobId);
+                return jobCost;
+            }
             jobCost.setDuration(servingJob.getDuration());
             jobCost.setTradeCost(servingJob.getTradeCost());
             jobCost.setOnDemandCost(servingJob.getOnDemandCost());

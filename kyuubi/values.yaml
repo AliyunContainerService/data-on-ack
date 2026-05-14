@@ -1,0 +1,18 @@
+image:
+  repository: {KYUUBI_IMAGE_REPO}
+  tag: {KYUUBI_IMAGE_TAG}
+  pullPolicy: Always
+
+envFrom:
+- secretRef:
+    name: hadoop-oss
+
+kyuubiConf:
+  filesFrom:
+  - configMap:
+      name: kyuubi-conf
+
+sparkConf:
+  filesFrom:
+  - configMap:
+      name: spark-conf

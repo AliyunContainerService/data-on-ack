@@ -56,7 +56,11 @@ public class DatasetService {
         if (null == obj) {
             throw new Exception("runtime type empty");
         }
-        String runtimeKind = ((LinkedHashMap<String, Object>)obj).get("kind").toString();
+        Object kindValue = ((LinkedHashMap<String, Object>)obj).get("kind");
+        if (kindValue == null) {
+            throw new Exception("runtime kind field is missing");
+        }
+        String runtimeKind = kindValue.toString();
         if (!runtimeKind.equals("AlluxioRuntime")) {
             return JINDO_RUNTIME_CRD_NAME;
         }

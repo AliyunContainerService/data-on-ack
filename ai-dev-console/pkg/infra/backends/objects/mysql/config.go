@@ -18,6 +18,7 @@ package mysql
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 
 	"github.com/AliyunContainerService/data-on-ack/ai-dev-console/pkg/infra/backends/utils"
@@ -55,7 +56,10 @@ func GetMysqlDBSource() (dbSource, logMode string, err error) {
 	}
 	db := utils.GetEnvOrDefault(EnvDBDatabase, "kubeai")
 	user := utils.GetEnvOrDefault(EnvDBUser, "kubeai")
-	password := utils.GetEnvOrDefault(EnvDBPassword, "kubeai@ACK")
+	password := os.Getenv(EnvDBPassword)
+	if password == "" {
+		return "", "", fmt.Errorf("MYSQL_PASSWORD environment variable is required")
+	}
 
 	dbSource = fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8&parseTime=true", user, password, host, port, db)
 	//klog.Infof("mysql datasource: %s", dbSource)

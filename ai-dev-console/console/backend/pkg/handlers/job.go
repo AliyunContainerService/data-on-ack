@@ -274,7 +274,12 @@ func (jh *JobHandler) GetJobStatisticsFromBackend(query *backends.Query) (model.
 
 	jobStatistics.TotalJobCount = totalJobCount
 	for _, stat := range historyJobsMap {
-		ratio := float64(stat.JobCount*100) / float64(totalJobCount)
+		var ratio float64
+		if totalJobCount == 0 {
+			ratio = 0
+		} else {
+			ratio = float64(stat.JobCount*100) / float64(totalJobCount)
+		}
 		stat.JobRatio, _ = strconv.ParseFloat(fmt.Sprintf("%.2f", ratio), 64)
 		jobStatistics.HistoryJobs = append(jobStatistics.HistoryJobs, stat)
 	}

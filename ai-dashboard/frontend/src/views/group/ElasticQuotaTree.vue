@@ -217,8 +217,7 @@ export default {
             if (isNumberRelationIlleagal) {
               this.$notify({
                 title: this.$t('quota.validator.minMaxRelationError'),
-                dangerouslyUseHTMLString: true,
-                message: `${resourceQuota.type} min>max min:${min} max:${max}`,
+                                message: `${resourceQuota.type} min>max min:${min} max:${max}`,
                 type: 'error',
                 duration: 2000
               })
@@ -241,8 +240,7 @@ export default {
           this.$notify({
             title: this.$t('quota.validator.formatError'),
             message: 'Name:' + quotaName + ' empty',
-            dangerouslyUseHTMLString: true,
-            type: 'error',
+                        type: 'error',
             duration: 2000
           })
           return false
@@ -251,8 +249,7 @@ export default {
         if (matchedQuota === null) {
           this.$notify({
             title: this.$t('quota.validator.formatError'),
-            dangerouslyUseHTMLString: true,
-            message: 'Name:' + quotaName + ' quota:' + quota + ', should be:' + formatExp,
+                        message: 'Name:' + quotaName + ' quota:' + quota + ', should be:' + formatExp,
             type: 'error',
             duration: 2000
           })
@@ -477,8 +474,7 @@ export default {
       }).catch((error) => {
         this.$notify({
           title: this.$t('quota.retry'),
-          dangerouslyUseHTMLString: true,
-          message: this.$t('quota.exception.getNamespace') + 'Error:' + error,
+                    message: this.$t('quota.exception.getNamespace') + 'Error:' + error,
           type: 'error',
           duration: 2000
         })
@@ -517,8 +513,7 @@ export default {
       }).catch((error) => {
         this.$notify({
           title: this.$t('quota.retry'),
-          dangerouslyUseHTMLString: true,
-          message: this.$t('quota.exception.getElasticQuotaTree') + ':' + error,
+                    message: this.$t('quota.exception.getElasticQuotaTree') + ':' + error,
           type: 'error',
           duration: 2000
         })
@@ -619,8 +614,7 @@ export default {
       } else {
         this.$notify({
           title: this.$t('quota.error'),
-          dangerouslyUseHTMLString: true,
-          message: this.$t(errorMsgKey) + ':' + response.data,
+                    message: this.$t(errorMsgKey) + ':' + response.data,
           type: 'error',
           duration: 2000
         })
@@ -659,8 +653,7 @@ export default {
           this.getList()
           this.$notify({
             title: this.$t('quota.retry'),
-            dangerouslyUseHTMLString: true,
-            message: this.$t('quota.exception.changeResourceType') + ':' + error,
+                        message: this.$t('quota.exception.changeResourceType') + ':' + error,
             type: 'error',
             duration: 2000
           })
@@ -734,8 +727,7 @@ export default {
         }).catch((error) => {
           this.$notify({
             title: this.$t('quota.retry'),
-            dangerouslyUseHTMLString: true,
-            message: error,
+                        message: error,
             type: 'error',
             duration: 2000
           })
@@ -779,8 +771,7 @@ export default {
           this.getList()
           this.$notify({
             title: this.$t('quota.retry'),
-            dangerouslyUseHTMLString: true,
-            message: error,
+                        message: error,
             type: 'error',
             duration: 2000
           })
@@ -818,8 +809,7 @@ export default {
         this.getList()
         this.$notify({
           title: this.$t('quota.retry'),
-          dangerouslyUseHTMLString: true,
-          message: this.$t('quota.exception.deleteQuota') + ':' + error,
+                    message: this.$t('quota.exception.deleteQuota') + ':' + error,
           type: 'error',
           duration: 2000
         })

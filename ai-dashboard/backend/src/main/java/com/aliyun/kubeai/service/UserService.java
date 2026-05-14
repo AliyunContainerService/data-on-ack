@@ -15,7 +15,7 @@
     
 package com.aliyun.kubeai.service;
 
-import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson2.JSON;
 import com.aliyun.kubeai.cluster.KubeClient;
 import com.aliyun.kubeai.dao.K8sUserDao;
 import com.aliyun.kubeai.dao.K8sUserGroupDao;
@@ -37,6 +37,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
+import java.security.SecureRandom;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
@@ -167,15 +168,24 @@ public class UserService {
             log.warn("gen kube config not found user id:{}", userId);
             return null;
         }
-        String serviceAccountName = user.getSpec().getK8sServiceAccount().getName();
-        String serviceAccountNamespace = user.getSpec().getK8sServiceAccount().getNamespace();
+        String serviceAccountName = user.getSpec().getK8sServiceAccount() != null ? user.getSpec().getK8sServiceAccount().getName() : null;
+        String serviceAccountNamespace = user.getSpec().getK8sServiceAccount() != null ? user.getSpec().getK8sServiceAccount().getNamespace() : null;
+        if (serviceAccountName == null || serviceAccountNamespace == null) {
+            log.warn("getBearerTokenByUserId: K8sServiceAccount is null for user {}", userId);
+            return null;
+        }
         ServiceAccount serviceAccount = findServiceAccountByName(serviceAccountName, serviceAccountNamespace);
         if (serviceAccount == null) {
             log.warn("can't find service account by name:{}", serviceAccountNamespace);
             return null;
         }
 
-        String secretName = serviceAccount.getSecrets().get(0).getName();
+        List<ObjectReference> secrets = serviceAccount.getSecrets();
+        if (secrets == null || secrets.isEmpty()) {
+            log.warn("no secrets found for service account:{}", serviceAccountName);
+            return null;
+        }
+        String secretName = secrets.get(0).getName();
         Secret secret = client.getClient().secrets().inNamespace(serviceAccountNamespace).withName(secretName).get();
         if (null == secret) {
             log.warn("can't find secret by sa:{}", secretName);
@@ -209,8 +219,17 @@ public class UserService {
             return null;
         }
 
-        String secretName = serviceAccount.getSecrets().get(0).getName();
+        List<ObjectReference> saSecrets = serviceAccount.getSecrets();
+        if (saSecrets == null || saSecrets.isEmpty()) {
+            log.warn("no secrets found for service account:{}", serviceAccountName);
+            return null;
+        }
+        String secretName = saSecrets.get(0).getName();
         Secret secret = client.getClient().secrets().inNamespace(serviceAccountNamespace).withName(secretName).get();
+        if (null == secret) {
+            log.warn("can't find secret by sa:{}", secretName);
+            return null;
+        }
         String secretCaCrtBase64 = secret.getData().get("ca.crt");
         String secretNamespaceBase64 = secret.getData().get("namespace");
         String secretNamespace = new String(Base64.decodeBase64(secretNamespaceBase64.getBytes()), StandardCharsets.UTF_8);
@@ -228,9 +247,15 @@ public class UserService {
             log.warn("endpoints name:{} not found in default", DEFAULT_KUBERNETES_ENDPOINT_NAME);
             return null;
         }
-        String portName = endpointSubsets.get(0).getPorts().get(0).getName();
-        Integer portNum = endpointSubsets.get(0).getPorts().get(0).getPort();
-        EndpointAddress epAddr = endpoints.getSubsets().get(0).getAddresses().get(0);
+        List<EndpointPort> epPorts = endpointSubsets.get(0).getPorts();
+        List<EndpointAddress> epAddresses = endpointSubsets.get(0).getAddresses();
+        if (epPorts == null || epPorts.isEmpty() || epAddresses == null || epAddresses.isEmpty()) {
+            log.warn("endpoint ports or addresses empty for:{}", DEFAULT_KUBERNETES_ENDPOINT_NAME);
+            return null;
+        }
+        String portName = epPorts.get(0).getName();
+        Integer portNum = epPorts.get(0).getPort();
+        EndpointAddress epAddr = epAddresses.get(0);
 
         String serverAddrs = String.format("%s://%s:%d/", portName, epAddr.getIp(), portNum);
         log.info("config serverAddrs:{}", serverAddrs);
@@ -339,11 +364,12 @@ public class UserService {
         totalItems.forEach(x->x.getMetadata().setCreationTimestamp(transUTCTime(x.getMetadata().getCreationTimestamp())));
         int total = totalItems.size();
         Collections.sort(totalItems);
-        List<User> resK8sItems = totalItems;
-        if (page * limit <= total) {
-            resK8sItems = totalItems.subList((page - 1) * limit, page * limit);
-        } else if ((page - 1) * limit >= total) {
-            resK8sItems = Arrays.asList();
+        List<User> resK8sItems;
+        int fromIndex = (page - 1) * limit;
+        if (fromIndex >= total) {
+            resK8sItems = Collections.emptyList();
+        } else {
+            resK8sItems = totalItems.subList(fromIndex, Math.min(fromIndex + limit, total));
         }
         res.setItems(resK8sItems);
         res.setTotal(total);
@@ -668,7 +694,7 @@ public class UserService {
             }
             spec.setApiRoles(Arrays.asList(ApiRole.ADMIN.toString()));
             spec.setUserName(userName);
-            spec.setPassword("123456");
+            spec.setPassword(generateAdminPassword());
             spec.setGroups(Arrays.asList("defaultUserGroup"));
             spec.setAliuid(uid);
             spec.setDeletable(false);
@@ -688,6 +714,20 @@ public class UserService {
             }
         }
         return userDao.findUserByAliuid(aliuid);
+    }
+
+    private String generateAdminPassword() {
+        String envPassword = System.getenv("ADMIN_DEFAULT_PASSWORD");
+        if (!Strings.isNullOrEmpty(envPassword)) {
+            return envPassword;
+        }
+        String chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+        SecureRandom random = new SecureRandom();
+        StringBuilder sb = new StringBuilder(16);
+        for (int i = 0; i < 16; i++) {
+            sb.append(chars.charAt(random.nextInt(chars.length())));
+        }
+        return sb.toString();
     }
 
 }

@@ -161,7 +161,7 @@ export default {
     this.query = this.$route.query
     this.getCost(this.query)
     this.timer = setInterval(() => {
-      setTimeout(this.getCost(this.query), 0)
+      setTimeout(() => this.getCost(this.query), 0)
     }, 60000)
   },
   beforeDestroy() {
@@ -171,9 +171,11 @@ export default {
   methods: {
     getCost(query) {
       this.listLoading = true
-      fetchJobCost(this.query).then(response => {
+      fetchJobCost(query).then(response => {
+        this.jobCost = response.data || {}
         this.listLoading = false
-        this.jobCost = response.data
+      }).catch(() => {
+        this.listLoading = false
       })
     }
   }

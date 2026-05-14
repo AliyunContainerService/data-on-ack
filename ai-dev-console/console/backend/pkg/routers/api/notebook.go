@@ -18,13 +18,16 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/AliyunContainerService/data-on-ack/ai-dev-console/console/backend/pkg/auth"
 	"github.com/AliyunContainerService/data-on-ack/ai-dev-console/console/backend/pkg/handlers"
 	"github.com/AliyunContainerService/data-on-ack/ai-dev-console/console/backend/pkg/utils"
 	"github.com/AliyunContainerService/data-on-ack/ai-dev-console/pkg/infra/dmo"
 	"github.com/AliyunContainerService/data-on-ack/ai-dev-console/pkg/proxy"
+	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 	"k8s.io/klog"
+	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"os"
@@ -100,6 +103,33 @@ func (nc *NotebookAPIsController) RegisterSDReverseProxy(routes *gin.RouterGroup
 func (nc *NotebookAPIsController) RegisterAllReverseProxy(routes *gin.RouterGroup, reverseProxyFunc func(c *gin.Context)) {
 	// proxy all request to notebook pod
 	routes.Any("/*path", reverseProxyFunc)
+}
+
+// checkNotebookNamespaceOwnership verifies that the authenticated user has access
+// to the specified namespace. Admin users can access all namespaces.
+func checkNotebookNamespaceOwnership(c *gin.Context, namespace string) bool {
+	session := sessions.Default(c)
+	if session == nil {
+		return false
+	}
+	loginName, _ := session.Get(auth.SessionKeyLoginName).(string)
+	accountId, _ := session.Get(auth.SessionKeyAccountID).(string)
+
+	// Admin users can access all namespaces
+	if IsAdminUser(loginName) || IsAdminUser(accountId) {
+		return true
+	}
+
+	userNamespaces, ok := session.Get(auth.SessionKeyUserNS).([]string)
+	if !ok || len(userNamespaces) == 0 {
+		return false
+	}
+	for _, ns := range userNamespaces {
+		if ns == namespace {
+			return true
+		}
+	}
+	return false
 }
 
 func (nc *NotebookAPIsController) GetNotebookListFromStorage(c *gin.Context) {
@@ -238,6 +268,12 @@ func (nc *NotebookAPIsController) JupyterReverseProxy(c *gin.Context) {
 
 	namespace, name := pathArr[1], pathArr[2]
 
+	if !checkNotebookNamespaceOwnership(c, namespace) {
+		c.JSON(http.StatusForbidden, gin.H{"code": 403, "message": "access denied: you do not have permission to access this notebook"})
+		c.Abort()
+		return
+	}
+
 	cacheKey := utils.GetProxyCacheKey(namespace, name, utils.JupyterProxy)
 	proxy, ok := nc.proxyCache.Get(cacheKey)
 	if ok {
@@ -281,6 +317,12 @@ func (nc *NotebookAPIsController) VSCodeReverseProxy(c *gin.Context) {
 	}
 
 	namespace, name := pathArr[1], pathArr[2]
+
+	if !checkNotebookNamespaceOwnership(c, namespace) {
+		c.JSON(http.StatusForbidden, gin.H{"code": 403, "message": "access denied: you do not have permission to access this notebook"})
+		c.Abort()
+		return
+	}
 
 	cacheKey := utils.GetProxyCacheKey(namespace, name, utils.VSCodeProxy)
 	proxy, ok := nc.proxyCache.Get(cacheKey)
@@ -326,6 +368,12 @@ func (nc *NotebookAPIsController) SdReverseProxy(c *gin.Context) {
 
 	namespace, name := pathArr[1], pathArr[2]
 
+	if !checkNotebookNamespaceOwnership(c, namespace) {
+		c.JSON(http.StatusForbidden, gin.H{"code": 403, "message": "access denied: you do not have permission to access this notebook"})
+		c.Abort()
+		return
+	}
+
 	cacheKey := utils.GetProxyCacheKey(namespace, name, utils.StableDiffusionProxy)
 	proxy, ok := nc.proxyCache.Get(cacheKey)
 	if ok {
@@ -369,6 +417,12 @@ func (nc *NotebookAPIsController) CommonReverseProxy(c *gin.Context) {
 	}
 
 	namespace, name, port := pathArr[1], pathArr[2], pathArr[3]
+
+	if !checkNotebookNamespaceOwnership(c, namespace) {
+		c.JSON(http.StatusForbidden, gin.H{"code": 403, "message": "access denied: you do not have permission to access this notebook"})
+		c.Abort()
+		return
+	}
 
 	cacheKey := utils.GetProxyCacheKey(namespace, name, utils.CommonPortProxy)
 	proxy, ok := nc.proxyCache.Get(cacheKey)

@@ -57,7 +57,6 @@
         <dependency>
             <groupId>com.fasterxml.jackson.dataformat</groupId>
             <artifactId>jackson-dataformat-yaml</artifactId>
-            <version>2.8.7</version>
         </dependency>
         <dependency>
             <groupId>com.alibaba</groupId>
@@ -101,9 +100,9 @@
             <version>2.3.5</version>
         </dependency>
         <dependency>
-            <groupId>com.alibaba</groupId>
-            <artifactId>fastjson</artifactId>
-            <version>1.2.83</version>
+            <groupId>com.alibaba.fastjson2</groupId>
+            <artifactId>fastjson2</artifactId>
+            <version>2.0.53</version>
         </dependency>
 
         <dependency>
@@ -157,7 +156,7 @@
         <dependency>
             <groupId>commons-compress</groupId>
             <artifactId>commons-compress</artifactId>
-            <version>20050911</version>
+            <version>1.26.0</version>
         </dependency>
 
         <dependency>

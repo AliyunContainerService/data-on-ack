@@ -13,18 +13,16 @@ spec:
     metadata:
       labels:
         app: notebook-controller
-    nodeSelector:
-    {{- if eq (.Values.global.clusterProfile | default "Default") "Edge"  }}
-      alibabacloud.com/is-edge-worker: "false"
-    {{- end }}
-    tolerations:
-    {{- if eq (.Values.global.clusterProfile | default "Default") "Edge"  }}
-      - key: "node-role.alibabacloud.com/addon"
-        operator: "Exists"
-        effect: "NoSchedule"
-    {{- end }}
     spec:
       serviceAccountName: {{ include "notebook.serviceAccountName" . }}
+      {{- if eq (.Values.global.clusterProfile | default "Default") "Edge" }}
+      nodeSelector:
+        alibabacloud.com/is-edge-worker: "false"
+      tolerations:
+        - key: "node-role.alibabacloud.com/addon"
+          operator: "Exists"
+          effect: "NoSchedule"
+      {{- end }}
       containers:
         - name: manager
           command:
