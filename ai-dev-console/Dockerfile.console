@@ -4,6 +4,9 @@ FROM registry-cn-hangzhou.ack.aliyuncs.com/dev/golang:1.22 as backend-builder
 WORKDIR /workspace
 
 COPY . .
+ENV GO111MODULE=on
+ENV GOPROXY=https://goproxy.cn
+RUN go mod tidy && go mod vendor
 
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o backend-server console/backend/cmd/backend-server/main.go
 

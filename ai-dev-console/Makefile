@@ -47,15 +47,21 @@ manifests: controller-gen
 	output:crd:artifacts:config=config/crd/bases
 
 vendor:
-	go mod vendor
+	@echo "Vendoring dependencies..."
+	@go mod vendor || (echo "Vendor failed!" && exit 1)
+	@echo "Vendor completed successfully"
 
 # Run go fmt against code
 fmt:
-	go fmt ./...
+	@echo "Formatting Go code..."
+	@go fmt ./... || (echo "fmt failed!" && exit 1)
+	@echo "Formatting completed"
 
 # Run go vet against code
 vet:
-	go vet ./...
+	@echo "Vetting Go code..."
+	@go vet ./... || (echo "vet failed!" && exit 1)
+	@echo "Vetting completed"
 
 # Generate code
 generate: controller-gen
@@ -73,29 +79,128 @@ else
 CONTROLLER_GEN=$(shell which controller-gen)
 endif
 
+# Build backend binary
 build-backend: vendor
-	cd console/ && env GOOS=linux GOARCH=amd64 go build -mod=vendor -o backend-server && cd -
+	@echo "Building backend server..."
+	@cd console/backend/cmd/backend-server && \
+		CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on \
+		go build -mod=../../../../vendor -a -o ../../../../backend-server main.go || \
+		(echo "Backend build failed!" && exit 1)
+	@echo "Backend build completed successfully"
 
+# Build frontend
 build-frontend:
-	cd console/frontend/ && npm install --legacy-peer-deps && npm run build && cd -
+	@echo "Building frontend..."
+	@cd console/frontend && \
+		if [ ! -d "node_modules" ] || [ "package.json" -nt "node_modules/.package-lock.json" ]; then \
+			echo "Installing/updating npm dependencies..."; \
+			npm install --legacy-peer-deps || (echo "npm install failed!" && exit 1); \
+		else \
+			echo "Dependencies are up to date, skipping npm install"; \
+		fi && \
+		echo "Running frontend build..." && \
+		(npm run build || (echo "Frontend build failed!" && exit 1)) && \
+		(npm run verify || (echo "Frontend build verification failed!" && exit 1))
+	@if [ ! -d "console/frontend/dist" ]; then \
+		echo "Error: Frontend dist directory not found after build!"; \
+		exit 1; \
+	fi
+	@if [ ! -f "console/frontend/dist/index.html" ]; then \
+		echo "Error: Frontend index.html not found after build!"; \
+		exit 1; \
+	fi
+	@echo "Frontend build completed successfully"
 
+# Verify frontend build
+verify-frontend:
+	@if [ ! -d "console/frontend/dist" ]; then \
+		echo "Error: Frontend dist directory not found. Please run 'make build-frontend' first."; \
+		exit 1; \
+	fi
+	@if [ ! -f "console/frontend/dist/index.html" ]; then \
+		echo "Error: Frontend index.html not found. Build may be incomplete."; \
+		exit 1; \
+	fi
+	@echo "Frontend build verified"
+
+# Save git commit hash
 save-git-commit:
-	echo "${GIT_COMMIT}" > .git-commit
+	@echo "${GIT_COMMIT}" > .git-commit
+	@echo "Git commit saved: ${GIT_COMMIT}"
 
-console-build: build-frontend save-git-commit
-	$(DOCKERCMD) \
+# Build console Docker image
+console-build: verify-frontend save-git-commit
+	@echo "Building console Docker image: ${CONSOLE_IMG}"
+	@$(DOCKERCMD) \
 		-f Dockerfile.console \
 		-t ${CONSOLE_IMG} \
-		.
+		--build-arg ARENA_TAR=${ARENA_TAR:-arena-installer-0.9.16-6c2373d-linux-amd64.tar.gz} \
+		. || (echo "Console Docker build failed!" && exit 1)
+	@echo "Console Docker image built successfully: ${CONSOLE_IMG}"
 
-console-push:
-	docker push ${CONSOLE_IMG}
+# Push console Docker image
+console-push: console-build
+	@echo "Pushing console Docker image: ${CONSOLE_IMG}"
+	@docker push ${CONSOLE_IMG} || (echo "Console Docker push failed!" && exit 1)
+	@echo "Console Docker image pushed successfully"
 
+# Build operator Docker image
 operator-build: manager
-	docker build --platform linux/amd64 . --no-cache -f Dockerfile -t ${OPERATOR_IMG}
+	@echo "Building operator Docker image: ${OPERATOR_IMG}"
+	@docker build --platform linux/amd64 . --no-cache -f Dockerfile -t ${OPERATOR_IMG} || \
+		(echo "Operator Docker build failed!" && exit 1)
+	@echo "Operator Docker image built successfully: ${OPERATOR_IMG}"
 
-operator-push:
-	docker push ${OPERATOR_IMG}
+# Push operator Docker image
+operator-push: operator-build
+	@echo "Pushing operator Docker image: ${OPERATOR_IMG}"
+	@docker push ${OPERATOR_IMG} || (echo "Operator Docker push failed!" && exit 1)
+	@echo "Operator Docker image pushed successfully"
 
-# Build the docker image
-docker-build: console-build operator-build cron-build
+# Build all components (console and operator)
+docker-build: console-build operator-build
+	@echo "All Docker images built successfully"
+	@echo "Console image: ${CONSOLE_IMG}"
+	@echo "Operator image: ${OPERATOR_IMG}"
+
+# Build and push all components
+docker-push: console-push operator-push
+	@echo "All Docker images pushed successfully"
+
+# Clean build artifacts
+clean:
+	@echo "Cleaning build artifacts..."
+	@rm -f backend-server manager .git-commit
+	@rm -rf console/frontend/dist
+	@rm -rf vendor
+	@echo "Clean completed"
+
+# Clean frontend (including node_modules)
+clean-frontend:
+	@echo "Cleaning frontend artifacts..."
+	@cd console/frontend && npm run clean:all || true
+	@echo "Frontend clean completed"
+
+# Help target
+help:
+	@echo "Available targets:"
+	@echo ""
+	@echo "Backend:"
+	@echo "  build-backend      - Build backend Go binary"
+	@echo ""
+	@echo "Frontend:"
+	@echo "  build-frontend     - Build frontend React application"
+	@echo "  verify-frontend    - Verify frontend build artifacts"
+	@echo "  clean-frontend    - Clean frontend artifacts (including node_modules)"
+	@echo ""
+	@echo "Docker:"
+	@echo "  console-build      - Build console Docker image"
+	@echo "  console-push       - Build and push console Docker image"
+	@echo "  operator-build     - Build operator Docker image"
+	@echo "  operator-push      - Build and push operator Docker image"
+	@echo "  docker-build       - Build all Docker images"
+	@echo "  docker-push        - Build and push all Docker images"
+	@echo ""
+	@echo "Utilities:"
+	@echo "  clean              - Clean build artifacts"
+	@echo "  help               - Show this help message"

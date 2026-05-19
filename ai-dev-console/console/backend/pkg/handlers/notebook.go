@@ -299,11 +299,21 @@ func (nh *NotebookHandler) CompatibleNotebook(namespace string) error {
 }
 
 func (nh *NotebookHandler) ListNotebookFromStorage(namespace, userName, userId string, c *gin.Context) ([]NotebookMessage, error) {
+	var err error
+	userIdMap := make(map[string]string)
+	notebooksFromApiserver, err := nh.ListNotebook(namespace)
+	if err != nil {
+		klog.Errorf("List notebooks err : %s", err.Error())
+		return nil, err
+	}
+	for _, notebook := range notebooksFromApiserver {
+		userIdMap[notebook.Name] = notebook.UserName
+	}
+
 	eventsMap, _ := nh.ListEvents(namespace)
 	session := sessions.Default(c)
 	var notebooksListFromStorage []*dmo.Notebook
 
-	var err error
 	if session.Get(auth.SessionKeyRole) == auth.SessionValueRoleAdmin {
 		notebooksListFromStorage, err = nh.storageBackend.ListAllNotebook(&backends.NotebookQuery{
 			Namespace: namespace,
@@ -388,7 +398,7 @@ func (nh *NotebookHandler) ListNotebookFromStorage(namespace, userName, userId s
 			Event:      event,
 			Token:      item.Token,
 			ErrMessage: errMessage,
-			UserName:   userId,
+			UserName:   userIdMap[item.Name],
 		})
 	}
 	sort.Sort(NotebookMessages(notebookMessageList))
