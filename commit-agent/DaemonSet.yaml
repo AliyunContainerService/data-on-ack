@@ -3,34 +3,108 @@ kind: DaemonSet
 metadata:
   name: ack-commit-agent
   namespace: kube-ai
+  labels:
+    component: ack-commit-agent
+    app: ack-ai-dev-console
 spec:
   selector:
     matchLabels:
       component: ack-commit-agent
       app: ack-ai-dev-console
       name: ack-commit-agent-ds
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
   template:
     metadata:
       labels:
         component: ack-commit-agent
         app: ack-ai-dev-console
         name: ack-commit-agent-ds
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
     spec:
+      # The agent dials the host's docker/containerd socket and writes its own
+      # UDS into /run; hostNetwork is intentionally disabled — the only entry
+      # point is the unix socket on the host filesystem.
+      hostNetwork: false
+      hostIPC: false
+      hostPID: false
+      priorityClassName: system-node-critical
+      tolerations:
+        - operator: Exists
       containers:
-        - image: registry-cn-beijing.ack.aliyuncs.com/acs/commit-agent:v0.1.1-9d4e12d-aliyun
-          imagePullPolicy: Always
-          name: ack-commit-agent
+        - name: ack-commit-agent
+          image: registry-cn-beijing.ack.aliyuncs.com/acs/commit-agent:v0.1.2-aliyun
+          imagePullPolicy: IfNotPresent
+          args:
+            - --socket-address=/host/run/commit-agent/commit-agent.sock
+            - --log-format=json
+            - --log-level=info
+            - --max-concurrent-commit=4
+            - --max-concurrent-push=4
+            - --request-timeout=30m
+            - --shutdown-timeout=30s
+            - --metrics-address=:9090
+          ports:
+            - name: metrics
+              containerPort: 9090
+              protocol: TCP
           resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+              ephemeral-storage: 1Gi
             limits:
-              memory: 100Mi
-              cpu: 200m
+              cpu: 500m
+              memory: 256Mi
+              ephemeral-storage: 4Gi
+          securityContext:
+            # Talking to host docker.sock / containerd.sock requires privilege.
+            privileged: true
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: true
           volumeMounts:
             - mountPath: /host/run
               name: run
-      dnsPolicy: ClusterFirst
-      hostNetwork: true
-      hostIPC: true
+          startupProbe:
+            exec:
+              command:
+                - /usr/bin/ack-commit-ctl
+                - --server-socket=/host/run/commit-agent/commit-agent.sock
+                - --dial-timeout=2s
+                - --timeout=3s
+                - version
+            failureThreshold: 12
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command:
+                - /usr/bin/ack-commit-ctl
+                - --server-socket=/host/run/commit-agent/commit-agent.sock
+                - --dial-timeout=2s
+                - --timeout=3s
+                - version
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - /usr/bin/ack-commit-ctl
+                - --server-socket=/host/run/commit-agent/commit-agent.sock
+                - --dial-timeout=2s
+                - --timeout=3s
+                - version
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
       restartPolicy: Always
+      terminationGracePeriodSeconds: 30
       volumes:
         - hostPath:
             path: /run

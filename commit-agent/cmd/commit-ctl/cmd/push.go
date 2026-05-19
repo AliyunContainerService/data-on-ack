@@ -16,60 +16,99 @@
 package cmd
 
 import (
+	"bufio"
 	"context"
-	"google.golang.org/grpc"
-	"net"
+	"fmt"
+	"io"
+	"os"
+	"strings"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
-	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/AliyunContainerService/data-on-ack/commit-agent/pkg/client"
 	"github.com/AliyunContainerService/data-on-ack/commit-agent/v1beta1"
 )
 
+const (
+	envUsername = "ACR_USERNAME"
+	envPassword = "ACR_PASSWORD"
+)
+
 var (
-	username string
-	password string
+	username      string
+	password      string
+	passwordStdin bool
 )
 
 // pushCmd represents the push command
 var pushCmd = &cobra.Command{
 	Use:   "push NAME[:TAG]",
 	Short: "Push an image or a repository to a registry.",
-	Args:  cobra.MatchAll(cobra.ExactArgs(1), cobra.OnlyValidArgs),
+	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		var opts []grpc.DialOption
-		var dialer = func(ctx context.Context, addr string) (net.Conn, error) {
-			var d net.Dialer
-			return d.DialContext(ctx, "unix", addr)
+		image := strings.TrimSpace(args[0])
+		if image == "" {
+			return fmt.Errorf("image name must not be empty")
 		}
-		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
-		opts = append(opts, grpc.WithContextDialer(dialer))
 
-		conn, err := grpc.Dial(serverSocket, opts...)
+		if passwordStdin {
+			if password != "" {
+				return fmt.Errorf("--password and --password-stdin are mutually exclusive")
+			}
+			pw, err := readPasswordStdin(cmd.InOrStdin())
+			if err != nil {
+				return fmt.Errorf("read password from stdin: %w", err)
+			}
+			password = pw
+		}
+
+		// Allow credentials via env to avoid putting passwords in shell history.
+		if username == "" {
+			username = os.Getenv(envUsername)
+		}
+		if password == "" {
+			password = os.Getenv(envPassword)
+		}
+
+		conn, err := dial(serverSocket)
 		if err != nil {
-			log.Errorf("did not connect: %v", err)
-			return err
+			return fmt.Errorf("dial commit-agent at %s: %w", serverSocket, err)
 		}
 		defer conn.Close()
 
 		c := v1beta1.NewImageServiceClient(conn)
 
-		// get version
-		client.PushImage(c, &v1beta1.PushRequest{
-			Image:    args[0],
+		ctx, cancel := context.WithTimeout(cmd.Context(), rpcTimeout)
+		defer cancel()
+
+		return client.PushImage(ctx, c, &v1beta1.PushRequest{
+			Image:    image,
 			Username: username,
 			Password: password,
 		})
-
-		return nil
 	},
+}
+
+// readPasswordStdin slurps the password from the reader, stripping the
+// trailing newline if present. Empty passwords are rejected so the caller
+// can't silently authenticate as anonymous.
+func readPasswordStdin(r io.Reader) (string, error) {
+	br := bufio.NewReader(r)
+	pw, err := br.ReadString('\n')
+	if err != nil && err != io.EOF {
+		return "", err
+	}
+	pw = strings.TrimRight(pw, "\r\n")
+	if pw == "" {
+		return "", fmt.Errorf("password from stdin is empty")
+	}
+	return pw, nil
 }
 
 func init() {
 	rootCmd.AddCommand(pushCmd)
 
-	pushCmd.Flags().StringVar(&username, "username", "", "username")
-	pushCmd.Flags().StringVar(&password, "password", "", "password")
+	pushCmd.Flags().StringVar(&username, "username", "", "registry username (defaults to $ACR_USERNAME)")
+	pushCmd.Flags().StringVar(&password, "password", "", "registry password (defaults to $ACR_PASSWORD); avoid in argv, prefer --password-stdin")
+	pushCmd.Flags().BoolVar(&passwordStdin, "password-stdin", false, "read registry password from stdin")
 }

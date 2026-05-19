@@ -17,6 +17,10 @@ package main
 
 import "github.com/AliyunContainerService/data-on-ack/commit-agent/cmd/commit-ctl/cmd"
 
+// version is overridden at build time via -ldflags "-X main.version=...".
+var version = "dev"
+
 func main() {
+	cmd.ClientVersion = version
 	cmd.Execute()
 }

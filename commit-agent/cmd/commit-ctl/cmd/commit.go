@@ -18,12 +18,10 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"github.com/spf13/cobra"
-	"google.golang.org/grpc"
-	"net"
+	"strings"
 
 	log "github.com/sirupsen/logrus"
-	"google.golang.org/grpc/credentials/insecure"
+	"github.com/spf13/cobra"
 
 	"github.com/AliyunContainerService/data-on-ack/commit-agent/pkg"
 	"github.com/AliyunContainerService/data-on-ack/commit-agent/pkg/client"
@@ -35,42 +33,38 @@ import (
 var commitCmd = &cobra.Command{
 	Use:   "commit NAME[:TAG]",
 	Short: "Create a new image from the notebook",
-	Args:  cobra.MatchAll(cobra.ExactArgs(1), cobra.OnlyValidArgs),
+	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		var opts []grpc.DialOption
-		var dialer = func(ctx context.Context, addr string) (net.Conn, error) {
-			var d net.Dialer
-			return d.DialContext(ctx, "unix", addr)
+		image := strings.TrimSpace(args[0])
+		if image == "" {
+			return fmt.Errorf("image name must not be empty")
 		}
-		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
-		opts = append(opts, grpc.WithContextDialer(dialer))
 
-		conn, err := grpc.Dial(serverSocket, opts...)
+		conn, err := dial(serverSocket)
 		if err != nil {
-			log.Errorf("did not connect: %v", err)
-			return err
+			return fmt.Errorf("dial commit-agent at %s: %w", serverSocket, err)
 		}
 		defer conn.Close()
 
 		c := v1beta1.NewImageServiceClient(conn)
 
-		cgroupMessage, err := utils.ReadSystemdLine(pkg.CgroupPath)
+		cgroupLine, err := utils.ReadCgroupLine(pkg.CgroupPath)
 		if err != nil {
-			log.Errorf("get container information failed: %v", err)
-			return err
+			return fmt.Errorf("read cgroup info: %w", err)
 		}
+		containerID := utils.GetContainerID(cgroupLine)
+		if containerID == "" {
+			return fmt.Errorf("could not extract container ID from %q", cgroupLine)
+		}
+		log.Infof("container id: %s", containerID)
 
-		containerID := utils.GetContainerID(cgroupMessage)
+		ctx, cancel := context.WithTimeout(cmd.Context(), rpcTimeout)
+		defer cancel()
 
-		log.Infof(fmt.Sprintf("container id: %s", containerID))
-
-		// get version
-		client.CommitImage(c, &v1beta1.CommitRequest{
-			Image:       args[0],
+		return client.CommitImage(ctx, c, &v1beta1.CommitRequest{
+			Image:       image,
 			ContainerID: containerID,
 		})
-
-		return nil
 	},
 }
 

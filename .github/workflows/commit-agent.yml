@@ -1,0 +1,79 @@
+name: commit-agent
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "commit-agent/**"
+      - ".github/workflows/commit-agent.yml"
+  pull_request:
+    paths:
+      - "commit-agent/**"
+      - ".github/workflows/commit-agent.yml"
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: commit-agent
+
+jobs:
+  test:
+    name: build & test
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.21"
+          check-latest: true
+          cache: true
+          cache-dependency-path: commit-agent/go.sum
+
+      - name: gofmt
+        run: |
+          changed="$(git ls-files '*.go' | grep -v '^vendor/' || true)"
+          if [ -n "$changed" ]; then
+            unformatted="$(gofmt -l $changed)"
+            if [ -n "$unformatted" ]; then
+              echo "::error::These files are not gofmt'd:" >&2
+              echo "$unformatted" >&2
+              exit 1
+            fi
+          fi
+
+      - name: go vet
+        run: GOOS=linux GOARCH=amd64 go vet -mod=vendor ./...
+
+      - name: go test (linux)
+        run: GOOS=linux GOARCH=amd64 go test -mod=vendor -race -count=1 ./...
+
+      - name: build agent (amd64)
+        run: GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -mod=vendor -o /tmp/commit-agent ./cmd/commit-agent
+
+      - name: build agent (arm64)
+        run: GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -mod=vendor -o /tmp/commit-agent-arm64 ./cmd/commit-agent
+
+      - name: build cli (amd64)
+        run: GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -mod=vendor -o /tmp/ack-commit-ctl ./cmd/commit-ctl
+
+  staticcheck:
+    name: staticcheck
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.21"
+          cache: true
+          cache-dependency-path: commit-agent/go.sum
+      - name: install staticcheck
+        run: go install honnef.co/go/tools/cmd/staticcheck@2023.1.7
+      - name: run
+        run: |
+          export PATH="$(go env GOPATH)/bin:$PATH"
+          GOOS=linux GOARCH=amd64 staticcheck -tests=false ./...

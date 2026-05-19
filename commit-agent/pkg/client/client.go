@@ -17,34 +17,43 @@ package client
 
 import (
 	"context"
+	"fmt"
 
 	log "github.com/sirupsen/logrus"
 
 	"github.com/AliyunContainerService/data-on-ack/commit-agent/v1beta1"
 )
 
-func GetVersion(client v1beta1.ImageServiceClient, request *v1beta1.VersionRequest) {
-	response, err := client.Version(context.TODO(), request)
+// GetVersion calls Version on the agent and prints the response.
+// Returns the version string and an error so callers may handle failure
+// (Cobra's RunE expects error returns) instead of os.Exit'ing.
+func GetVersion(ctx context.Context, c v1beta1.ImageServiceClient, request *v1beta1.VersionRequest) (string, error) {
+	resp, err := c.Version(ctx, request)
 	if err != nil {
-		log.Fatalf("get version failed: %v", err)
+		return "", fmt.Errorf("get version: %w", err)
 	}
-	log.Println(response.Version)
+	log.Infoln(resp.Version)
+	return resp.Version, nil
 }
 
-func CommitImage(client v1beta1.ImageServiceClient, request *v1beta1.CommitRequest) {
-	response, err := client.CommitImage(context.TODO(), request)
+// CommitImage requests a commit and prints the result.
+func CommitImage(ctx context.Context, c v1beta1.ImageServiceClient, request *v1beta1.CommitRequest) error {
+	resp, err := c.CommitImage(ctx, request)
 	if err != nil {
-		log.Fatalf("commit image failed: %v", err)
+		return fmt.Errorf("commit image: %w", err)
 	}
-	log.Println(response.Result)
+	log.Infoln(resp.Result)
+	return nil
 }
 
-func PushImage(client v1beta1.ImageServiceClient, request *v1beta1.PushRequest) {
-	log.Println("Start pushing the image: ", request.Image)
-	log.Println("Waiting...")
-	response, err := client.PushImage(context.TODO(), request)
+// PushImage requests a push and prints the result.
+func PushImage(ctx context.Context, c v1beta1.ImageServiceClient, request *v1beta1.PushRequest) error {
+	log.Infoln("Start pushing the image:", request.Image)
+	log.Infoln("Waiting...")
+	resp, err := c.PushImage(ctx, request)
 	if err != nil {
-		log.Fatalf("Image push failed: %v", err)
+		return fmt.Errorf("push image: %w", err)
 	}
-	log.Println(response.Result)
+	log.Infoln(resp.Result)
+	return nil
 }

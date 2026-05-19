@@ -1,3 +1,8 @@
+{{- $agent := .Values.commitAgent | default dict -}}
+{{- $metrics := $agent.metrics | default dict -}}
+{{- $retry := $agent.pushRetry | default dict -}}
+{{- $socket := $agent.socketAddress | default "/host/run/commit-agent/commit-agent.sock" -}}
+{{- $metricsPort := $metrics.port | default 9090 -}}
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
@@ -11,6 +16,10 @@ spec:
       app: ack-ai-dev-console
       name: ack-commit-agent-ds
       {{- include "dev-console.selectorLabels" . | nindent 6 }}
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
   template:
     metadata:
       labels:
@@ -18,22 +27,110 @@ spec:
         app: ack-ai-dev-console
         name: ack-commit-agent-ds
         {{- include "dev-console.selectorLabels" . | nindent 8 }}
+      {{- if and $metrics.enabled (ne ($metricsPort | toString) "0") }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: {{ $metricsPort | quote }}
+        prometheus.io/path: "/metrics"
+      {{- end }}
     spec:
-      containers:
-      - image: "{{ .Values.image.commitAgentImageName }}:{{ .Values.image.commitAgentImageTag }}"
-        imagePullPolicy: Always
-        name: ack-commit-agent
-        resources:
-          limits:
-            memory: 100Mi
-            cpu: 200m
-        volumeMounts:
-          - mountPath: /host/run
-            name: run
-      dnsPolicy: ClusterFirst
-      hostNetwork: true
-      hostIPC: true
+      hostNetwork: false
+      hostIPC: false
+      hostPID: false
       restartPolicy: Always
+      terminationGracePeriodSeconds: 30
+      {{- with $agent.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      {{- with $agent.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | indent 8 }}
+      {{- end }}
+      {{- with $agent.tolerations }}
+      tolerations:
+{{ toYaml . | indent 8 }}
+      {{- end }}
+      containers:
+        - name: ack-commit-agent
+          image: "{{ .Values.image.commitAgentImageName }}:{{ .Values.image.commitAgentImageTag }}"
+          imagePullPolicy: IfNotPresent
+          args:
+            - --socket-address={{ $socket }}
+            - --log-level={{ $agent.logLevel | default "info" }}
+            - --log-format={{ $agent.logFormat | default "json" }}
+            - --request-timeout={{ $agent.requestTimeout | default "30m" }}
+            - --shutdown-timeout={{ $agent.shutdownTimeout | default "30s" }}
+            - --max-concurrent-commit={{ $agent.maxConcurrentCommit | default 4 }}
+            - --max-concurrent-push={{ $agent.maxConcurrentPush | default 4 }}
+            - --containerd-namespace={{ $agent.containerdNamespace | default "k8s.io" }}
+            {{- with $agent.runtime }}
+            - --runtime={{ . }}
+            {{- end }}
+            {{- with $agent.allowedUIDs }}
+            - --allowed-uids={{ . }}
+            {{- end }}
+            {{- if $retry.attempts }}
+            - --push-retry-attempts={{ $retry.attempts }}
+            {{- end }}
+            {{- if $retry.initialDelay }}
+            - --push-retry-initial-delay={{ $retry.initialDelay }}
+            {{- end }}
+            {{- if $retry.maxDelay }}
+            - --push-retry-max-delay={{ $retry.maxDelay }}
+            {{- end }}
+            {{- if $metrics.enabled }}
+            - --metrics-address=:{{ $metricsPort }}
+            {{- end }}
+          {{- if $metrics.enabled }}
+          ports:
+            - name: metrics
+              containerPort: {{ $metricsPort }}
+              protocol: TCP
+          {{- end }}
+          {{- with $agent.resources }}
+          resources:
+{{ toYaml . | indent 12 }}
+          {{- end }}
+          securityContext:
+            privileged: true
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: true
+          volumeMounts:
+            - mountPath: /host/run
+              name: run
+          startupProbe:
+            exec:
+              command:
+                - /usr/bin/ack-commit-ctl
+                - --server-socket={{ $socket }}
+                - --dial-timeout=2s
+                - --timeout=3s
+                - version
+            failureThreshold: 12
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command:
+                - /usr/bin/ack-commit-ctl
+                - --server-socket={{ $socket }}
+                - --dial-timeout=2s
+                - --timeout=3s
+                - version
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - /usr/bin/ack-commit-ctl
+                - --server-socket={{ $socket }}
+                - --dial-timeout=2s
+                - --timeout=3s
+                - version
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
       volumes:
         - hostPath:
             path: /run
