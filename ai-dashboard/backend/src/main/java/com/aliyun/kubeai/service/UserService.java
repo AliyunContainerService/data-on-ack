@@ -257,8 +257,8 @@ public class UserService {
         Integer portNum = epPorts.get(0).getPort();
         EndpointAddress epAddr = epAddresses.get(0);
 
-        String serverAddrs = String.format("%s://%s:%d/", portName, epAddr.getIp(), portNum);
-        log.info("config serverAddrs:{}", serverAddrs);
+        String serverAddrs = String.format("https://%s:%d/", epAddr.getIp(), portNum);
+        log.info("config serverAddrs:{} (endpoint port name:{})", serverAddrs, portName);
 
         String clusterName = DEFAULT_CLUSTER_NAME;
         Context context = new ContextBuilder().withCluster(clusterName).withNamespace(curNamespace).withUser(serviceAccountName).build();
@@ -283,13 +283,13 @@ public class UserService {
         try {
             Serialization.yamlMapper().writeValue(stream, modelConfig);
             kubeConfig = new String(stream.toByteArray());
-            log.info("write kube config value:{}", kubeConfig);
+            log.info("write kube config done, length:{}", kubeConfig.length());
         } catch (Exception e) {
             log.error("write kube config value exception:{}", e);
             throw new Exception(e);
         }
 
-        log.info("gen k8s config:{}", kubeConfig);
+        log.info("gen k8s config done for user:{} length:{}", userId, kubeConfig.length());
         //String base64String = Base64.encodeBase64String(kubeConfig.getBytes());
         return kubeConfig;
     }

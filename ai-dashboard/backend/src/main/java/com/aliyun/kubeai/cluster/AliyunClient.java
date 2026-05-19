@@ -268,12 +268,12 @@ public class AliyunClient {
         } else {
             List<ListAppSecretIdsResponseBody.ListAppSecretIdsResponseBodyAppSecretsAppSecret> secrets = appSecrets.getAppSecret();
             secretId = secrets.get(0).getAppSecretId();
-            log.info("found app secret len:{} secrets:{}", secrets.size(), JSON.toJSONString(secrets));
+            log.info("found app secret len:{}", secrets.size());
             GetAppSecretRequest getSecretReq = new GetAppSecretRequest().setAppId(appId).setAppSecretId(secretId);
             GetAppSecretResponse getSecretRes = client.getAppSecret(getSecretReq);
             ret = JSON.parseObject(JSON.toJSONString(getSecretRes.getBody().getAppSecret()), RamSecret.class);
         }
-        log.info("got ram secret:{}", ret);
+        log.info("got ram secret present:{}", ret != null);
         return ret;
     }
 

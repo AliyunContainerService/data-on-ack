@@ -623,7 +623,7 @@ public class K8sService {
             K8sSecret tmpSecret = parseK8sSecretToSecret(item);
             res.add(tmpSecret);
         }
-        log.info("secret parsed:{}", res);
+        log.info("secret parsed count:{}", res.size());
         return res;
     }
 

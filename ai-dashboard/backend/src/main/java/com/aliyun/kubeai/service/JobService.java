@@ -77,7 +77,8 @@ public class JobService {
     public JobCost getJobCost(String jobId, String jobType) {
         JobCost jobCost = new JobCost();
 
-        if (jobType.equals(TRAINING_JOB)) {
+        String normalizedType = jobType == null ? "" : jobType.trim();
+        if (TRAINING_JOB.equalsIgnoreCase(normalizedType)) {
             TrainingJob trainingJob = trainingJobMapper.findByJobId(jobId);
             if (trainingJob == null) {
                 log.warn("training job not found for jobId:{}", jobId);

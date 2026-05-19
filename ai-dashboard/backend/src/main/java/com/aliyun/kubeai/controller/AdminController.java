@@ -131,7 +131,7 @@ public class AdminController {
 
         String aliyunAccessToken = auth2AuthenticationDetails.getTokenValue();
         Map<String, String> userProfileDetails = (Map<String, String>) userAuthentication.getDetails();
-        log.info("accessToken:{}", aliyunAccessToken);
+        log.debug("accessToken received (length:{})", aliyunAccessToken == null ? 0 : aliyunAccessToken.length());
         if (userProfileDetails == null) {
             result.setFailed(ResultCode.USER_AUTH_FAILED, "user auth details not found");
             return result;

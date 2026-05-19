@@ -152,7 +152,7 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter  {
         if (Strings.isNullOrEmpty(clientId) || Strings.isNullOrEmpty(clientSecret)) {
             throw new Exception("client id or secret empty");
         }
-        log.info("got client id:{} and secret:{}", clientId, clientSecret);
+        log.info("got oauth client id (length:{}) and secret (length:{})", clientId.length(), clientSecret.length());
         res.setClientId(clientId);
         res.setClientSecret(clientSecret);
         String ramDomain = getRamDomain(isIntlAccount());
