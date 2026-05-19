@@ -4,8 +4,13 @@
   "private": true,
   "description": "An out-of-box UI solution for enterprise applications",
   "scripts": {
-    "analyze": "cross-env ANALYZE=1 umi build",
-    "build": "cross-env  UMI_ENV=default umi build",
+    "prebuild": "echo 'Starting frontend build...' && npm run lint:js",
+    "build": "cross-env UMI_ENV=default NODE_ENV=production umi build",
+    "build:analyze": "cross-env ANALYZE=1 UMI_ENV=default NODE_ENV=production umi build",
+    "build:stage": "cross-env UMI_ENV=default NODE_ENV=production umi build",
+    "postbuild": "echo 'Frontend build completed. Checking dist directory...' && test -d dist && echo '✓ dist directory exists' || (echo '✗ dist directory not found!' && exit 1)",
+    "clean": "rm -rf dist node_modules/.cache .umi .umi-production",
+    "clean:all": "npm run clean && rm -rf node_modules",
     "deploy": "npm run site && npm run gh-pages",
     "fetch:blocks": "pro fetch-blocks --branch antd@4 && npm run prettier",
     "format-imports": "cross-env import-sort --write '**/*.{js,jsx,ts,tsx}'",
@@ -19,7 +24,7 @@
     "lint:prettier": "check-prettier lint",
     "lint:style": "stylelint --fix \"src/**/*.less\" --syntax less",
     "prettier": "prettier -c --write \"**/*\"",
-    "start": "cross-env  UMI_ENV=default umi dev",
+    "start": "cross-env UMI_ENV=default umi dev",
     "start:no-mock": "cross-env MOCK=none umi dev",
     "start:no-ui": "cross-env UMI_UI=none umi dev",
     "test": "umi test",
@@ -27,8 +32,9 @@
     "test:component": "umi test ./src/components",
     "tsc": "tsc",
     "ui": "umi ui",
-    "eflops": "cross-env  UMI_ENV=eflops  UMI_UI=none umi dev",
-    "eflops-build": "cross-env  UMI_ENV=eflops umi build"
+    "eflops": "cross-env UMI_ENV=eflops UMI_UI=none umi dev",
+    "eflops-build": "cross-env UMI_ENV=eflops NODE_ENV=production umi build",
+    "verify": "test -d dist && test -f dist/index.html && echo '✓ Build verification passed' || (echo '✗ Build verification failed' && exit 1)"
   },
   "lint-staged": {
     "**/*.less": "stylelint --syntax less",
