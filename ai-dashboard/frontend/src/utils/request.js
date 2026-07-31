@@ -1,5 +1,5 @@
 import axios from 'axios'
-// import { Message } from 'element-ui'
+import { Message } from 'element-ui'
 import store from '@/store'
 import { getToken, getTokenByKey } from '@/utils/auth'
 
@@ -7,7 +7,7 @@ import { getToken, getTokenByKey } from '@/utils/auth'
 const service = axios.create({
   baseURL: process.env.VUE_APP_BASE_API, // url = base url + request url
   // withCredentials: true, // send cookies when cross-domain requests
-  timeout: 6000 // request timeout
+  timeout: 30000 // request timeout
   // responseType: 'blob'
 })
 
@@ -47,13 +47,13 @@ service.interceptors.response.use(
     const res = response.data
 
     if (res.code !== 10000) {
-      // Message({
-      //  message: res.message,
-      //  type: 'error',
-      //  duration: 5 * 1000
-      // })
       if (res.code === 10101 || res.code === 10102 || res.code === 10103) {
-        store.dispatch('user/resetToken').then(() => {
+        store.dispatch('user/resetToken').then(() => {})
+      } else {
+        Message({
+          message: res.message || '错误',
+          type: 'error',
+          duration: 5 * 1000
         })
       }
       return Promise.reject(new Error(res.message || '错误'))
@@ -62,12 +62,11 @@ service.interceptors.response.use(
     }
   },
   error => {
-    // console.log('err' + error) // for debug
-    // Message({
-    //  message: error.message,
-    //  type: 'error',
-    //  duration: 5 * 1000
-    // })
+    Message({
+      message: error.message,
+      type: 'error',
+      duration: 5 * 1000
+    })
     return Promise.reject(error)
   }
 )

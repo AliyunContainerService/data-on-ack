@@ -15,7 +15,7 @@ all: docker-build docker-push
 
 get-arena:
 	if [ ! -d bin ]; then mkdir bin; fi \
-	&& if [ ! -f bin/${ARENA_BIN} ]; then wget http://aliacs-k8s-cn-hongkong.oss-cn-hongkong.aliyuncs.com/arena/${ARENA_BIN} -O bin/${ARENA_BIN}; fi
+	&& if [ ! -f bin/${ARENA_BIN} ]; then wget https://aliacs-k8s-cn-hongkong.oss-cn-hongkong.aliyuncs.com/arena/${ARENA_BIN} -O bin/${ARENA_BIN}; fi
 
 pkg:
 	cd ${BACKEND_ROOT} \

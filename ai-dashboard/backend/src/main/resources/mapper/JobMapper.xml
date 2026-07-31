@@ -16,22 +16,30 @@
     </resultMap>
 
     <select id="findJob" parameterType="com.aliyun.kubeai.entity.JobSqlRequest" resultMap="baseResultMap">
-        select * from job WHERE
-        user_id in
-        <foreach item="item" index="index" collection="userIds"
-                 open="(" separator="," close=")">
-            #{item}
-        </foreach>
-        and namespace in
-        <foreach item="item" index="index" collection="namespaces"
-                 open="(" separator="," close=")">
-            #{item}
-        </foreach>
-        and status in
-        <foreach item="status" index="index" collection="statuses"
-                 open="(" separator="," close=")">
-            #{status}
-        </foreach>
+        select * from job
+        <where>
+            <if test="userIds != null and userIds.size() > 0">
+                user_id in
+                <foreach item="item" index="index" collection="userIds"
+                         open="(" separator="," close=")">
+                    #{item}
+                </foreach>
+            </if>
+            <if test="namespaces != null and namespaces.size() > 0">
+                and namespace in
+                <foreach item="item" index="index" collection="namespaces"
+                         open="(" separator="," close=")">
+                    #{item}
+                </foreach>
+            </if>
+            <if test="statuses != null and statuses.size() > 0">
+                and status in
+                <foreach item="status" index="index" collection="statuses"
+                         open="(" separator="," close=")">
+                    #{status}
+                </foreach>
+            </if>
+        </where>
     </select>
 
 </mapper>

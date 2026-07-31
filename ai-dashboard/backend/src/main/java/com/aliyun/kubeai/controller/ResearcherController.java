@@ -42,8 +42,7 @@ public class ResearcherController {
     @Resource
     private UserService researcherService;
 
-    @ModelAttribute
-    void setHeader(HttpServletResponse response) {
+    private void setHeader(HttpServletResponse response) {
         response.addHeader("Content-type", "application/octet-stream");
         response.addHeader("Content-Disposition", "attachment;filename=kuebeconfig.yaml");
         response.addHeader("Access-Control-Expose-Headers", "X-Suggested-Filename");
@@ -65,7 +64,8 @@ public class ResearcherController {
             log.error("get bearer token exception", e);
             result.setFailed(ResultCode.GET_RESEARCHER_TOKEN_EXCEPTION, String.format("获取BearerToken异常:%s", e.getMessage()));
         }
-        log.info("get bearer token result: {}", JSON.toJSONString(result));
+        log.info("get bearer token result code:{} message:{} hasToken:{}",
+                result.getCode(), result.getMessage(), !Strings.isNullOrEmpty(result.getData()));
         return result;
     }
 
@@ -97,6 +97,8 @@ public class ResearcherController {
         }
         if (limit == null || limit < 1) {
             limit = 20;
+        } else if (limit > 200) {
+            limit = 200;
         }
         RequestResult<Pagination<User>> result = new RequestResult<>();
         Pagination<User> pagination = researcherService.listUser(page, limit, userName);

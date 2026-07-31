@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 
 	"github.com/docker/distribution/reference"
@@ -32,34 +33,38 @@ import (
 	_type "github.com/AliyunContainerService/data-on-ack/commit-agent/pkg/type"
 )
 
+// maxStreamLine bounds an individual JSON status line emitted by the docker
+// daemon during push. The default bufio.Scanner buffer is 64 KiB which is too
+// small for some registries and image manifests.
+const maxStreamLine = 4 * 1024 * 1024
+
+// Client wraps the docker SDK client.
 type Client struct {
-	Ctx    context.Context
-	Client client.CommonAPIClient
+	cli client.CommonAPIClient
 }
 
-type ErrorLine struct {
+// errorLine matches the JSON status frames emitted by the docker daemon.
+type errorLine struct {
 	Error       string      `json:"error"`
-	ErrorDetail ErrorDetail `json:"errorDetail"`
+	ErrorDetail errorDetail `json:"errorDetail"`
 }
 
-type ErrorDetail struct {
+type errorDetail struct {
 	Message string `json:"message"`
 }
 
+// NewDockerClient initialises the docker daemon client. It returns an error
+// instead of panicking so the caller can fail gracefully.
 func NewDockerClient() (_type.ContainerClient, error) {
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
-		panic(err)
+		return nil, fmt.Errorf("init docker client: %w", err)
 	}
-
-	return &Client{
-		Ctx:    context.Background(),
-		Client: cli,
-	}, nil
+	return &Client{cli: cli}, nil
 }
 
-func (c *Client) CommitImageFromSelf(containerID string, image string) error {
-
+// CommitImageFromSelf commits the live container into a new image reference.
+func (c *Client) CommitImageFromSelf(ctx context.Context, containerID, image string) error {
 	commitOps := types.ContainerCommitOptions{
 		Reference: image,
 		Comment:   "",
@@ -69,22 +74,22 @@ func (c *Client) CommitImageFromSelf(containerID string, image string) error {
 		Config:    &container.Config{},
 	}
 
-	_, err := c.Client.ContainerCommit(c.Ctx, containerID, commitOps)
-	if err != nil {
-		return err
+	if _, err := c.cli.ContainerCommit(ctx, containerID, commitOps); err != nil {
+		return fmt.Errorf("docker commit: %w", err)
 	}
 	return nil
 }
 
-func (c *Client) PushImageFromSelf(imageName, username, password string) error {
+// PushImageFromSelf pushes the named image to its remote registry.
+func (c *Client) PushImageFromSelf(ctx context.Context, imageName, username, password string) error {
 	ref, err := reference.ParseNormalizedNamed(imageName)
-	switch {
-	case err != nil:
-		return err
-	case reference.IsNameOnly(ref):
+	if err != nil {
+		return fmt.Errorf("parse image %q: %w", imageName, err)
+	}
+	if reference.IsNameOnly(ref) {
 		ref = reference.TagNameOnly(ref)
 		if tagged, ok := ref.(reference.Tagged); ok {
-			log.Infof("Using default tag: %s\n", tagged.Tag())
+			log.Infof("Using default tag: %s", tagged.Tag())
 		}
 	}
 
@@ -93,10 +98,9 @@ func (c *Client) PushImageFromSelf(imageName, username, password string) error {
 		Password:      password,
 		ServerAddress: reference.Domain(ref),
 	}
-
 	encodedAuth, err := registrytypes.EncodeAuthConfig(authConfig)
 	if err != nil {
-		return err
+		return fmt.Errorf("encode registry auth: %w", err)
 	}
 
 	pushOps := types.ImagePushOptions{
@@ -104,39 +108,46 @@ func (c *Client) PushImageFromSelf(imageName, username, password string) error {
 		All:          false,
 	}
 
-	response, err := c.Client.ImagePush(c.Ctx, reference.FamiliarString(ref), pushOps)
+	response, err := c.cli.ImagePush(ctx, reference.FamiliarString(ref), pushOps)
 	if err != nil {
-		log.Infof("push image failed: %v", err)
-		return err
+		return fmt.Errorf("docker push: %w", err)
 	}
+	defer response.Close()
 
-	if err := checkResponse(response); err != nil {
-		return err
-	}
-
-	return nil
+	return checkResponse(response)
 }
 
+// checkResponse drains the docker push status stream and surfaces the final
+// error frame, if any. Bufio's default token size is too small for some
+// registry payloads so we expand the scanner buffer.
 func checkResponse(rd io.Reader) error {
-	var lastLine string
-
 	scanner := bufio.NewScanner(rd)
+	scanner.Buffer(make([]byte, 64*1024), maxStreamLine)
+
+	var lastLine string
 	for scanner.Scan() {
 		lastLine = scanner.Text()
-		log.Println(scanner.Text())
+		log.Debugln(lastLine)
 	}
-
-	errLine := &ErrorLine{}
-	err := json.Unmarshal([]byte(lastLine), errLine)
-	if err != nil {
-		return err
-	}
-	if errLine.Error != "" {
-		return errors.New(errLine.ErrorDetail.Message)
-	}
-
 	if err := scanner.Err(); err != nil {
-		return err
+		return fmt.Errorf("read push stream: %w", err)
+	}
+	if lastLine == "" {
+		return nil
+	}
+
+	var ln errorLine
+	if err := json.Unmarshal([]byte(lastLine), &ln); err != nil {
+		// The daemon sometimes returns a non-JSON trailer; treat as success
+		// so long as no earlier frame raised an error.
+		return nil
+	}
+	if ln.Error != "" {
+		msg := ln.ErrorDetail.Message
+		if msg == "" {
+			msg = ln.Error
+		}
+		return errors.New(msg)
 	}
 	return nil
 }

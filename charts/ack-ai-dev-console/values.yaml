@@ -12,6 +12,37 @@ dev-console:
     checkMysqlImageTag: stable
     commitAgentImageName: registry-cn-beijing.ack.aliyuncs.com/acs/commit-agent
     commitAgentImageTag: v0.1.1-9d4e12d-aliyun
+  commitAgent:
+    socketAddress: /host/run/commit-agent/commit-agent.sock
+    logLevel: info
+    logFormat: json
+    requestTimeout: 30m
+    shutdownTimeout: 30s
+    maxConcurrentCommit: 4
+    maxConcurrentPush: 4
+    runtime: ""
+    containerdNamespace: k8s.io
+    allowedUIDs: ""
+    pushRetry:
+      attempts: 3
+      initialDelay: 2s
+      maxDelay: 30s
+    metrics:
+      enabled: true
+      port: 9090
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+        ephemeral-storage: 1Gi
+      limits:
+        cpu: 500m
+        memory: 256Mi
+        ephemeral-storage: 4Gi
+    priorityClassName: system-node-critical
+    nodeSelector: {}
+    tolerations:
+      - operator: Exists
   resources:
     limits:
       cpu: 2000m

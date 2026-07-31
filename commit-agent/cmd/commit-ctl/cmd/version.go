@@ -17,40 +17,41 @@ package cmd
 
 import (
 	"context"
-	"google.golang.org/grpc"
-	"net"
+	"fmt"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
-	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/AliyunContainerService/data-on-ack/commit-agent/pkg/client"
 	"github.com/AliyunContainerService/data-on-ack/commit-agent/v1beta1"
 )
 
+// ClientVersion is the build-stamped CLI version, set via -ldflags from the
+// Makefile. Matches the value the agent reports for its `Version` RPC.
+var ClientVersion = "dev"
+
 // versionCmd represents the version command
 var versionCmd = &cobra.Command{
 	Use:   "version",
-	Short: "Print version",
-	Run: func(cmd *cobra.Command, args []string) {
-		var opts []grpc.DialOption
-		var dialer = func(ctx context.Context, addr string) (net.Conn, error) {
-			var d net.Dialer
-			return d.DialContext(ctx, "unix", addr)
-		}
-		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
-		opts = append(opts, grpc.WithContextDialer(dialer))
+	Short: "Print client and remote agent version",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		fmt.Printf("client: %s\n", ClientVersion)
 
-		conn, err := grpc.Dial(serverSocket, opts...)
+		conn, err := dial(serverSocket)
 		if err != nil {
-			log.Fatalf("did not connect: %v", err)
+			return fmt.Errorf("dial commit-agent at %s: %w", serverSocket, err)
 		}
 		defer conn.Close()
 
 		c := v1beta1.NewImageServiceClient(conn)
+		ctx, cancel := context.WithTimeout(cmd.Context(), rpcTimeout)
+		defer cancel()
 
-		// get version
-		client.GetVersion(c, &v1beta1.VersionRequest{})
+		ver, err := client.GetVersion(ctx, c, &v1beta1.VersionRequest{})
+		if err != nil {
+			return err
+		}
+		fmt.Printf("agent:  %s\n", ver)
+		return nil
 	},
 }
 

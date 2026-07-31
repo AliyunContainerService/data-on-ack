@@ -15,7 +15,12 @@
 
 package _type
 
+import "context"
+
+// ContainerClient abstracts the operations the agent performs against a
+// container runtime daemon (Docker or containerd). Implementations must be
+// safe for concurrent use across goroutines.
 type ContainerClient interface {
-	CommitImageFromSelf(containerID, image string) error
-	PushImageFromSelf(image, username, password string) error
+	CommitImageFromSelf(ctx context.Context, containerID, image string) error
+	PushImageFromSelf(ctx context.Context, image, username, password string) error
 }

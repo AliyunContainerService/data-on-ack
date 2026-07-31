@@ -63,8 +63,13 @@ public class JobController {
         return (page == null || page < 1) ? 1 : page;
     }
 
+    private static final int MAX_LIMIT = 200;
+
     private int normalizeLimit(Integer limit) {
-        return (limit == null || limit < 1) ? 20 : limit;
+        if (limit == null || limit < 1) {
+            return 20;
+        }
+        return Math.min(limit, MAX_LIMIT);
     }
 
     @GetMapping("/cost")

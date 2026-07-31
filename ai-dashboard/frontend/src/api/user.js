@@ -3,7 +3,7 @@ import request from '@/utils/request'
 export function logoutAliyun() {
   return request({
     url: '/logout',
-    metho: 'post'
+    method: 'post'
   })
 }
 

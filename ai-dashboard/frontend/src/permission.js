@@ -60,9 +60,6 @@ router.beforeEach(async(to, from, next) => {
   document.title = getPageTitle(to.meta.title)
   // determine whether the user has logged in
   var hasToken = !isEmpty(getToken())
-  if (process.env.NODE_ENV === 'development') {
-    console.log('token:', hasToken)
-  }
   // const hasToken = true
   if (hasToken) {
     if (to.path === '/login/') {
@@ -72,9 +69,6 @@ router.beforeEach(async(to, from, next) => {
       // determine whether the user has obtained his permission roles through getInfo
       const hasRoles = store.getters.roles && store.getters.roles.length > 0
       // const hasRoles = true
-      if (process.env.NODE_ENV === 'development') {
-        console.log('roles:', hasRoles)
-      }
       if (hasRoles) {
         next()
       } else {

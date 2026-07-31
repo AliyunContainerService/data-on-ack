@@ -18,10 +18,11 @@ package containerd
 import (
 	"context"
 	"fmt"
-	"github.com/containerd/containerd"
+	"io"
 	"os"
 	"path/filepath"
 
+	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/images/converter"
 	"github.com/containerd/containerd/namespaces"
@@ -45,29 +46,46 @@ import (
 	_type "github.com/AliyunContainerService/data-on-ack/commit-agent/pkg/type"
 )
 
+const defaultContainerdSock = "/host/run/containerd/containerd.sock"
+
+// Options configures the containerd client.
+type Options struct {
+	// Address is the path to the containerd UDS. Empty = default.
+	Address string
+	// Namespace is the containerd namespace, e.g. "k8s.io".
+	Namespace string
+}
+
+// Client wraps a containerd.Client and remembers which namespace to use.
 type Client struct {
-	Ctx    context.Context
-	Client *containerd.Client
+	cli       *containerd.Client
+	namespace string
 }
 
-func NewContainerdClient() (_type.ContainerClient, error) {
-
-	cli, err := containerd.New("/host/run/containerd/containerd.sock")
-	if err != nil {
-		log.Errorln(err.Error())
-		return nil, err
+// NewContainerdClient establishes a connection to containerd. The error is
+// returned to the caller rather than panicking.
+func NewContainerdClient(opts Options) (_type.ContainerClient, error) {
+	addr := opts.Address
+	if addr == "" {
+		addr = defaultContainerdSock
 	}
-	return &Client{
-		Ctx:    context.Background(),
-		Client: cli,
-	}, nil
+	ns := opts.Namespace
+	if ns == "" {
+		ns = "k8s.io"
+	}
+
+	cli, err := containerd.New(addr)
+	if err != nil {
+		return nil, fmt.Errorf("dial containerd at %s: %w", addr, err)
+	}
+	return &Client{cli: cli, namespace: ns}, nil
 }
 
-func (c *Client) CommitImageFromSelf(containerID string, image string) error {
-
+// CommitImageFromSelf snapshots the named container.
+func (c *Client) CommitImageFromSelf(ctx context.Context, containerID, image string) error {
 	named, err := referenceutil.ParseDockerRef(image)
 	if err != nil {
-		return err
+		return fmt.Errorf("parse image %q: %w", image, err)
 	}
 
 	opts := &commit.Opts{
@@ -79,44 +97,39 @@ func (c *Client) CommitImageFromSelf(containerID string, image string) error {
 	}
 
 	walker := &containerwalker.ContainerWalker{
-		Client: c.Client,
+		Client: c.cli,
 		OnFound: func(ctx context.Context, found containerwalker.Found) error {
 			if found.MatchCount > 1 {
-				return fmt.Errorf("ambiguous ID %q", found.Req)
+				return fmt.Errorf("ambiguous container ID %q", found.Req)
 			}
-			_, err := commit.Commit(ctx, c.Client, found.Container, opts)
-			if err != nil {
-				return err
-			}
+			_, err := commit.Commit(ctx, c.cli, found.Container, opts)
 			return err
 		},
 	}
 
-	ctx := namespaces.WithNamespace(c.Ctx, "k8s.io")
-
+	ctx = namespaces.WithNamespace(ctx, c.namespace)
 	n, err := walker.Walk(ctx, containerID)
 	if err != nil {
-		return err
-	} else if n == 0 {
-		return fmt.Errorf("no such container %s", containerID)
+		return fmt.Errorf("containerd commit: %w", err)
 	}
-
+	if n == 0 {
+		return fmt.Errorf("no such container %s in namespace %s", containerID, c.namespace)
+	}
 	return nil
 }
 
-func (c *Client) PushImageFromSelf(rawRef, username, password string) error {
-	ctx := context.TODO()
-	ctx = namespaces.WithNamespace(ctx, "k8s.io")
-
-	err := Push(ctx, c.Client, rawRef, username, password, types.ImagePushOptions{
-		Stdout: os.Stdout,
-		GOptions: types.GlobalCommandOptions{
-			Debug: true,
-		},
+// PushImageFromSelf pushes via nerdctl's push helper, with insecure-fallback
+// driven by the registry's response.
+func (c *Client) PushImageFromSelf(ctx context.Context, rawRef, username, password string) error {
+	ctx = namespaces.WithNamespace(ctx, c.namespace)
+	return Push(ctx, c.cli, rawRef, username, password, types.ImagePushOptions{
+		Stdout:   io.Discard,
+		GOptions: types.GlobalCommandOptions{Debug: log.GetLevel() >= log.DebugLevel},
 	})
-	return err
 }
 
+// Push uploads `rawRef` to its remote registry. It mirrors nerdctl's push
+// implementation but is parameterised by the credentials supplied via gRPC.
 func Push(ctx context.Context, client *containerd.Client, rawRef, username, password string, options types.ImagePushOptions) error {
 	if scheme, ref, err := referenceutil.ParseIPFSRefWithScheme(rawRef); err == nil {
 		if scheme != "ipfs" {
