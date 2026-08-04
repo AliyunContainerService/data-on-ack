@@ -40,6 +40,7 @@ func NewRouter(
 		Path:     "/",
 		MaxAge:   86400 * 7, // 7 days
 		HttpOnly: true,
+		Secure:   true,
 	})
 	r.Use(sessions.Sessions("ai-dashboard-session", store))
 

@@ -38,6 +38,12 @@ func NewRouter(
 	r.Use(gin.Logger())
 
 	store := cookie.NewStore(getSessionSecret())
+	store.Options(sessions.Options{
+		Path:     "/",
+		MaxAge:   86400 * 7, // 7 days
+		HttpOnly: true,
+		Secure:   true,
+	})
 	r.Use(sessions.Sessions("ai-dev-console-session", store))
 
 	// --- Public routes ---
