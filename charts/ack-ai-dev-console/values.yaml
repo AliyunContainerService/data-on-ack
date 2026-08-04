@@ -8,7 +8,7 @@ dev-console:
   replicaCount: 1
   image:
     repository: registry-cn-hangzhou.ack.aliyuncs.com/dev/ai-dev-console
-    tag: "v3.0.0"
+    tag: "v3.1.0"
     pullPolicy: Always
     commitAgentImageName: registry-cn-beijing.ack.aliyuncs.com/acs/commit-agent
     commitAgentImageTag: v0.1.1-9d4e12d-aliyun

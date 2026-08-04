@@ -2,7 +2,7 @@ replicaCount: 1
 
 image:
   repository: registry-cn-hangzhou.ack.aliyuncs.com/dev/ai-dashboard
-  tag: "v3.0.1"
+  tag: "v3.2.0"
   pullPolicy: Always
 
 imagePullSecrets: []
