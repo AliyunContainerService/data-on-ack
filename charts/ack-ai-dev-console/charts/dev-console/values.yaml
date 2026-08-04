@@ -3,8 +3,8 @@
 replicaCount: 1
 
 image:
-  repository: registry.cn-beijing.aliyuncs.com/acs/ai-dev-console
-  tag: "latest"
+  repository: registry-cn-hangzhou.ack.aliyuncs.com/dev/ai-dev-console
+  tag: "v3.0.0"
   pullPolicy: Always
 
 resources:

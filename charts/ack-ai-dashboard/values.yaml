@@ -72,8 +72,8 @@ grafana:
 
 admin-ui:
   image:
-    repository: registry.cn-beijing.aliyuncs.com/acs/ai-dashboard
-    tag: "latest"
+    repository: registry-cn-hangzhou.ack.aliyuncs.com/dev/ai-dashboard
+    tag: "v3.0.1"
     pullPolicy: Always
   resources:
     limits:
