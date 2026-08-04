@@ -38,6 +38,10 @@ spec:
                   fieldPath: metadata.name
             - name: DASHBOARD_INGRESS_ENABLE
               value: "{{ .Values.dashboard.ingress.enabled }}"
+            {{- if .Values.dashboard.ingress.enabled }}
+            - name: DASHBOARD_HOST
+              value: "{{ (index .Values.dashboard.ingress.hosts 0).host }}"
+            {{- end }}
             - name: DASHBOARD_ADMINUID
               value: "{{ .Values.dashboard.adminUid }}"
             - name: INTL_ACCOUNT

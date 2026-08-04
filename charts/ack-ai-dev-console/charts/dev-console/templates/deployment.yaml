@@ -38,6 +38,10 @@ spec:
                   fieldPath: metadata.name
             - name: KUBE_DL_INGRESS_ENABLE
               value: "{{ .Values.console.ingress.enabled }}"
+            {{- if .Values.console.ingress.enabled }}
+            - name: DEV_CONSOLE_HOST
+              value: "{{ (index .Values.console.ingress.hosts 0).host }}"
+            {{- end }}
             - name: CONSOLE_ADMINUID
               value: "{{ .Values.console.adminUid }}"
             - name: INTL_ACCOUNT

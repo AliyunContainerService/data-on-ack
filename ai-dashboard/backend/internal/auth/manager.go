@@ -68,15 +68,14 @@ func (m *Manager) initWebApp() error {
 
 func (m *Manager) resolveRedirectURI() (string, error) {
 	if m.cfg.IsCreateWebApp {
+		// Priority 1: explicit DASHBOARD_HOST env var (set by Helm chart)
 		envHost := getEnvOrEmpty(envDashboardHost)
-		ingressEnabled := getEnvOrEmpty(envIngressEnabled)
-
-		if ingressEnabled == "" {
-			if envHost != "" {
-				return fmt.Sprintf("http://%s%s", envHost, defaultFilterURL), nil
-			}
+		if envHost != "" {
+			return fmt.Sprintf("http://%s%s", envHost, defaultFilterURL), nil
 		}
 
+		// Priority 2: lookup from cluster resources
+		ingressEnabled := getEnvOrEmpty(envIngressEnabled)
 		isIngress := ingressEnabled == "true"
 		var host string
 		var err error
@@ -88,7 +87,9 @@ func (m *Manager) resolveRedirectURI() (string, error) {
 		if err != nil {
 			return "", err
 		}
-		return fmt.Sprintf("http://%s%s", host, defaultFilterURL), nil
+		if host != "" {
+			return fmt.Sprintf("http://%s%s", host, defaultFilterURL), nil
+		}
 	}
 
 	return fmt.Sprintf("http://localhost%s", defaultFilterURL), nil
