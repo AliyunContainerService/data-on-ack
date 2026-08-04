@@ -1,3 +1,9 @@
+---
+title: 部署指南
+layout: default
+nav_order: 2
+---
+
 # 部署指南：在 ACK 上安装 AI 开发平台
 
 本文介绍如何在阿里云容器服务 ACK（Kubernetes）集群上部署 data-on-ack AI 开发平台，包含运维控制台（ai-dashboard）和开发控制台（ai-dev-console）。

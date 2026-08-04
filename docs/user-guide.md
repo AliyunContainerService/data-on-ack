@@ -1,3 +1,9 @@
+---
+title: 功能使用指南
+layout: default
+nav_order: 3
+---
+
 # 功能使用指南
 
 本文介绍 data-on-ack AI 平台的核心功能和使用方法。
