@@ -82,6 +82,23 @@ spec:
                   name: kubeai-rds
                   key: MYSQL_PASSWORD
             {{ end }}
+            {{- if .Values.auth.existingSecret }}
+            - name: SESSION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.auth.existingSecret }}
+                  key: sessionSecret
+            {{- end }}
+            - name: ENABLE_SECURE_COOKIE
+              value: "{{ .Values.auth.secureCookie }}"
+            {{- if .Values.auth.oauthSigninURL }}
+            - name: OAUTH_SIGNIN_URL
+              value: "{{ .Values.auth.oauthSigninURL }}"
+            {{- end }}
+            {{- if .Values.auth.oauthTokenURL }}
+            - name: OAUTH_TOKEN_URL
+              value: "{{ .Values.auth.oauthTokenURL }}"
+            {{- end }}
           ports:
             - name: http
               containerPort: {{ .Values.service.containerPort }}

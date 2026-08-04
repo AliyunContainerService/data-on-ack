@@ -1,13 +1,14 @@
 # Default values for ai-dashboard.
-# This is a YAML-formatted file.
-# Declare variables to be passed into your templates.
 
 grafana:
   image:
     repository: registry-cn-beijing.ack.aliyuncs.com/acs/grafana
     tag: 7.3.5
+  # Grafana admin credentials - MUST be overridden at install time or provided via existing Secret.
+  # Example: helm install --set grafana.adminPassword=<your-password>
+  # Or create Secret manually: kubectl create secret generic grafana-admin --from-literal=admin-password=<pw>
   adminUser: admin
-  adminPassword: "KubeAIGrafana12345"
+  adminPassword: ""
   datasources:
     datasources.yaml:
       apiVersion: 1
@@ -40,8 +41,6 @@ grafana:
         file: dashboards/kube-ai-node-details.json
       kube-ai-cluster-details:
         file: dashboards/kube-ai-cluster-details.json
-      kube-ai-job-details:
-        file: dashboards/kube-ai-job-details.json
       kube-ai-resource-quota-details:
         file: dashboards/kube-ai-resource-quota-details.json
   grafana.ini:
@@ -74,25 +73,22 @@ grafana:
 admin-ui:
   image:
     repository: registry-cn-beijing.ack.aliyuncs.com/acs/ai-dashboard
-    tag: 1.0.14-ae0aaf6
+    tag: 2.0.0
     pullPolicy: Always
-    initRdsImageName: registry-cn-beijing.ack.aliyuncs.com/acs/mysql-init
-    initRdsImageTag: 1.0.0
-    checkMysqlImageName: registry-cn-beijing.ack.aliyuncs.com/acs/busybox
-    checkMysqlImageTag: stable
   resources:
     limits:
-      cpu: 2000m
-      memory: 2Gi
+      cpu: 1000m
+      memory: 256Mi
     requests:
-      cpu: 500m
-      memory: 100Mi
+      cpu: 200m
+      memory: 64Mi
   serviceAccount:
     create: true
     name: ai-dashboard-admin
   dashboard:
     intlAccount: "false"
     adminUid: ""
+    credentialMode: "static"
     ingress:
       enabled: false
       annotations: {}
@@ -100,6 +96,10 @@ admin-ui:
       - host: ai-dashboard.local
         paths: []
       tls: []
-  storage:
-    mysql:
-      enabled: true
+  credentials:
+    # AK/SK MUST NOT be stored here. Create a Secret manually:
+    #   kubectl create secret generic ai-dashboard-credentials \
+    #     --from-literal=accessKeyId=<AK> --from-literal=accessKeySecret=<SK> -n kube-ai
+    rrsa:
+      oidcProviderArn: ""
+      oidcTokenFile: "/var/run/secrets/tokens/oidc-token"

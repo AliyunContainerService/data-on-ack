@@ -61,6 +61,19 @@ console:
       paths: []
     tls: []
 
+# Authentication and session configuration
+auth:
+  # Name of an existing Secret containing 'sessionSecret' key.
+  # If empty, a random key is generated on each pod restart (sessions lost).
+  # Create with: kubectl create secret generic ai-dev-console-auth --from-literal=sessionSecret=$(openssl rand -hex 32) -n kube-ai
+  existingSecret: ""
+  # Set to true when TLS is enabled on Ingress
+  secureCookie: false
+  # OAuth signin URL override (leave empty to use default aliyun.com endpoint)
+  oauthSigninURL: ""
+  # OAuth token URL override
+  oauthTokenURL: ""
+
 storage:
   mysql:
     enabled: true
