@@ -1,3 +1,9 @@
+---
+title: 运维指南
+layout: default
+nav_order: 4
+---
+
 # 运维指南
 
 本文介绍 data-on-ack AI 平台的日常运维操作，包括升级、扩缩容、故障排查和备份恢复。
