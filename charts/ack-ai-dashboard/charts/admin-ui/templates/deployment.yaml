@@ -21,26 +21,16 @@ spec:
       serviceAccountName: {{ include "admin-ui.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
-      {{ if .Values.storage.mysql.enabled }}
-      initContainers:
-        - name: check-mysql
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
-          image: "{{ .Values.image.checkMysqlImageName }}:{{ .Values.image.checkMysqlImageTag }}"
-          command: ['sh','-c','until nc -vz {{ .Values.storage.mysql.host | default "ack-mysql" }} 3306 &> /dev/null; do echo mysql service is not ready,waiting...;sleep 2;done;']
-          resources:
-            limits:
-              cpu: 100m
-              memory: 64Mi
-            requests:
-              cpu: 50m
-              memory: 32Mi
-      {{ end }}
       containers:
         - name: {{ .Chart.Name }}
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- if not .Values.dashboard.createWebApp }}
+          args:
+            - --disable-oauth
+          {{- end }}
           env:
             - name: MY_POD_NAME
               valueFrom:
@@ -48,32 +38,53 @@ spec:
                   fieldPath: metadata.name
             - name: DASHBOARD_INGRESS_ENABLE
               value: "{{ .Values.dashboard.ingress.enabled }}"
+            {{- if .Values.dashboard.ingress.enabled }}
+            - name: DASHBOARD_HOST
+              value: "{{ (index .Values.dashboard.ingress.hosts 0).host }}"
+            {{- end }}
             - name: DASHBOARD_ADMINUID
               value: "{{ .Values.dashboard.adminUid }}"
             - name: INTL_ACCOUNT
               value: "{{ .Values.dashboard.intlAccount }}"
-            {{ if not .Values.storage.mysql.enabled }}
-            - name: MYSQL_HOST
+            - name: CREDENTIAL_MODE
+              value: "{{ .Values.dashboard.credentialMode }}"
+            - name: AK_ACCESS_KEY_ID
               valueFrom:
                 secretKeyRef:
-                  name: kubeai-rds
-                  key: MYSQL_HOST
-            - name: MYSQL_DB_NAME
+                  name: ai-dashboard-credentials
+                  key: accessKeyId
+                  optional: true
+            - name: AK_ACCESS_KEY_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: kubeai-rds
-                  key: MYSQL_DB_NAME
-            - name: MYSQL_USER
+                  name: ai-dashboard-credentials
+                  key: accessKeySecret
+                  optional: true
+            - name: OIDC_PROVIDER_ARN
+              value: "{{ .Values.credentials.rrsa.oidcProviderArn }}"
+            - name: OIDC_TOKEN_FILE
+              value: "{{ .Values.credentials.rrsa.oidcTokenFile }}"
+            - name: FRONTEND_DIR
+              value: "/app/dist"
+            - name: GRAFANA_PROXY_TARGET
+              value: "{{ .Values.dashboard.grafanaProxyTarget | default "ack-ai-dashboard-grafana.kube-ai:80" }}"
+            {{- if .Values.auth.existingSecret }}
+            - name: SESSION_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: kubeai-rds
-                  key: MYSQL_USER
-            - name: MYSQL_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: kubeai-rds
-                  key: MYSQL_PASSWORD
-            {{ end }}
+                  name: {{ .Values.auth.existingSecret }}
+                  key: sessionSecret
+            {{- end }}
+            - name: ENABLE_SECURE_COOKIE
+              value: "{{ .Values.auth.secureCookie }}"
+            {{- if .Values.auth.oauthSigninURL }}
+            - name: OAUTH_SIGNIN_URL
+              value: "{{ .Values.auth.oauthSigninURL }}"
+            {{- end }}
+            {{- if .Values.auth.oauthTokenURL }}
+            - name: OAUTH_TOKEN_URL
+              value: "{{ .Values.auth.oauthTokenURL }}"
+            {{- end }}
           ports:
             - name: http
               containerPort: {{ .Values.service.containerPort }}
@@ -82,7 +93,7 @@ spec:
             httpGet:
               path: /health
               port: http
-            initialDelaySeconds: 20
+            initialDelaySeconds: 10
             timeoutSeconds: 5
             periodSeconds: 15
             failureThreshold: 3
@@ -90,7 +101,7 @@ spec:
             httpGet:
               path: /health
               port: http
-            initialDelaySeconds: 20
+            initialDelaySeconds: 10
             timeoutSeconds: 5
             periodSeconds: 15
             failureThreshold: 3

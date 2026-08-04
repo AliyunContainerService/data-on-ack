@@ -28,6 +28,14 @@ node_modules/
 vendor/
 package-lock.json
 
+# Agent intermediate files / work briefs (contain sensitive cluster info)
+briefs/
+*.brief.md
+.task/
+.agent/
+.claude/
+.opencode/
+
 # Java
 *.class
 target/
@@ -45,3 +53,16 @@ commit-agent/bin/
 **/.git-commit
 
 add_head.py
+
+# Compiled Go binaries
+server
+ai-dev-console/server
+ai-dashboard/server
+
+# Secrets / credentials (never commit)
+*.pem
+*.key
+*.crt
+kubeconfig*
+kube-configs/
+*.env.local

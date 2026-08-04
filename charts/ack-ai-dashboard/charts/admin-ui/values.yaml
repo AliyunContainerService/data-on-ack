@@ -1,28 +1,17 @@
-# Default values for admin-ui.
-# This is a YAML-formatted file.
-# Declare variables to be passed into your templates.
-
 replicaCount: 1
 
 image:
-  repository: registry.cn-beijing.aliyuncs.com/acs/ai-dashboard
+  repository: registry-cn-hangzhou.ack.aliyuncs.com/dev/ai-dashboard
+  tag: "v3.2.0"
   pullPolicy: Always
-  initRdsImageName: registry.cn-beijing.aliyuncs.com/acs/mysql-init
-  initRdsImageTag: 1.0.0
-  checkMysqlImageName: busybox
-  checkMysqlImageTag: stable
 
 imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
 
 serviceAccount:
-  # Specifies whether a service account should be created
   create: true
-  # Annotations to add to the service account
   annotations: {}
-  # The name of the service account to use.
-  # If not set and create is true, a name is generated using the fullname template
   name: ai-dashboard-admin
 
 podSecurityContext:
@@ -46,42 +35,61 @@ service:
 dashboard:
   intlAccount: "false"
   adminUid: ""
+  credentialMode: "static"
+  # Set to true to create RAM OAuth2 Web App on startup
+  createWebApp: true
+  # Grafana reverse proxy target (service inside cluster)
+  grafanaProxyTarget: "ack-ai-dashboard-grafana.kube-ai:80"
   ingress:
-    enabled: false
-    annotations: {}
+    enabled: true
+    annotations:
+      kubernetes.io/ingress.class: nginx
     hosts:
     - host: ai-dashboard.local
-      paths: []
+      paths:
+      - /
     tls: []
 
-storage:
-  mysql:
-    enabled: true
-    host: ""
+# Authentication and session configuration
+auth:
+  # Name of an existing Secret containing 'sessionSecret' key.
+  # If empty, a random key is generated on each pod restart (sessions lost).
+  # Create with: kubectl create secret generic ai-dashboard-auth --from-literal=sessionSecret=$(openssl rand -hex 32)
+  existingSecret: ""
+  # Set to true when TLS is enabled on Ingress
+  secureCookie: false
+  # OAuth signin URL override (leave empty to use default aliyun.com endpoint)
+  oauthSigninURL: ""
+  # OAuth token URL override
+  oauthTokenURL: ""
+
+credentials:
+  # Credentials MUST be provided via a pre-created Secret named "ai-dashboard-credentials".
+  # Create with:
+  #   kubectl create secret generic ai-dashboard-credentials \
+  #     --from-literal=accessKeyId=<YOUR_AK> \
+  #     --from-literal=accessKeySecret=<YOUR_SK> \
+  #     -n kube-ai
+  rrsa:
+    oidcProviderArn: ""
+    oidcTokenFile: "/var/run/secrets/tokens/oidc-token"
 
 ingress:
   enabled: false
   annotations: {}
-    # kubernetes.io/ingress.class: nginx
-    # kubernetes.io/tls-acme: "true"
   hosts:
     - host: chart-example.local
       paths: []
   tls: []
-  #  - secretName: chart-example-tls
-  #    hosts:
-  #      - chart-example.local
 
 resources:
   limits:
-    cpu: 2000m
-    memory: 500Mi
+    cpu: 1000m
+    memory: 256Mi
   requests:
-    cpu: 500m
-    memory: 100Mi
+    cpu: 200m
+    memory: 64Mi
 
 nodeSelector: {}
-
 tolerations: []
-
 affinity: {}

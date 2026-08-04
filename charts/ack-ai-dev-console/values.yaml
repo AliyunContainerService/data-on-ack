@@ -1,15 +1,15 @@
+# Default values for ai-dev-console.
+# 用户必须提供的参数标记为 [REQUIRED]
+
 global:
   clusterProfile: Default
 
 dev-console:
   replicaCount: 1
-  regionID: cn-beijing
   image:
-    repository: registry-cn-beijing.ack.aliyuncs.com/acs/kubeai-dev-console
-    tag: v1.1.1-7731fc3d-aliyun
+    repository: registry-cn-hangzhou.ack.aliyuncs.com/dev/ai-dev-console
+    tag: "v3.1.0"
     pullPolicy: Always
-    checkMysqlImageName: registry-cn-beijing.ack.aliyuncs.com/acs/busybox
-    checkMysqlImageTag: stable
     commitAgentImageName: registry-cn-beijing.ack.aliyuncs.com/acs/commit-agent
     commitAgentImageTag: v0.1.1-9d4e12d-aliyun
   commitAgent:
@@ -56,24 +56,12 @@ dev-console:
   fullnameOverride: ""
 
   serviceAccount:
-    # Specifies whether a service account should be created
     create: true
-    # Annotations to add to the service account
     annotations: {}
-    # The name of the service account to use.
-    # If not set and create is true, a name is generated using the fullname template
     name: ai-dev-console
 
   podSecurityContext: {}
-    # fsGroup: 2000
-
   securityContext: {}
-    # capabilities:
-    #   drop:
-    #   - ALL
-    # readOnlyRootFilesystem: true
-    # runAsNonRoot: true
-    # runAsUser: 1000
 
   service:
     type: ClusterIP
@@ -81,29 +69,46 @@ dev-console:
     containerPort: 9090
 
   console:
+    # 是否为国际站账号
     intlAccount: "false"
+    # 管理员阿里云 UID (可选)
     adminUid: ""
+    # 凭据模式: static (AK/SK) 或 rrsa
+    credentialMode: "static"
+    # 是否自动创建 RAM OAuth2 Web App
+    createWebApp: true
     ingress:
-      enabled: false
-      annotations: {}
-      hosts:
-      - host: ai-dev-console.local
-        paths: []
-      tls: []
-
-  storage:
-    mysql:
+      # [REQUIRED] 必须启用并设置域名
       enabled: true
+      annotations:
+        kubernetes.io/ingress.class: nginx
+      hosts:
+      # [REQUIRED] 开发控制台访问域名
+      - host: ai-dev-console.local
+        paths:
+        - /
+      tls: []
+    # RRSA 凭据 (credentialMode=rrsa 时配置)
+    rrsa:
+      oidcProviderArn: ""
+      oidcTokenFile: "/var/run/secrets/tokens/oidc-token"
+
+  # 认证与会话配置
+  auth:
+    # Session 持久化 Secret (推荐)
+    # 创建: kubectl create secret generic ai-dev-console-auth --from-literal=sessionSecret=$(openssl rand -hex 32) -n kube-ai
+    existingSecret: ""
+    secureCookie: false
+    oauthSigninURL: ""
+    oauthTokenURL: ""
 
   nodeSelector: {}
-
   tolerations: []
-
   affinity: {}
 
+# Notebook Controller
 notebook:
   replicaCount: 1
-
   image:
     repository: registry-cn-beijing.ack.aliyuncs.com/acs/notebook-controller
     pullPolicy: Always
@@ -112,65 +117,9 @@ notebook:
   nameOverride: ""
   fullnameOverride: ""
   serviceAccount:
-    # Specifies whether a service account should be created
     create: true
-    # Annotations to add to the service account
     annotations: {}
-    # The name of the service account to use.
-    # If not set and create is true, a name is generated using the fullname template
     name: "notebook-controller-service-account"
 
 labels:
   app: notebook-controller
-
-
-persist:
-  replicaCount: 1
-
-  image:
-    repository: registry-cn-beijing.ack.aliyuncs.com/acs/kubeai-dev-console-operator
-    tag: v1.1.0-410e1db8-aliyun
-    pullPolicy: Always
-    checkMysqlImageName: registry-cn-beijing.ack.aliyuncs.com/acs/busybox
-    checkMysqlImageTag: stable
-  resources:
-    limits:
-      cpu: 2000m
-      memory: 500Mi
-    requests:
-      cpu: 500m
-      memory: 100Mi
-
-  imagePullSecrets: []
-  nameOverride: ""
-  fullnameOverride: ""
-
-  storage:
-    mysql:
-      enabled: true
-
-  serviceAccount:
-    # Specifies whether a service account should be created
-    create: true
-    # Annotations to add to the service account
-    annotations: {}
-    # The name of the service account to use.
-    # If not set and create is true, a name is generated using the fullname template
-    name: ai-dev-console-persist
-
-  podSecurityContext: {}
-    # fsGroup: 2000
-
-  securityContext: {}
-    # capabilities:
-    #   drop:
-    #   - ALL
-    # readOnlyRootFilesystem: true
-    # runAsNonRoot: true
-    # runAsUser: 1000
-
-  nodeSelector: {}
-
-  tolerations: []
-
-  affinity: {}

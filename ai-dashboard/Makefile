@@ -1,43 +1,33 @@
-# build params
-GIT_USER:=$(shell git config --get user.name)
-PREFIX?=
-VERSION?=1.0.16
-GIT_COMMIT:=$(shell git rev-parse --short HEAD)
-ARENA_BIN=arena-installer-0.9.11-14fa45c-linux-amd64.tar.gz
+VERSION ?= v2.0.0
+IMAGE ?= ai-dashboard
+TAG ?= $(VERSION)-$(shell git rev-parse --short HEAD)
+REGISTRY ?= registry.cn-beijing.aliyuncs.com/acs
 
-# Image URL to use all building/pushing image targets
-IMG ?= ${PREFIX}ai-dashboard:$(VERSION)-$(GIT_COMMIT)-aliyun
+.PHONY: build-frontend build-backend docker-build clean test vet
 
-BACKEND_ROOT=backend/
-FRONTEND_ROOT=frontend/
-
-all: docker-build docker-push
-
-get-arena:
-	if [ ! -d bin ]; then mkdir bin; fi \
-	&& if [ ! -f bin/${ARENA_BIN} ]; then wget https://aliacs-k8s-cn-hongkong.oss-cn-hongkong.aliyuncs.com/arena/${ARENA_BIN} -O bin/${ARENA_BIN}; fi
-
-pkg:
-	cd ${BACKEND_ROOT} \
-	&& mvn clean \
-	&& mvn package -DskipTests \
-	&& cd -
-
+# Build frontend
 build-frontend:
-	if [ ! -d ${BACKEND_ROOT}/src/main/resources/static/ ]; then mkdir ${BACKEND_ROOT}/src/main/resources/static/; fi  \
- 	&& cd ${FRONTEND_ROOT}  \
- 	&& npm install  \
- 	&& npm run build:prod  \
- 	&& cd - \
- 	&& rm -rf ${BACKEND_ROOT}/src/main/resources/static/*  \
- 	&& cp -r ${FRONTEND_ROOT}/dist/* ${BACKEND_ROOT}/src/main/resources/static/ \
- 	&& ls ${BACKEND_ROOT}/src/main/resources/static/
+	cd frontend && npm ci --legacy-peer-deps && npm run build
 
-# Build the docker image
-docker-build: get-arena build-frontend pkg
-	echo ${GIT_COMMIT} > .git-commit
-	docker buildx build --platform linux/amd64 . --no-cache --push -f Dockerfile -t ${IMG}
+# Build Go backend
+build-backend:
+	go build -o bin/ai-dashboard ./backend/cmd/server/
 
-# Push the docker image
-docker-push:
-	docker push ${IMG}
+# Build everything locally (no Docker)
+build: build-frontend build-backend
+
+# Run Go tests
+test:
+	go test ./backend/internal/... -count=1 -v
+
+# Run go vet
+vet:
+	go vet ./backend/...
+
+# Build Docker image
+docker-build: build-frontend
+	docker buildx build -t $(REGISTRY)/$(IMAGE):$(TAG) -f Dockerfile .
+
+# Clean build artifacts
+clean:
+	rm -rf frontend/dist bin/

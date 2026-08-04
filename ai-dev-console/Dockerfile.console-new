@@ -1,0 +1,27 @@
+# Stage 1: Build frontend
+FROM node:20-alpine AS frontend-builder
+WORKDIR /app
+COPY console/frontend-new/package.json console/frontend-new/package-lock.json* ./
+RUN npm ci || npm install
+COPY console/frontend-new/ ./
+RUN npm run build
+
+# Stage 2: Build backend
+FROM golang:1.22-alpine AS backend-builder
+RUN apk add --no-cache git
+WORKDIR /workspace
+ENV GOPROXY=https://goproxy.cn,https://proxy.golang.org,direct
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o server ./console/backend/cmd/server/
+
+# Stage 3: Runtime
+FROM alpine:3.20
+RUN apk add --no-cache ca-certificates tzdata && \
+    cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
+WORKDIR /app
+COPY --from=backend-builder /workspace/server .
+COPY --from=frontend-builder /app/dist ./dist
+EXPOSE 9090
+ENTRYPOINT ["./server"]
