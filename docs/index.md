@@ -4,9 +4,9 @@ layout: default
 nav_order: 1
 ---
 
-# Data on ACK 文档
+# Data/AI on ACK 文档
 
-Data on ACK 是一个基于阿里云容器服务 ACK 的开源云原生 AI/ML 平台，为数据科学家和算法工程师提供模型开发、训练和管理的完整工具链。
+Data/AI on ACK 是一个基于阿里云容器服务 ACK 的开源云原生 AI/ML 平台，为数据科学家和算法工程师提供模型开发、训练和管理的完整工具链。
 
 ## 文档导航
 
