@@ -1,79 +1,67 @@
-# AI Dashboard
+# ai-dashboard — 运维控制台
 
-ACK 上的 AI 基础设施管理平台，提供集群监控、弹性配额管理、用户/用户组管理、数据集管理等功能。
-
-## 架构
-
-- **后端**: Go 1.22 + Gin + client-go + IMS SDK
-- **前端**: React 18 + Ant Design 5 + Vite 5 + React Router 6 + Zustand
-- **部署**: 单一 Docker 镜像（Go 二进制 + 前端静态文件），无 MySQL/arena 依赖
+基于 Go (Gin) + React (Vite) 的 ACK AI 集群运维控制台。
 
 ## 功能
 
-- 集群概览（Grafana 嵌入）
-- 弹性配额树管理（ElasticQuotaTree CRUD）
-- 用户管理（RAM 用户同步、K8s User CRD、RBAC、kubeconfig 下载）
-- 用户组管理（UserGroup CRD、配额绑定、命名空间解析）
-- 数据集管理（Fluid Dataset + Runtime CRD）
-- K8s 资源查看（PVC、Secret、Namespace）
-- OAuth2 SSO 登录（阿里云 RAM）
+- 用户/用户组管理（关联 ACK ElasticQuotaTree）
+- GPU 集群监控（Grafana 面板代理）
+- 数据集管理（PVC 生命周期）
+- Node Shell 远程运维（仅 admin）
+- 模型注册中心
+- RAM SSO 登录（OAuth2）
 
-## 快速开始
-
-### 本地开发
+## 构建
 
 ```bash
-# 后端
-make build-backend && ./bin/ai-dashboard
+# 完整 Docker 构建（含前端）
+docker build -t ai-dashboard:latest .
+
+# 仅构建后端（本地开发）
+cd backend && go build -o server ./cmd/server/
+
+# 仅构建前端
+cd frontend && npm ci && npm run build
+```
+
+## 本地开发
+
+```bash
+# 后端（需 kubeconfig）
+export DISABLE_AUTH=true
+cd backend && go run ./cmd/server/ --listen-addr=:8080 --disable-oauth
 
 # 前端
-cd frontend && npm install && npm run dev
+cd frontend && npm run dev
 ```
 
-### 构建 Docker 镜像
+## 部署
+
+参见 [部署指南](../docs/deploy-guide.md)。
 
 ```bash
-make docker-build
+helm install ai-dashboard ../charts/ack-ai-dashboard -n kube-ai \
+  --set 'admin-ui.dashboard.ingress.hosts[0].host=<domain>' \
+  --set 'admin-ui.dashboard.ingress.hosts[0].paths[0]=/' \
+  --set grafana.adminPassword=<password>
 ```
 
-### 部署
+## 配置
 
-```bash
-helm install ai-dashboard charts/ack-ai-dashboard
-```
+| 环境变量 | 说明 | 默认值 |
+|----------|------|--------|
+| `DASHBOARD_INGRESS_ENABLE` | 是否启用 Ingress 发现 | `true` |
+| `DASHBOARD_HOST` | OAuth 回调域名 | 从 Ingress 自动发现 |
+| `CREDENTIAL_MODE` | 凭据模式 (static/rrsa) | `static` |
+| `AK_ACCESS_KEY_ID` | 阿里云 AccessKey ID | - |
+| `AK_ACCESS_KEY_SECRET` | 阿里云 AccessKey Secret | - |
+| `SESSION_SECRET` | Cookie 加密密钥 | 随机生成 |
+| `ENABLE_SECURE_COOKIE` | Cookie Secure 标志 | `false` |
+| `DISABLE_AUTH` | 禁用认证（开发模式） | `false` |
+| `FRONTEND_DIR` | 前端静态文件目录 | `./dist` |
 
-## 凭证配置
+## 技术栈
 
-支持两种 IMS API 凭证模式：
-
-1. **静态 AK/SK**（`CREDENTIAL_MODE=static`）: 通过环境变量 `AK_ACCESS_KEY_ID` / `AK_ACCESS_KEY_SECRET` 配置
-2. **RRSA**（`CREDENTIAL_MODE=rrsa`）: 通过 OIDC token → STS 自动获取临时凭证
-
-## 项目结构
-
-```
-ai-dashboard/
-├── backend/
-│   ├── cmd/server/main.go          # 入口
-│   └── internal/
-│       ├── aliyun/                 # IMS 客户端
-│       ├── auth/                   # OAuth2 SSO + 中间件
-│       ├── config/                 # 配置
-│       ├── credential/             # 凭证 provider (static/rrsa)
-│       ├── handler/                # HTTP handler
-│       ├── k8s/                     # K8s client + CRD 操作
-│       ├── model/                  # CRD 模型 + DTO
-│       ├── response/               # 统一响应
-│       └── service/                # 业务逻辑 + 嵌入 YAML 清单
-├── frontend/
-│   └── src/
-│       ├── api/                    # API 客户端
-│       ├── i18n/                   # 中英双语
-│       ├── layouts/                # antd 布局
-│       ├── pages/                  # 页面组件
-│       ├── router/                 # 路由
-│       └── store/                  # Zustand 状态管理
-├── go.mod
-├── Dockerfile
-└── Makefile
-```
+- **后端**: Go 1.22 + Gin + client-go + IMS SDK
+- **前端**: React 18 + TypeScript + Vite + Ant Design
+- **监控**: Grafana (subchart)
