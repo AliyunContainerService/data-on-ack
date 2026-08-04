@@ -42,7 +42,7 @@ func NewRouter(
 		Path:     "/",
 		MaxAge:   86400 * 7, // 7 days
 		HttpOnly: true,
-		Secure:   true,
+		Secure:   os.Getenv("ENABLE_SECURE_COOKIE") == "true",
 	})
 	r.Use(sessions.Sessions("ai-dev-console-session", store))
 
