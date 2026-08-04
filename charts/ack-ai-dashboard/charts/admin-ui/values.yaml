@@ -2,6 +2,7 @@ replicaCount: 1
 
 image:
   repository: registry.cn-beijing.aliyuncs.com/acs/ai-dashboard
+  tag: "latest"
   pullPolicy: Always
 
 imagePullSecrets: []
@@ -35,12 +36,16 @@ dashboard:
   intlAccount: "false"
   adminUid: ""
   credentialMode: "static"
+  # Set to true to create RAM OAuth2 Web App on startup
+  createWebApp: true
   ingress:
-    enabled: false
-    annotations: {}
+    enabled: true
+    annotations:
+      kubernetes.io/ingress.class: nginx
     hosts:
     - host: ai-dashboard.local
-      paths: []
+      paths:
+      - /
     tls: []
 
 # Authentication and session configuration

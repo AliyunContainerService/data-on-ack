@@ -5,11 +5,9 @@ dev-console:
   replicaCount: 1
   regionID: cn-beijing
   image:
-    repository: registry-cn-beijing.ack.aliyuncs.com/acs/kubeai-dev-console
-    tag: v1.1.1-7731fc3d-aliyun
+    repository: registry.cn-beijing.aliyuncs.com/acs/ai-dev-console
+    tag: "latest"
     pullPolicy: Always
-    checkMysqlImageName: registry-cn-beijing.ack.aliyuncs.com/acs/busybox
-    checkMysqlImageTag: stable
     commitAgentImageName: registry-cn-beijing.ack.aliyuncs.com/acs/commit-agent
     commitAgentImageTag: v0.1.1-9d4e12d-aliyun
   commitAgent:
@@ -83,17 +81,17 @@ dev-console:
   console:
     intlAccount: "false"
     adminUid: ""
+    credentialMode: "static"
+    createWebApp: true
     ingress:
-      enabled: false
-      annotations: {}
+      enabled: true
+      annotations:
+        kubernetes.io/ingress.class: nginx
       hosts:
       - host: ai-dev-console.local
-        paths: []
+        paths:
+        - /
       tls: []
-
-  storage:
-    mysql:
-      enabled: true
 
   nodeSelector: {}
 

@@ -21,67 +21,47 @@ spec:
       serviceAccountName: {{ include "dev-console.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
-      {{ if .Values.storage.mysql.enabled }}
-      initContainers:
-        - name: check-mysql
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
-          image: "{{ .Values.image.checkMysqlImageName }}:{{ .Values.image.checkMysqlImageTag }}"
-          command: ['sh','-c','until nc -vz {{ .Values.storage.mysql.host | default "ack-mysql" }} 3306 &> /dev/null; do echo mysql service is not ready,waiting...;sleep 2;done;']
-          resources:
-            limits:
-              cpu: 100m
-              memory: 64Mi
-            requests:
-              cpu: 50m
-              memory: 32Mi
-      {{ end }}
       containers:
         - name: {{ .Chart.Name }}
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- if not .Values.console.createWebApp }}
           args:
-            - --enable-auth=true
-            - --is-create-webapp=true
-            - --kubedl-config-name={{ include "dev-console.fullname" . }}
-            - --kubedl-namespace={{ .Release.Namespace }}
-            - --object-storage=mysql
+            - --disable-oauth
+          {{- end }}
           env:
             - name: MY_POD_NAME
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
-            - name: INIT_IMAGE
-              value: "{{ .Values.image.checkMysqlImageName }}:{{ .Values.image.checkMysqlImageTag }}"
             - name: KUBE_DL_INGRESS_ENABLE
               value: "{{ .Values.console.ingress.enabled }}"
-            - name: KUBE_DL_ADMIN_AID
+            - name: CONSOLE_ADMINUID
               value: "{{ .Values.console.adminUid }}"
             - name: INTL_ACCOUNT
               value: "{{ .Values.console.intlAccount }}"
-            {{ if not .Values.storage.mysql.enabled }}
-            - name: MYSQL_HOST
+            - name: CREDENTIAL_MODE
+              value: "{{ .Values.console.credentialMode }}"
+            - name: AK_ACCESS_KEY_ID
               valueFrom:
                 secretKeyRef:
-                  name: kubeai-rds
-                  key: MYSQL_HOST
-            - name: MYSQL_DB_NAME
+                  name: ai-dev-console-credentials
+                  key: accessKeyId
+                  optional: true
+            - name: AK_ACCESS_KEY_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: kubeai-rds
-                  key: MYSQL_DB_NAME
-            - name: MYSQL_USER
-              valueFrom:
-                secretKeyRef:
-                  name: kubeai-rds
-                  key: MYSQL_USER
-            - name: MYSQL_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: kubeai-rds
-                  key: MYSQL_PASSWORD
-            {{ end }}
+                  name: ai-dev-console-credentials
+                  key: accessKeySecret
+                  optional: true
+            - name: OIDC_PROVIDER_ARN
+              value: "{{ .Values.console.rrsa.oidcProviderArn }}"
+            - name: OIDC_TOKEN_FILE
+              value: "{{ .Values.console.rrsa.oidcTokenFile }}"
+            - name: FRONTEND_DIR
+              value: "/app/dist"
             {{- if .Values.auth.existingSecret }}
             - name: SESSION_SECRET
               valueFrom:
@@ -105,34 +85,31 @@ spec:
               protocol: TCP
           livenessProbe:
             httpGet:
-              path: /api/v1/health
+              path: /health
               port: http
-            initialDelaySeconds: 20
+            initialDelaySeconds: 15
             timeoutSeconds: 5
             periodSeconds: 15
             failureThreshold: 3
           readinessProbe:
             httpGet:
-              path: /api/v1/health
+              path: /health
               port: http
-            initialDelaySeconds: 20
+            initialDelaySeconds: 10
             timeoutSeconds: 5
-            periodSeconds: 15
+            periodSeconds: 10
             failureThreshold: 3
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
       nodeSelector:
-      {{- if eq (.Values.global.clusterProfile | default "Default") "Edge"  }}
-        alibabacloud.com/is-edge-worker: "false"
+        {{- toYaml . | nindent 8 }}
       {{- end }}
+    {{- with .Values.tolerations }}
       tolerations:
-      {{- if eq (.Values.global.clusterProfile | default "Default") "Edge"  }}
-        - key: "node-role.alibabacloud.com/addon"
-          operator: "Exists"
-          effect: "NoSchedule"
-      {{- end }}
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
     {{- with .Values.affinity }}
       affinity:
         {{- toYaml . | nindent 8 }}
     {{- end }}
-

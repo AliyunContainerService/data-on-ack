@@ -27,6 +27,10 @@ spec:
             {{- toYaml .Values.securityContext | nindent 12 }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- if not .Values.dashboard.createWebApp }}
+          args:
+            - --disable-oauth
+          {{- end }}
           env:
             - name: MY_POD_NAME
               valueFrom:
