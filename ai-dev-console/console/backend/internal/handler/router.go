@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
+	"github.com/sirupsen/logrus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -35,7 +37,7 @@ func NewRouter(
 	r.Use(gin.Recovery())
 	r.Use(gin.Logger())
 
-	store := cookie.NewStore([]byte("ai-dev-console-secret-key"))
+	store := cookie.NewStore(getSessionSecret())
 	r.Use(sessions.Sessions("ai-dev-console-session", store))
 
 	// --- Public routes ---
@@ -198,6 +200,18 @@ func NewRouter(
 	}
 
 	return r
+}
+
+// getSessionSecret reads the cookie encryption key from SESSION_SECRET env var.
+// If not set, generates a random 32-byte key and logs a warning.
+func getSessionSecret() []byte {
+	if s := os.Getenv("SESSION_SECRET"); s != "" {
+		return []byte(s)
+	}
+	b := make([]byte, 32)
+	_, _ = rand.Read(b)
+	logrus.Warn("SESSION_SECRET not set, using random key (sessions will not survive pod restart)")
+	return b
 }
 
 func getUserNamespaces(c *gin.Context) []string {
