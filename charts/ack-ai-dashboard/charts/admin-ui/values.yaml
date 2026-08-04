@@ -38,6 +38,8 @@ dashboard:
   credentialMode: "static"
   # Set to true to create RAM OAuth2 Web App on startup
   createWebApp: true
+  # Grafana reverse proxy target (service inside cluster)
+  grafanaProxyTarget: "ack-ai-dashboard-grafana.kube-ai:80"
   ingress:
     enabled: true
     annotations:

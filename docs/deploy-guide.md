@@ -10,7 +10,7 @@
 | Helm 3 | 本地已安装 helm CLI |
 | kubectl | 已配置 kubeconfig 连接到目标集群 |
 | 阿里云账号 | 主账号或具有 RAM/IMS 权限的子账号 |
-| Docker（可选） | 如需自行构建镜像 |
+| Prometheus 监控 | 集群已开启 ARMS Prometheus 监控 |
 
 ## 架构概览
 
@@ -84,7 +84,7 @@ AI 控制台需要调用阿里云 IMS API 管理 OAuth 登录应用，因此需�
 控制台需要 AK/SK 来调用阿里云 IMS API 创建 OAuth 应用。
 
 1. 登录 [RAM 控制台](https://ram.console.aliyun.com) > AccessKey 管理
-2. 创建 AccessKey（推荐使用 RAM 子账号的 AK）
+2. 创建 AccessKey（推荐使用 RAM 子账号的 AK，并仅授予 IMS 权限）
 3. 记录 `AccessKeyId` 和 `AccessKeySecret`
 
 > **安全提示**：请勿将 AK/SK 存入代码仓库或 values.yaml。后续步骤通过 Kubernetes Secret 注入。
@@ -120,7 +120,17 @@ kubectl create secret generic ai-dev-console-auth \
   -n kube-ai
 ```
 
-## 步骤四：安装运维控制台（ai-dashboard）
+## 步骤四：获取 Prometheus 内网地址
+
+Grafana 监控面板需要 ARMS Prometheus 数据源地址：
+
+1. 登录 [ACK 控制台](https://cs.console.aliyun.com) > 集群详情 > 运维管理 > Prometheus 监控
+2. 点击"设置"，复制 **HTTP API 地址（内网）**
+3. 地址格式：`http://cn-<region>-intranet.arms.aliyuncs.com:9090/api/v1/prometheus/<实例ID>/<UID>/<集群ID>/<region>`
+
+> **说明**：如果集群未开启 Prometheus 监控，可在 ACK 控制台 > 运维管理 > Prometheus 监控 中开启。
+
+## 步骤五：安装运维控制台（ai-dashboard）
 
 ```bash
 helm install ai-dashboard charts/ack-ai-dashboard \
@@ -128,7 +138,8 @@ helm install ai-dashboard charts/ack-ai-dashboard \
   --set 'admin-ui.dashboard.ingress.hosts[0].host=<YOUR_DASHBOARD_DOMAIN>' \
   --set 'admin-ui.dashboard.ingress.hosts[0].paths[0]=/' \
   --set admin-ui.auth.existingSecret=ai-dashboard-auth \
-  --set grafana.adminPassword=<YOUR_GRAFANA_PASSWORD>
+  --set grafana.adminPassword=<YOUR_GRAFANA_PASSWORD> \
+  --set 'grafana.datasources.datasources\.yaml.datasources[0].url=<PROMETHEUS_URL>'
 ```
 
 **参数说明：**
@@ -136,8 +147,9 @@ helm install ai-dashboard charts/ack-ai-dashboard \
 | 参数 | 必填 | 说明 |
 |------|------|------|
 | `admin-ui.dashboard.ingress.hosts[0].host` | 是 | Ingress 域名，如 `ai-dashboard.example.com` |
-| `admin-ui.auth.existingSecret` | 否 | Session 持久化 Secret 名称 |
+| `grafana.datasources.datasources\.yaml.datasources[0].url` | 是 | ARMS Prometheus 内网地址（步骤四获取） |
 | `grafana.adminPassword` | 是 | Grafana 管理员密码 |
+| `admin-ui.auth.existingSecret` | 否 | Session 持久化 Secret 名称 |
 | `admin-ui.dashboard.intlAccount` | 否 | 国际站账号设为 `"true"` |
 | `admin-ui.dashboard.credentialMode` | 否 | `static`(AK/SK) 或 `rrsa` |
 
@@ -151,7 +163,7 @@ curl -s -o /dev/null -w '%{http_code}' http://<YOUR_DASHBOARD_DOMAIN>/health
 # 期望：200
 ```
 
-## 步骤五：安装开发控制台（ai-dev-console）
+## 步骤六：安装开发控制台（ai-dev-console）
 
 ```bash
 helm install ai-dev-console charts/ack-ai-dev-console \
@@ -180,7 +192,7 @@ curl -s -o /dev/null -w '%{http_code}' http://<YOUR_CONSOLE_DOMAIN>/health
 # 期望：200
 ```
 
-## 步骤六：配置域名解析
+## 步骤七：配置域名解析
 
 ### 方式一：公网域名（测试用）
 
@@ -199,15 +211,37 @@ curl -s -o /dev/null -w '%{http_code}' http://<YOUR_CONSOLE_DOMAIN>/health
 1. 获取 Nginx Ingress 的 SLB 私网 IP
 2. 在企业 DNS 或阿里云 PrivateZone 中配置域名解析
 
-## 步骤七：访问控制台
+## 步骤八：配置 OAuth 回调地址（自动完成）
+
+控制台启动时会自动通过 IMS API 创建 RAM OAuth2 Web 应用并设置回调地址。回调地址格式为：
+
+- 运维控制台：`http://<YOUR_DASHBOARD_DOMAIN>/login/aliyun`
+- 开发控制台：`http://<YOUR_CONSOLE_DOMAIN>/api/v1/login/aliyun/callback`
+
+如需手动管理 OAuth 应用（如配置多个回调地址、更换域名等），请参阅：
+- [创建 RAM OAuth 应用](https://help.aliyun.com/zh/ram/create-an-application)
+
+> **说明**：如果设置 `createWebApp: false`，则需要手动在 RAM 控制台创建 OAuth 应用并配置回调地址。
+
+## 步骤九：访问控制台
 
 - 运维控制台：`http://<YOUR_DASHBOARD_DOMAIN>/`
 - 开发控制台：`http://<YOUR_CONSOLE_DOMAIN>/`
 
-首次访问会重定向到阿里云 RAM SSO 登录页面，使用阿里云账号登录即可。
+首次访问会重定向到阿里云 RAM SSO 登录页面：
+
+![RAM SSO 登录页面](images/login-page.png)
+
+使用阿里云账号登录即可：
 
 - **主账号登录**：自动获得 admin 角色
 - **RAM 子账号登录**：获得 researcher 角色
+
+登录成功后进入控制台首页：
+
+![运维控制台首页](images/dashboard-overview.png)
+
+![开发控制台首页](images/dev-console-overview.png)
 
 ## 自行构建镜像（可选）
 
@@ -216,13 +250,13 @@ curl -s -o /dev/null -w '%{http_code}' http://<YOUR_CONSOLE_DOMAIN>/health
 ```bash
 # 运维控制台
 cd ai-dashboard
-docker build -t <your-registry>/ai-dashboard:v3.0.1 .
-docker push <your-registry>/ai-dashboard:v3.0.1
+docker build -t <your-registry>/ai-dashboard:latest .
+docker push <your-registry>/ai-dashboard:latest
 
 # 开发控制台
 cd ai-dev-console
-docker build -f Dockerfile.console-new -t <your-registry>/ai-dev-console:v3.0.0 .
-docker push <your-registry>/ai-dev-console:v3.0.0
+docker build -f Dockerfile.console-new -t <your-registry>/ai-dev-console:latest .
+docker push <your-registry>/ai-dev-console:latest
 ```
 
 安装时通过 `--set` 指定镜像：
@@ -230,9 +264,17 @@ docker push <your-registry>/ai-dev-console:v3.0.0
 ```bash
 helm install ai-dashboard charts/ack-ai-dashboard -n kube-ai \
   --set admin-ui.image.repository=<your-registry>/ai-dashboard \
-  --set admin-ui.image.tag=v3.0.1 \
+  --set admin-ui.image.tag=latest \
   ...
 ```
+
+## 参考文档
+
+- [创建 ACK Pro 集群](https://help.aliyun.com/zh/ack/ack-managed-and-ack-dedicated/user-guide/create-an-ack-managed-cluster-2)
+- [RAM 权限策略管理](https://help.aliyun.com/zh/ram/user-guide/create-a-custom-policy)
+- [创建 RAM OAuth 应用](https://help.aliyun.com/zh/ram/create-an-application)
+- [ACK Prometheus 监控](https://help.aliyun.com/zh/ack/ack-managed-and-ack-dedicated/user-guide/use-managed-service-for-prometheus-to-monitor-an-ack-cluster)
+- [配置 Nginx Ingress](https://help.aliyun.com/zh/ack/ack-managed-and-ack-dedicated/user-guide/nginx-ingress-overview)
 
 ## 常见问题
 
@@ -246,4 +288,7 @@ A: Ingress host 配置为空。确保 `dashboard.ingress.hosts[0].host` 设置�
 A: 检查 Nginx Ingress Controller 是否已安装：`kubectl get pods -n kube-system | grep nginx-ingress`
 
 ### Q: 登录后跳转失败
-A: 确认 RAM 授权策略已正确配置（步骤一），且 AK 对应的用户有 IMS 相关权限。
+A: 确认 RAM 授权策略已正确配置（步骤一），且 AK 对应的用户有 IMS 相关权限。参考 [创建 RAM OAuth 应用](https://help.aliyun.com/zh/ram/create-an-application) 检查回调地址是否正确。
+
+### Q: Grafana 面板无数据
+A: 确认 Prometheus URL 配置正确（步骤四），且集群已开启 ARMS Prometheus 监控。

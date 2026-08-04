@@ -1,12 +1,11 @@
 # Default values for ai-dashboard.
+# 用户必须提供的参数标记为 [REQUIRED]
 
 grafana:
   image:
     repository: registry-cn-beijing.ack.aliyuncs.com/acs/grafana
     tag: 7.3.5
-  # Grafana admin credentials - MUST be overridden at install time or provided via existing Secret.
-  # Example: helm install --set grafana.adminPassword=<your-password>
-  # Or create Secret manually: kubectl create secret generic grafana-admin --from-literal=admin-password=<pw>
+  # [REQUIRED] Grafana 管理员密码
   adminUser: admin
   adminPassword: ""
   datasources:
@@ -15,6 +14,9 @@ grafana:
       datasources:
       - name: KubeAICluster
         type: prometheus
+        # [REQUIRED] ARMS Prometheus 内网地址
+        # 格式: http://cn-<region>-intranet.arms.aliyuncs.com:9090/api/v1/prometheus/<ARMS实例ID>/<主账号UID>/<集群ID>/<region>
+        # 获取方式: ACK 控制台 > 集群 > 运维管理 > Prometheus监控 > 设置 > HTTP API 地址(内网)
         url: ""
         access: proxy
         isDefault: true
@@ -43,6 +45,8 @@ grafana:
         file: dashboards/kube-ai-cluster-details.json
       kube-ai-resource-quota-details:
         file: dashboards/kube-ai-resource-quota-details.json
+      kube-ai-job-details:
+        file: dashboards/kube-ai-job-details.json
   grafana.ini:
     server:
       domain: arena-exporter-grafana
@@ -54,11 +58,9 @@ grafana:
       plugins: /var/lib/grafana/plugins
       provisioning: /etc/grafana/provisioning
     analytics:
-      check_for_updates: true
+      check_for_updates: false
     log:
       mode: console
-    grafana_net:
-      url: https://grafana.net
     auth:
       disable_login_form: false
     auth.anonymous:
@@ -86,23 +88,41 @@ admin-ui:
     create: true
     name: ai-dashboard-admin
   dashboard:
+    # 是否为国际站账号 (signin.alibabacloud.com)
     intlAccount: "false"
+    # 管理员阿里云 UID (可选，留空则主账号自动为 admin)
     adminUid: ""
+    # 凭据模式: static (AK/SK) 或 rrsa
     credentialMode: "static"
+    # 是否自动创建 RAM OAuth2 Web App (需要 IMS 权限)
     createWebApp: true
     ingress:
+      # [REQUIRED] 必须启用 Ingress 并设置域名
       enabled: true
       annotations:
         kubernetes.io/ingress.class: nginx
       hosts:
+      # [REQUIRED] 运维控制台访问域名
       - host: ai-dashboard.local
         paths:
         - /
       tls: []
+    # Grafana 反向代理目标 (通常无需修改)
+    grafanaProxyTarget: "ack-ai-dashboard-grafana.kube-ai:80"
+  # 认证与会话配置
+  auth:
+    # Session 持久化 Secret 名称 (推荐配置，否则 Pod 重启后用户需重新登录)
+    # 创建: kubectl create secret generic ai-dashboard-auth --from-literal=sessionSecret=$(openssl rand -hex 32) -n kube-ai
+    existingSecret: ""
+    # TLS 启用时设为 true
+    secureCookie: false
+    # OAuth URL 覆盖 (通常留空使用默认值)
+    oauthSigninURL: ""
+    oauthTokenURL: ""
   credentials:
-    # AK/SK MUST NOT be stored here. Create a Secret manually:
-    #   kubectl create secret generic ai-dashboard-credentials \
-    #     --from-literal=accessKeyId=<AK> --from-literal=accessKeySecret=<SK> -n kube-ai
+    # [REQUIRED] AK/SK 通过 Secret 提供，不要写在此文件中
+    # 创建: kubectl create secret generic ai-dashboard-credentials \
+    #   --from-literal=accessKeyId=<AK> --from-literal=accessKeySecret=<SK> -n kube-ai
     rrsa:
       oidcProviderArn: ""
       oidcTokenFile: "/var/run/secrets/tokens/oidc-token"

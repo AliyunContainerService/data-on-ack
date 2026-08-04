@@ -47,16 +47,16 @@ export default function Dashboard() {
   const pct = (used: number, total: number) => total > 0 ? Math.round((used / total) * 100) : 0
 
   const resources = summary ? [
-    { label: t('dashboard.cpuUsage'), icon: <HddOutlined />, used: summary.cpu.allocated, total: summary.cpu.capacity, color: '#1677ff', unit: 'cores' },
-    { label: t('dashboard.memUsage'), icon: <CloudServerOutlined />, used: summary.memory.allocated, total: summary.memory.capacity, color: '#722ed1', unit: 'GiB' },
-    { label: t('dashboard.gpuUsage'), icon: <ThunderboltOutlined />, used: summary.gpu.allocated, total: summary.gpu.capacity, color: '#fa541c', unit: '' },
+    { label: t('dashboard.cpuUsage'), icon: <HddOutlined />, used: summary.cpu?.allocated ?? 0, total: summary.cpu?.capacity ?? 0, color: '#1677ff', unit: 'cores' },
+    { label: t('dashboard.memUsage'), icon: <CloudServerOutlined />, used: summary.memory?.allocated ?? 0, total: summary.memory?.capacity ?? 0, color: '#722ed1', unit: 'GiB' },
+    { label: t('dashboard.gpuUsage'), icon: <ThunderboltOutlined />, used: summary.gpu?.allocated ?? 0, total: summary.gpu?.capacity ?? 0, color: '#fa541c', unit: '' },
   ] : []
 
   const eventColumns = [
     { title: t('event.time'), dataIndex: 'lastTimestamp', key: 'time', width: 160, render: (ts: string) => ts ? new Date(ts).toLocaleString() : '-' },
-    { title: t('event.reason'), dataIndex: 'reason', key: 'reason', width: 140, render: (r: string) => <Tag color="warning">{r}</Tag> },
+    { title: t('event.reason'), dataIndex: 'reason', key: 'reason', width: 140, render: (r: string) => <Tag color="warning">{r || '-'}</Tag> },
     { title: t('event.message'), dataIndex: 'message', key: 'message', ellipsis: true },
-    { title: 'Object', key: 'object', width: 160, render: (_: unknown, r: EventInfo) => <Text type="secondary" style={{ fontSize: 11 }}>{r.kind}/{r.name}</Text> },
+    { title: 'Object', key: 'object', width: 160, render: (_: unknown, r: EventInfo) => <Text type="secondary" style={{ fontSize: 11 }}>{r?.kind || ''}/{r?.name || ''}</Text> },
   ]
 
   const overviewTab = (
@@ -127,7 +127,6 @@ export default function Dashboard() {
   const tabs = [
     { key: 'overview', label: t('dashboard.cluster'), children: overviewTab },
     { key: 'nodes', label: t('dashboard.nodes'), children: <Card bordered={false} style={{ borderRadius: 8 }}><iframe src={buildUrl('kube-ai-node-details')} style={iframeStyle} /></Card> },
-    { key: 'gpu', label: t('dashboard.gpu'), children: <Card bordered={false} style={{ borderRadius: 8 }}><iframe src={buildUrl('kube-ai-gpu-details')} style={iframeStyle} /></Card> },
     { key: 'events', label: <Space><WarningOutlined />{t('dashboard.events')}</Space>, children: eventsTab },
   ]
 

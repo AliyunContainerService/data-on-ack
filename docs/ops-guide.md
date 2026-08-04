@@ -196,6 +196,7 @@ Grafana 面板通过运维控制台的 `/grafana/` 路径访问，默认包含�
 
 | 面板 | 内容 |
 |------|------|
-| Cluster Details | 集群 GPU 总览、节点分布 |
-| Node Details | 单节点 GPU 利用率、显存、温度 |
+| Cluster Details | 集群资源总览、节点分布 |
+| Node Details | 单节点资源利用率详情 |
 | Resource Quota | 弹性配额使用情况 |
+| Training Jobs | 训练任务资源消耗 |

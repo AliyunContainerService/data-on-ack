@@ -4,7 +4,9 @@
 
 ## 运维控制台（ai-dashboard）
 
-运维控制台面向**集群管理员**，提供用户管理、资源配额、GPU 监控等运维能力。
+运维控制台面向**集群管理员**，提供用户管理、资源配额、集群监控等运维能力。
+
+![运维控制台首页](images/dashboard-overview.png)
 
 ### 用户管理
 
@@ -13,6 +15,8 @@
 3. 为用户分配 **用户组**（决定可使用的 namespace 和资源配额）
 4. 用户使用 RAM 子账号登录开发控制台即可看到分配的资源
 
+![用户管理页面](images/user-management.png)
+
 ### 用户组与配额管理
 
 1. 进入 **用户组** 页面
@@ -20,14 +24,19 @@
 3. 叶子节点的 namespace 即为该组用户可使用的命名空间
 4. 配额由 ACK 的弹性配额调度器自动执行
 
-### GPU 监控
+![弹性配额管理](images/elastic-quota-list.png)
 
-运维控制台内嵌 Grafana 面板，展示：
-- 集群 GPU 利用率总览
-- 节点级 GPU 显存/算力使用
-- 单任务 GPU 使用趋势
+### 节点管理
 
-访问路径：控制台左侧导航 > **监控大盘**
+管理员可在节点管理页面查看集群节点状态、GPU 资源分布：
+
+![节点管理](images/node-management.png)
+
+### 工作负载
+
+查看集群中运行的所有 AI 工作负载（训练任务、Notebook、推理服务）：
+
+![工作负载列表](images/workload-list.png)
 
 ### Node Shell
 
@@ -44,6 +53,8 @@
 
 开发控制台面向 **ML 工程师/研究员**，提供模型开发全流程工具。
 
+![开发控制台首页](images/dev-console-overview.png)
+
 ### Notebook 管理
 
 #### 创建 Notebook
@@ -58,6 +69,8 @@
 6. 点击创建，等待 Pod Running
 
 #### 访问 Notebook
+
+![Notebook 管理页面](images/notebook-list.png)
 
 Notebook 启动后，点击 **打开** 按钮直接在浏览器中打开 Jupyter/VSCode 界面。
 
@@ -87,11 +100,12 @@ Notebook 启动后，点击 **打开** 按钮直接在浏览器中打开 Jupyter
 
 #### 查看任务状态
 
+![训练任务管理](images/model-training.png)
+
 - **任务列表**：查看所有任务的运行状态
 - **任务详情**：
   - Pod 状态和事件
   - 实时日志（支持多 Worker 切换）
-  - GPU 指标图表
   - Checkpoint 列表
   - YAML 定义
 
@@ -105,6 +119,8 @@ Notebook 启动后，点击 **打开** 按钮直接在浏览器中打开 Jupyter
    - 推理框架（Triton / vLLM / TGI）
    - 副本数和资源
 3. 部署后获得 ClusterIP 或 Ingress 端点
+
+![模型推理服务](images/model-serving.png)
 
 #### 测试推理
 

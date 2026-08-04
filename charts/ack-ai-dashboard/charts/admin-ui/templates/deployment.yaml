@@ -66,6 +66,8 @@ spec:
               value: "{{ .Values.credentials.rrsa.oidcTokenFile }}"
             - name: FRONTEND_DIR
               value: "/app/dist"
+            - name: GRAFANA_PROXY_TARGET
+              value: "{{ .Values.dashboard.grafanaProxyTarget | default "ack-ai-dashboard-grafana.kube-ai:80" }}"
             {{- if .Values.auth.existingSecret }}
             - name: SESSION_SECRET
               valueFrom:
