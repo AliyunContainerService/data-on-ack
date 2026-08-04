@@ -1,0 +1,13 @@
+apiVersion: data.kubeai.alibabacloud.com/v1
+kind: UserGroup
+metadata:
+  name: default-user-group
+  namespace: kube-ai
+spec:
+  groupName: default-user-group
+  quotaNames:
+  - root.defaultQuotaGroup
+  defaultRoles:
+  - kubeai-researcher-role
+  defaultClusterRoles:
+  - kubeai-researcher-clusterrole

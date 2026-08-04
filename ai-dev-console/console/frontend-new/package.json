@@ -1,25 +1,25 @@
 {
-  "name": "ai-dashboard-frontend",
-  "version": "1.0.0",
+  "name": "ai-dev-console",
   "private": true,
+  "version": "2.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
-    "preview": "vite preview",
-    "lint": "eslint src --ext ts,tsx"
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview"
   },
   "dependencies": {
-    "antd": "^5.21.0",
     "@ant-design/icons": "^5.5.0",
+    "@ant-design/pro-components": "^2.7.0",
+    "antd": "^5.21.0",
     "axios": "^1.7.0",
+    "dayjs": "^1.11.0",
+    "i18next": "^23.15.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
-    "react-router-dom": "^6.26.0",
     "react-i18next": "^15.0.0",
-    "i18next": "^23.15.0",
-    "zustand": "^4.5.0",
-    "dayjs": "^1.11.0"
+    "react-router-dom": "^6.26.0",
+    "zustand": "^4.5.0"
   },
   "devDependencies": {
     "@types/react": "^18.3.0",

@@ -1,0 +1,26 @@
+# Stage 1: Build frontend
+FROM registry.cn-beijing.aliyuncs.com/huozx/node:20-alpine AS frontend-builder
+WORKDIR /app
+COPY console/frontend-new/package.json console/frontend-new/package-lock.json ./
+RUN npm ci --registry=https://registry.npmmirror.com
+COPY console/frontend-new/ ./
+RUN npm run build
+
+# Stage 2: Build backend
+FROM registry.cn-beijing.aliyuncs.com/huozx/golang:1.22-alpine AS backend-builder
+RUN apk add --no-cache git
+WORKDIR /workspace
+ENV GOPROXY=https://goproxy.cn,direct
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o server ./console/backend/cmd/server/
+
+# Stage 3: Runtime
+FROM registry.cn-beijing.aliyuncs.com/huozx/alpine:3.20
+RUN apk add --no-cache ca-certificates tzdata
+WORKDIR /app
+COPY --from=backend-builder /workspace/server .
+COPY --from=frontend-builder /app/dist ./dist
+EXPOSE 9090
+ENTRYPOINT ["./server"]

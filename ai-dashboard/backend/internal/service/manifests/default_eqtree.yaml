@@ -1,0 +1,20 @@
+apiVersion: scheduling.sigs.k8s.io/v1beta1
+kind: ElasticQuotaTree
+metadata:
+  name: kube-ai-quota-tree
+  namespace: kube-system
+spec:
+  root:
+    name: root
+    max:
+      cpu: "999999"
+      memory: "999999Gi"
+      nvidia.com/gpu: "999999"
+    children:
+    - name: root.defaultQuotaGroup
+      max:
+        cpu: "999999"
+        memory: "999999Gi"
+        nvidia.com/gpu: "999999"
+      namespaces:
+      - default-group
