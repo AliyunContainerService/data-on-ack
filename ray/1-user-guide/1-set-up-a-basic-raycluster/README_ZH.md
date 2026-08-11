@@ -73,18 +73,67 @@ Pending Demands:
 
 ## 3. 运行 Ray 程序示例
 
-将本目录下的 `ray_actor_rand_and_sum.py` 拷贝到 head Pod 中运行：
+脚本通过 `ray.init(address="auto")` 自动连接本机 Ray 集群，由 `RandIntActor` 产生一个 1~100 的随机数，再由 `AddActor` 将其加 5 返回。先把脚本拷贝到 head Pod 中：
 
 ```bash
 kubectl cp ray_actor_rand_and_sum.py $HEAD_POD:/tmp/ray_actor_rand_and_sum.py
+```
+
+### 方法一：在 head Pod 中直接运行
+
+```bash
 kubectl exec -it $HEAD_POD -- python /tmp/ray_actor_rand_and_sum.py
 ```
 
-脚本通过 `ray.init(address="auto")` 自动连接本机 Ray 集群，由 `RandIntActor` 产生一个 1~100 的随机数，再由 `AddActor` 将其加 5 返回。预期输出（随机数每次运行不同）：
+预期输出（随机数每次运行不同）：
 
 ```
 Random number: 61
 Final result: 66
+```
+
+### 方法二：通过 ray job CLI 提交
+
+`ray job submit` 将程序作为 Ray Job 提交到集群运行，适合提交需要后台调度执行的任务。提交并等待运行完成：
+
+```bash
+kubectl exec -it $HEAD_POD -- ray job submit -- python /tmp/ray_actor_rand_and_sum.py
+```
+
+预期输出（Job ID 每次运行不同）：
+
+```
+Random number: 1
+Final result: 6
+Job 'raysubmit_phQgB2Qrh6VKFYd9' succeeded
+```
+
+查看 Job 列表：
+
+```bash
+kubectl exec -it $HEAD_POD -- ray job list
+```
+
+预期输出（节选，提交的 Job 状态为 SUCCEEDED）：
+
+```
+Job submission server address: http://10.246.1.67:8265
+[JobDetails(..., submission_id='raysubmit_phQgB2Qrh6VKFYd9', status=<JobStatus.SUCCEEDED: 'SUCCEEDED'>, entrypoint='python /tmp/ray_actor_rand_and_sum.py', ...)]
+```
+
+查看 Job 日志：
+
+```bash
+kubectl exec -it $HEAD_POD -- ray job logs raysubmit_phQgB2Qrh6VKFYd9
+```
+
+预期输出：
+
+```
+Job submission server address: http://10.246.1.67:8265
+...
+Random number: 1
+Final result: 6
 ```
 
 ## 清理

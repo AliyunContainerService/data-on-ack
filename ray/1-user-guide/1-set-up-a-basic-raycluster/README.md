@@ -4,8 +4,8 @@ This guide shows how to deploy a basic RayCluster (1 head + 1 worker) on an ACK 
 
 ## Prerequisites
 
-- An [ACK managed cluster](https://help.aliyun.com/zh/ack/ack-managed-and-ack-dedicated/user-guide/create-an-ack-managed-cluster-2) created
-- The [KubeRay Operator](https://help.aliyun.com/zh/ack/cloud-native-ai-suite/use-cases/ack-install-kuberay-components) installed in the cluster
+- [ACK managed cluster](https://help.aliyun.com/zh/ack/ack-managed-and-ack-dedicated/user-guide/create-an-ack-managed-cluster-2)
+- [KubeRay Operator](https://help.aliyun.com/zh/ack/cloud-native-ai-suite/use-cases/ack-install-kuberay-components) installed in the cluster
 
 ## 1. Deploy the RayCluster
 
@@ -73,18 +73,67 @@ Pending Demands:
 
 ## 3. Run a Ray Sample Program
 
-Copy `ray_actor_rand_and_sum.py` from this directory into the head pod and run it:
+The script connects to the local Ray cluster via `ray.init(address="auto")`: a `RandIntActor` draws a random integer between 1 and 100, then an `AddActor` adds 5 to it and returns the result. First copy it into the head pod:
 
 ```bash
 kubectl cp ray_actor_rand_and_sum.py $HEAD_POD:/tmp/ray_actor_rand_and_sum.py
+```
+
+### Method 1: Run directly in the head pod
+
+```bash
 kubectl exec -it $HEAD_POD -- python /tmp/ray_actor_rand_and_sum.py
 ```
 
-The script connects to the local Ray cluster via `ray.init(address="auto")`: a `RandIntActor` draws a random integer between 1 and 100, then an `AddActor` adds 5 to it and returns the result. Expected output (the random number varies on each run):
+Expected output (the random number varies on each run):
 
 ```
 Random number: 61
 Final result: 66
+```
+
+### Method 2: Submit via the Ray Job CLI
+
+`ray job submit` submits the program as a Ray Job managed by the cluster, which fits tasks that need background scheduling. Submit and wait for the job to finish:
+
+```bash
+kubectl exec -it $HEAD_POD -- ray job submit -- python /tmp/ray_actor_rand_and_sum.py
+```
+
+Expected output (the job ID varies on each run):
+
+```
+Random number: 1
+Final result: 6
+Job 'raysubmit_phQgB2Qrh6VKFYd9' succeeded
+```
+
+Check the job list:
+
+```bash
+kubectl exec -it $HEAD_POD -- ray job list
+```
+
+Expected output (abbreviated, the submitted job shows status SUCCEEDED):
+
+```
+Job submission server address: http://10.246.1.67:8265
+[JobDetails(..., submission_id='raysubmit_phQgB2Qrh6VKFYd9', status=<JobStatus.SUCCEEDED: 'SUCCEEDED'>, entrypoint='python /tmp/ray_actor_rand_and_sum.py', ...)]
+```
+
+View the job logs:
+
+```bash
+kubectl exec -it $HEAD_POD -- ray job logs raysubmit_phQgB2Qrh6VKFYd9
+```
+
+Expected output:
+
+```
+Job submission server address: http://10.246.1.67:8265
+...
+Random number: 1
+Final result: 6
 ```
 
 ## Cleanup
