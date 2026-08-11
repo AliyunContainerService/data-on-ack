@@ -10,7 +10,7 @@
 ## 1. 部署 RayCluster
 
 ```bash
-kubectl apply -f raycluster.yaml
+kubectl apply -f ray-cluster.yaml
 ```
 
 预期输出：

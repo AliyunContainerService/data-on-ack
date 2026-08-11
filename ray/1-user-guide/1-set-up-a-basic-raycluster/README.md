@@ -10,7 +10,7 @@ This guide shows how to deploy a basic RayCluster (1 head + 1 worker) on an ACK 
 ## 1. Deploy the RayCluster
 
 ```bash
-kubectl apply -f raycluster.yaml
+kubectl apply -f ray-cluster.yaml
 ```
 
 Expected output:
