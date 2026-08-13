@@ -1,0 +1,79 @@
+# In-cluster build of the NIXL image (see Dockerfile in this directory).
+#
+# The build runs as a Job so that it survives the disconnection of whoever
+# started it: kubectl exec would die with the client's network.
+#
+# Prepare the context PVC once (the tarballs cannot be fetched from inside
+# the cluster), then create the Job:
+#   kubectl apply -f build-job.yaml            # creates the PVC
+#   kubectl run nixl-ctx-loader --image=... --overrides=... # mounts it
+#   kubectl cp Dockerfile nixl-ctx-loader:/ctx/Dockerfile
+#   kubectl cp <tarballs> nixl-ctx-loader:/ctx/
+#   kubectl delete pod nixl-ctx-loader         # RWO: release before the Job
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nixl-build-ctx
+  namespace: default
+spec:
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: alicloud-disk-topology-alltype
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: nixl-image-build
+  namespace: default
+spec:
+  backoffLimit: 1
+  # Compiling UCX + Mooncake + NIXL takes well under an hour on a large node,
+  # but the registry token is short lived, so fail fast rather than hang.
+  activeDeadlineSeconds: 7200
+  template:
+    spec:
+      restartPolicy: Never
+      imagePullSecrets:
+      - name: regcred-cn-hangzhou
+      containers:
+      - name: buildctl
+        image: registry-cn-hangzhou.ack.aliyuncs.com/dev/buildkit:v0.29.0
+        env:
+        # buildctl reads the push credentials from $DOCKER_CONFIG/config.json
+        # and forwards them to the daemon over the build session.
+        - name: DOCKER_CONFIG
+          value: /root/.docker
+        command:
+        - buildctl
+        - --addr
+        - tcp://buildkitd:1234
+        - build
+        - --frontend
+        - dockerfile.v0
+        - --local
+        - context=/ctx
+        - --local
+        - dockerfile=/ctx
+        - --output
+        - type=image,name=registry.cn-beijing.aliyuncs.com/image-yueming/ray-llm:2.57.0-py312-cu130-erdma-nixl,push=true
+        - --progress
+        - plain
+        volumeMounts:
+        - name: ctx
+          mountPath: /ctx
+        - name: docker-config
+          mountPath: /root/.docker
+          readOnly: true
+      volumes:
+      - name: ctx
+        persistentVolumeClaim:
+          claimName: nixl-build-ctx
+      - name: docker-config
+        secret:
+          secretName: buildkit-push-creds
+          items:
+          - key: config.json
+            path: config.json

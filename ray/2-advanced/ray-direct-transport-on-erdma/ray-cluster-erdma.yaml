@@ -1,0 +1,90 @@
+apiVersion: ray.io/v1
+kind: RayCluster
+metadata:
+  name: ray-erdma-cluster
+  namespace: default
+spec:
+  headGroupSpec:
+    rayStartParams:
+      dashboard-host: 0.0.0.0
+      # Keep all workloads off the head. num-gpus is important: the head
+      # container has no GPU limit, so it can see every GPU of the node it
+      # lands on and Ray would otherwise advertise them as schedulable -
+      # GPU actors would then run on a pod without an eRDMA device.
+      num-cpus: "0"
+      num-gpus: "0"
+    serviceType: ClusterIP
+    template:
+      spec:
+        # Secret for the registry you pushed the eRDMA image to.
+        imagePullSecrets:
+        - name: regcred-image-yueming
+        containers:
+        - name: ray-head
+          # Image built from the Dockerfile in this directory - replace the
+          # repository with your own.
+          image: registry.cn-beijing.aliyuncs.com/image-yueming/ray-llm:2.57.0-py312-cu130-erdma
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              cpu: "2"
+              memory: 8Gi
+            limits:
+              cpu: "4"
+              memory: 16Gi
+  workerGroupSpecs:
+  - groupName: gpu-erdma
+    replicas: 2
+    numOfHosts: 1
+    rayStartParams: {}
+    template:
+      spec:
+        imagePullSecrets:
+        - name: regcred-image-yueming
+        # eRDMA requires host networking. A side effect: two workers can
+        # never land on the same node (Ray port conflicts), so the two
+        # replicas are naturally spread across two eRDMA nodes.
+        hostNetwork: true
+        hostIPC: true
+        dnsPolicy: ClusterFirstWithHostNet
+        nodeSelector:
+          aliyun.accelerator/nvidia_name: NVIDIA-RTX-PRO-5000-72GB-Blackwell
+        containers:
+        - name: ray-worker
+          image: registry.cn-beijing.aliyuncs.com/image-yueming/ray-llm:2.57.0-py312-cu130-erdma
+          imagePullPolicy: IfNotPresent
+          env:
+          # Let NCCL use the ibverbs (eRDMA) path instead of sockets.
+          - name: NCCL_IB_DISABLE
+            value: "0"
+          # Pin NCCL to the eRDMA device. Instances with several eRDMA ENIs
+          # can list them comma-separated, e.g. "erdma_0,erdma_1".
+          - name: NCCL_IB_HCA
+            value: erdma_0
+          # Interface used for NCCL's out-of-band bootstrap.
+          - name: NCCL_SOCKET_IFNAME
+            value: eth0
+          securityContext:
+            capabilities:
+              add:
+              # Required by ibverbs to register (pin) memory regions.
+              - IPC_LOCK
+          resources:
+            requests:
+              nvidia.com/gpu: "1"
+              aliyun/erdma: "1"
+              cpu: "8"
+              memory: 64Gi
+            limits:
+              nvidia.com/gpu: "1"
+              aliyun/erdma: "1"
+              cpu: "16"
+              memory: 100Gi
+          volumeMounts:
+          - name: dshm
+            mountPath: /dev/shm
+        volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 32Gi

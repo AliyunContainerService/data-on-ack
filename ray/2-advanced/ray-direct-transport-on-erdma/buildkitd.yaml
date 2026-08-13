@@ -1,0 +1,119 @@
+# In-cluster BuildKit daemon + a client pod with buildctl.
+#
+# The daemon does the actual image build and push. The client pod is only a
+# convenient place to run `buildctl` with the registry push credentials
+# mounted (buildctl forwards them to the daemon through the build session).
+#
+# BuildKit state (pulled layers, build cache) lives on a dedicated cloud
+# disk: unpacking a multi-GB base image like ray-llm needs >100 GiB of
+# scratch space and would otherwise get the pod evicted for exhausting the
+# node's ephemeral storage.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: buildkitd-state
+  namespace: default
+spec:
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: alicloud-disk-topology-alltype
+  resources:
+    requests:
+      storage: 200Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: buildkitd
+  namespace: default
+spec:
+  replicas: 1
+  # The state disk is ReadWriteOnce; never run two daemons against it.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: buildkitd
+  template:
+    metadata:
+      labels:
+        app: buildkitd
+    spec:
+      containers:
+      - name: buildkitd
+        # Relayed copy of docker.io/moby/buildkit:v0.29.0
+        image: registry-cn-hangzhou.ack.aliyuncs.com/dev/buildkit:v0.29.0
+        args:
+        # Keep the default unix socket (used by the readiness probe) and
+        # additionally listen on TCP for remote buildctl clients.
+        - --addr
+        - unix:///run/buildkit/buildkitd.sock
+        - --addr
+        - tcp://0.0.0.0:1234
+        ports:
+        - containerPort: 1234
+        securityContext:
+          privileged: true
+        readinessProbe:
+          exec:
+            command: ["buildctl", "debug", "workers"]
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 5
+        volumeMounts:
+        - name: state
+          mountPath: /var/lib/buildkit
+        resources:
+          # Build steps run inside the daemon's cgroup, and `make -j$(nproc)`
+          # sees the host's CPU count regardless of this limit - keep it
+          # generous or source-heavy images (UCX, Mooncake, NIXL) take hours.
+          requests:
+            cpu: "8"
+            memory: 16Gi
+          limits:
+            cpu: "64"
+            memory: 128Gi
+      volumes:
+      - name: state
+        persistentVolumeClaim:
+          claimName: buildkitd-state
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: buildkitd
+  namespace: default
+spec:
+  selector:
+    app: buildkitd
+  ports:
+  - port: 1234
+    targetPort: 1234
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: buildkit-client
+  namespace: default
+spec:
+  containers:
+  - name: buildctl
+    image: registry-cn-hangzhou.ack.aliyuncs.com/dev/buildkit:v0.29.0
+    command: ["sleep", "infinity"]
+    env:
+    # buildctl reads push credentials from $DOCKER_CONFIG/config.json.
+    - name: DOCKER_CONFIG
+      value: /root/.docker
+    volumeMounts:
+    - name: docker-config
+      mountPath: /root/.docker
+      readOnly: true
+  volumes:
+  - name: docker-config
+    secret:
+      # Docker-registry secret holding the ACR push credentials.
+      secretName: regcred-cn-hangzhou
+      items:
+      - key: .dockerconfigjson
+        path: config.json
+  restartPolicy: Never
