@@ -1,0 +1,52 @@
+apiVersion: ray.io/v1
+kind: RayJob
+metadata:
+  name: rayjob-new-cluster
+  namespace: default
+spec:
+  entrypoint: python /home/ray/job/ray_job_sample.py
+  shutdownAfterJobFinishes: true
+  rayClusterSpec:
+    headGroupSpec:
+      rayStartParams:
+        dashboard-host: 0.0.0.0
+        num-cpus: "0"
+      serviceType: ClusterIP
+      template:
+        spec:
+          containers:
+          - image: rayproject/ray:2.56.1-py312
+            imagePullPolicy: Always
+            name: ray-head
+            resources:
+              limits:
+                cpu: "1"
+                memory: 2Gi
+              requests:
+                cpu: "1"
+                memory: 2Gi
+            volumeMounts:
+            - name: job-code
+              mountPath: /home/ray/job
+          volumes:
+          - name: job-code
+            configMap:
+              name: ray-job-code
+    workerGroupSpecs:
+    - groupName: worker-group
+      numOfHosts: 1
+      rayStartParams: {}
+      replicas: 1
+      template:
+        spec:
+          containers:
+          - image: rayproject/ray:2.56.1-py312
+            imagePullPolicy: Always
+            name: ray-worker
+            resources:
+              limits:
+                cpu: "2"
+                memory: 4Gi
+              requests:
+                cpu: "2"
+                memory: 4Gi
