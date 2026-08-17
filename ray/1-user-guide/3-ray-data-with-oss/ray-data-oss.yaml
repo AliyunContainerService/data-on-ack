@@ -1,0 +1,69 @@
+apiVersion: ray.io/v1
+kind: RayJob
+metadata:
+  name: rayjob-data-oss
+  namespace: default
+spec:
+  entrypoint: python /home/ray/job/ray_data_oss_sample.py
+  shutdownAfterJobFinishes: true
+  rayClusterSpec:
+    headGroupSpec:
+      rayStartParams:
+        dashboard-host: 0.0.0.0
+        num-cpus: "0"
+      serviceType: ClusterIP
+      template:
+        spec:
+          containers:
+          - image: <IMAGE_REGISTRY>/ray:2.56.1-py312-with-iris
+            imagePullPolicy: Always
+            name: ray-head
+            resources:
+              limits:
+                cpu: "1"
+                memory: 2Gi
+              requests:
+                cpu: "1"
+                memory: 2Gi
+            env:
+            - name: OSS_ENDPOINT
+              value: <OSS_ENDPOINT>
+            - name: OSS_BUCKET
+              value: <OSS_BUCKET>
+            - name: OSS_PARQUET_DIR
+              value: <OSS_DATA_PARQUET_DIR>
+            - name: OSS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: oss-credential
+                  key: akId
+            - name: OSS_ACCESS_KEY_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: oss-credential
+                  key: akSecret
+            volumeMounts:
+            - name: job-code
+              mountPath: /home/ray/job
+          volumes:
+          - name: job-code
+            configMap:
+              name: ray-job-code
+    workerGroupSpecs:
+    - groupName: worker-group
+      numOfHosts: 1
+      rayStartParams: {}
+      replicas: 1
+      template:
+        spec:
+          containers:
+          - image: <IMAGE_REGISTRY>/ray:2.56.1-py312-with-iris
+            imagePullPolicy: Always
+            name: ray-worker
+            resources:
+              limits:
+                cpu: "2"
+                memory: 4Gi
+              requests:
+                cpu: "2"
+                memory: 4Gi
