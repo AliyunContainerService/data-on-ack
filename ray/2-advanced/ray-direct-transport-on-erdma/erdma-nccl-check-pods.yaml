@@ -1,0 +1,68 @@
+# Two standalone pods on two eRDMA nodes, used to sanity-check NCCL over
+# eRDMA independently of Ray (see README, "Confirm the Transfer Really Used
+# eRDMA"). Set nodeName to two of your own eRDMA GPU nodes.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: erdma-nccl-a
+  namespace: default
+spec:
+  nodeName: <your-erdma-node-1>   # Replace with your eRDMA GPU node name
+  hostNetwork: true
+  hostIPC: true
+  dnsPolicy: ClusterFirstWithHostNet
+  restartPolicy: Never
+  containers:
+  - name: main
+    image: <your-registry>/ray-llm:2.57.0-py312-cu130-erdma
+    command: ["sleep", "infinity"]
+    securityContext:
+      capabilities:
+        add: ["IPC_LOCK"]
+    resources:
+      limits:
+        nvidia.com/gpu: "1"
+        aliyun/erdma: "1"
+        cpu: "8"
+        memory: 32Gi
+    volumeMounts:
+    - name: dshm
+      mountPath: /dev/shm
+  volumes:
+  - name: dshm
+    emptyDir:
+      medium: Memory
+      sizeLimit: 16Gi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: erdma-nccl-b
+  namespace: default
+spec:
+  nodeName: <your-erdma-node-2>   # Replace with your eRDMA GPU node name
+  hostNetwork: true
+  hostIPC: true
+  dnsPolicy: ClusterFirstWithHostNet
+  restartPolicy: Never
+  containers:
+  - name: main
+    image: <your-registry>/ray-llm:2.57.0-py312-cu130-erdma
+    command: ["sleep", "infinity"]
+    securityContext:
+      capabilities:
+        add: ["IPC_LOCK"]
+    resources:
+      limits:
+        nvidia.com/gpu: "1"
+        aliyun/erdma: "1"
+        cpu: "8"
+        memory: 32Gi
+    volumeMounts:
+    - name: dshm
+      mountPath: /dev/shm
+  volumes:
+  - name: dshm
+    emptyDir:
+      medium: Memory
+      sizeLimit: 16Gi

@@ -1,0 +1,51 @@
+apiVersion: ray.io/v1
+kind: RayCluster
+metadata:
+  name: cgpu-ray
+  namespace: default
+spec:
+  rayVersion: "2.57.0"
+  # CPU-only head: it does not need a GPU slice, so keep num-gpus at 0.
+  headGroupSpec:
+    rayStartParams:
+      num-cpus: "0"
+      num-gpus: "0"
+      dashboard-host: 0.0.0.0
+    template:
+      spec:
+        containers:
+        - name: ray-head
+          image: rayproject/ray-llm:2.57.0-py312-cu130
+          resources:
+            requests: {cpu: "500m", memory: 4Gi}
+            limits: {cpu: "2", memory: 8Gi}
+  workerGroupSpecs:
+  - groupName: cgpu-worker
+    replicas: 1
+    minReplicas: 1
+    maxReplicas: 1
+    rayStartParams:
+      # THIS IS THE KEY LINE. KubeRay derives `--num-gpus` only from the
+      # container's nvidia.com/gpu limit. A cGPU pod requests
+      # aliyun.com/gpu-mem instead, which KubeRay does not understand, so Ray
+      # would otherwise start with 0 GPUs and no GPU actor could ever be
+      # scheduled. Declare the GPU count explicitly.
+      num-gpus: "1"
+    template:
+      spec:
+        containers:
+        - name: ray-worker
+          image: rayproject/ray-llm:2.57.0-py312-cu130
+          resources:
+            # Request a shared-GPU slice instead of a whole card. The unit is
+            # GiB (gpushare-device-plugin --memory-unit=GiB). The gpushare
+            # scheduler places the pod, injects CUDA_VISIBLE_DEVICES, and the
+            # cGPU kernel module caps the pod's visible GPU memory to this
+            # value. No nvidia.com/gpu here.
+            limits:
+              cpu: "4"
+              memory: 24Gi
+              aliyun.com/gpu-mem: "8"
+            requests:
+              cpu: "2"
+              memory: 8Gi
