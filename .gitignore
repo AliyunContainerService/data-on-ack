@@ -5,6 +5,7 @@
 # IDEs
 .idea
 .vscode
+.qoder
 *.sublime-workspace
 *.sublime-project
 *.code-workspace
@@ -66,3 +67,6 @@ ai-dashboard/server
 kubeconfig*
 kube-configs/
 *.env.local
+
+# Compiled python cache files
+__pycache__

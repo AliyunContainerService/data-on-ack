@@ -1,0 +1,67 @@
+# Step 1: Create a RayCluster first. The sample code is mounted into the head
+# pod via the `ray-job-code` ConfigMap so the Ray job can execute it.
+apiVersion: ray.io/v1
+kind: RayCluster
+metadata:
+  name: demo-ray-cluster
+  namespace: default
+  labels:
+    ray.io/cluster: demo-ray-cluster
+spec:
+  suspend: false
+  headGroupSpec:
+    rayStartParams:
+      dashboard-host: 0.0.0.0
+      num-cpus: "0"
+    serviceType: ClusterIP
+    template:
+      spec:
+        containers:
+        - image: rayproject/ray:2.56.1-py312
+          imagePullPolicy: Always
+          name: ray-head
+          resources:
+            limits:
+              cpu: "1"
+              memory: 2Gi
+            requests:
+              cpu: "1"
+              memory: 2Gi
+          volumeMounts:
+          - name: job-code
+            mountPath: /home/ray/job
+        volumes:
+        - name: job-code
+          configMap:
+            name: ray-job-code
+  workerGroupSpecs:
+  - groupName: worker-group
+    numOfHosts: 1
+    rayStartParams: {}
+    replicas: 1
+    template:
+      spec:
+        containers:
+        - image: rayproject/ray:2.56.1-py312
+          imagePullPolicy: Always
+          name: ray-worker
+          resources:
+            limits:
+              cpu: "2"
+              memory: 4Gi
+            requests:
+              cpu: "2"
+              memory: 4Gi
+---
+# Step 2: Submit a RayJob to the existing cluster above. The cluster is located
+# by `clusterSelector`, so no new RayCluster is created by this RayJob.
+apiVersion: ray.io/v1
+kind: RayJob
+metadata:
+  name: rayjob-existing-cluster
+  namespace: default
+spec:
+  entrypoint: python /home/ray/job/ray_job_sample.py
+  shutdownAfterJobFinishes: false
+  clusterSelector:
+    ray.io/cluster: demo-ray-cluster
