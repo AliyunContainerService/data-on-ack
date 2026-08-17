@@ -136,12 +136,121 @@ ossutil ls oss://<your-bucket>/data/iris_parquet/
 
 ## 方法二：通过 OSS 存储卷挂载访问
 
-TODO（待补充）：如何在 Ray Job 中通过 `volumes` / `volumeMounts` 挂载 OSS 存储卷，以及访问挂载路径的 Ray Data 示例代码。
+该方法将 OSS PersistentVolumeClaim（PVC）以卷的形式挂载到 Ray Job Pod 中。挂载后 OSS Bucket 会呈现为本地目录（`/mnt/oss`），你可以直接使用标准文件系统 API 读写数据。
+
+示例 Pipeline 与使用方法一相同的流程（读取 iris.csv → 写入 parquet → 读回 → 过滤 + 聚合），区别在于 parquet 的读写通过挂载卷的本地路径进行。
+
+### 前提条件
+
+除了本文开头列出的[通用前提条件](#前提条件)外，还需在集群中创建好 OSS PVC。创建方法请参考[阿里云官方文档 - 在ACK中使用OSS存储卷](https://help.aliyun.com/zh/ack/ack-managed-and-ack-dedicated/user-guide/ossfs-2-0/)。本文假设 PVC 名称为 `pvc-oss`，挂载到容器内的 `/mnt/oss` 路径。
+
+### 1. 示例代码说明
+
+Ray Job 的入口命令是 `python /home/ray/job/ray_data_oss_volume.py`，使用 Iris 数据集通过 OSS 存储卷挂载实现读取 -> 处理 -> 写入 Pipeline：
+
+1. **读取**：从镜像内置的 `iris.csv` 加载（`/home/ray/iris.csv`）
+2. **写入**：将数据集以 **parquet** 格式写入挂载卷路径 `/mnt/oss/volume_iris_output/`
+3. **读回**：从同一挂载路径读取该 parquet 文件，构建新的 Ray Data Dataset
+4. **聚合**：过滤 `sepal_length > 5.0` 的行，然后按 `species` 分组，计算各数值列的平均值
+
+> 使用 OSS 存储卷挂载后，parquet 的读写走普通本地文件系统路径，无需配置 S3 endpoint、AccessKey 或 `force_virtual_addressing`。
+
+### 2. 构建镜像
+
+本方法复用[方法一](#2-构建包含示例数据的镜像)中构建的同一镜像（内置了 `iris.csv`）。如已构建并推送，可跳过此步骤。
+
+```bash
+cd ray/1-user-guide/3-ray-data-with-oss/
+docker build -f Dockerfile -t <IMAGE_REGISTRY>/ray:2.56.1-py312-with-iris .
+docker push <IMAGE_REGISTRY>/ray:2.56.1-py312-with-iris
+```
+
+### 3. 创建 ConfigMap
+
+将示例代码存入 ConfigMap：
+
+```bash
+kubectl create configmap ray-job-code-volume --from-file=ray_data_oss_volume.py
+```
+
+预期输出：
+
+```
+configmap/ray-job-code-volume created
+```
+
+> 挂载 OSS 不需要额外创建 Secret——CSI 驱动（RRSA 配置）负责处理 Bucket 的访问鉴权。
+
+### 4. 提交 RayJob
+
+提交 `ray-data-oss-volume.yaml` 前，先修改：
+
+- `spec.rayClusterSpec.headGroupSpec.template.spec.containers[0].image`：你推送的镜像地址
+- 如果 PVC 名称不同，修改 `volumes[].persistentVolumeClaim.claimName` 的值
+
+然后提交：
+
+```bash
+kubectl apply -f ray-data-oss-volume.yaml
+```
+
+预期输出：
+
+```
+rayjob.ray.io/rayjob-data-oss-volume created
+```
+
+等待任务完成：
+
+```bash
+kubectl wait --for=condition=complete job/rayjob-data-oss-volume --timeout=300s
+kubectl get rayjob rayjob-data-oss-volume
+```
+
+预期输出：
+
+```
+NAME                     JOB STATUS   DEPLOYMENT STATUS   RAY CLUSTER NAME               START TIME             END TIME               AGE
+rayjob-data-oss-volume   SUCCEEDED    Complete            rayjob-data-oss-volume-xxxxx   ...                    ...                    ...
+```
+
+查看任务输出：
+
+```bash
+kubectl logs job/rayjob-data-oss-volume
+```
+
+预期输出（节选，首次运行）：
+
+```
+Loaded 150 rows from /home/ray/iris.csv
+Wrote parquet to /mnt/oss/volume_iris_output
+Read back 150 rows from /mnt/oss/volume_iris_output
+Rows with sepal_length > 5.0: 118
+Job 'rayjob-data-oss-volume-xxxxx' succeeded
+```
+
+如果 parquet 输出已存在（例如重复提交任务），日志中的写入行会变为 `Parquet output already exists at /mnt/oss/volume_iris_output, skip writing`。
+
+聚合结果（过滤 `sepal_length > 5.0` 后，按 species 分组各数值列的平均值）：
+
+```
+     species  sepal_length  sepal_width  petal_length  petal_width
+      setosa      5.313636     3.713636      1.509091     0.277273
+  versicolor      5.997872     2.804255      4.317021     1.346809
+   virginica      6.622449     2.983673      5.573469     2.032653
+```
+
+由于 `shutdownAfterJobFinishes` 为 `true`，任务成功后 RayCluster 会自动清理。
+
+
 
 ## 清理
 
 ```bash
 kubectl delete -f ray-data-oss.yaml
+kubectl delete -f ray-data-oss-volume.yaml
 kubectl delete configmap ray-job-code
+kubectl delete configmap ray-job-code-volume
 kubectl delete secret oss-credential
 ```
