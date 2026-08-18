@@ -1,0 +1,97 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ray-serve-app
+  namespace: default
+data:
+  greeter.py: |
+    from ray import serve
+    from starlette.requests import Request
+
+
+    @serve.deployment
+    class Greeter:
+        async def __call__(self, request: Request) -> str:
+            name = request.query_params.get("name", "Ray")
+            return f"Hello {name} from Ray Serve!"
+
+
+    app = Greeter.bind()
+---
+apiVersion: ray.io/v1
+kind: RayService
+metadata:
+  name: demo-ray-service
+  namespace: default
+spec:
+  serveConfigV2: |
+    applications:
+      - name: greeter
+        import_path: greeter:app
+        route_prefix: /
+        deployments:
+          - name: Greeter
+            num_replicas: 2
+            ray_actor_options:
+              num_cpus: 0.5
+  rayClusterConfig:
+    headGroupSpec:
+      rayStartParams:
+        dashboard-host: 0.0.0.0
+        num-cpus: "0"
+      serviceType: ClusterIP
+      template:
+        spec:
+          containers:
+          - image: rayproject/ray:2.57.0-py312
+            imagePullPolicy: IfNotPresent
+            name: ray-head
+            env:
+            # Make the Serve application module in the ConfigMap importable
+            # by the Serve controller and proxies.
+            - name: PYTHONPATH
+              value: /home/ray/serve-app
+            resources:
+              limits:
+                cpu: "1"
+                memory: 2Gi
+              requests:
+                cpu: "1"
+                memory: 2Gi
+            volumeMounts:
+            - name: serve-app
+              mountPath: /home/ray/serve-app
+          volumes:
+          - name: serve-app
+            configMap:
+              name: ray-serve-app
+    workerGroupSpecs:
+    - groupName: worker-group
+      replicas: 1
+      numOfHosts: 1
+      rayStartParams: {}
+      template:
+        spec:
+          containers:
+          - image: rayproject/ray:2.57.0-py312
+            imagePullPolicy: IfNotPresent
+            name: ray-worker
+            env:
+            # Make the Serve application module importable by the
+            # deployment replicas running on this worker.
+            - name: PYTHONPATH
+              value: /home/ray/serve-app
+            resources:
+              limits:
+                cpu: "2"
+                memory: 4Gi
+              requests:
+                cpu: "2"
+                memory: 4Gi
+            volumeMounts:
+            - name: serve-app
+              mountPath: /home/ray/serve-app
+          volumes:
+          - name: serve-app
+            configMap:
+              name: ray-serve-app

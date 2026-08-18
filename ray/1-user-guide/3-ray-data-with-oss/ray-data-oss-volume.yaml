@@ -1,0 +1,64 @@
+apiVersion: ray.io/v1
+kind: RayJob
+metadata:
+  name: rayjob-data-oss-volume
+  namespace: default
+spec:
+  entrypoint: python /home/ray/job/ray_data_oss_volume.py
+  shutdownAfterJobFinishes: true
+  rayClusterSpec:
+    headGroupSpec:
+      rayStartParams:
+        dashboard-host: 0.0.0.0
+        num-cpus: "0"
+      serviceType: ClusterIP
+      template:
+        spec:
+          containers:
+          - image: <your-registry>/ray:2.56.1-py312-with-iris
+            imagePullPolicy: Always
+            name: ray-head
+            resources:
+              limits:
+                cpu: "1"
+                memory: 2Gi
+              requests:
+                cpu: "1"
+                memory: 2Gi
+            volumeMounts:
+            - name: job-code
+              mountPath: /home/ray/job
+            - name: oss-data
+              mountPath: /mnt/oss
+          volumes:
+          - name: job-code
+            configMap:
+              name: ray-job-code-volume
+          - name: oss-data
+            persistentVolumeClaim:
+              claimName: pvc-oss
+    workerGroupSpecs:
+    - groupName: worker-group
+      numOfHosts: 1
+      rayStartParams: {}
+      replicas: 1
+      template:
+        spec:
+          containers:
+          - image: <your-registry>/ray:2.56.1-py312-with-iris
+            imagePullPolicy: Always
+            name: ray-worker
+            resources:
+              limits:
+                cpu: "2"
+                memory: 4Gi
+              requests:
+                cpu: "2"
+                memory: 4Gi
+            volumeMounts:
+            - name: oss-data
+              mountPath: /mnt/oss
+          volumes:
+          - name: oss-data
+            persistentVolumeClaim:
+              claimName: pvc-oss
