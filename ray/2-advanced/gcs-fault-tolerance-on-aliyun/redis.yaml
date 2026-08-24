@@ -1,0 +1,75 @@
+# Single-replica Redis used to validate GCS fault tolerance.
+#
+# For validation and test environments only. If this Redis loses its data, the
+# recovered GCS loses the cluster state with it, so production deployments
+# should point `redisAddress` at a managed, highly available single-shard
+# instance (on Alibaba Cloud: ApsaraDB for Redis / Tair, standard architecture).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-config
+data:
+  redis.conf: |
+    requirepass 5241590000000000
+    save 60 1000
+    # AOF keeps the GCS metadata across a Redis restart. Never place the AOF
+    # directory on object storage or a FUSE mount: they do not support append.
+    appendonly yes
+    appendfsync everysec
+    # GCS keys carry no TTL, so an allkeys-* policy would silently evict cluster
+    # metadata that Ray still believes is there.
+    maxmemory-policy noeviction
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+spec:
+  # ClusterIP is the default; stated explicitly because Redis holds the head's
+  # cluster state and must never be reachable from outside the cluster.
+  type: ClusterIP
+  selector:
+    app: redis
+  ports:
+  - port: 6379
+    targetPort: 6379
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+      - name: redis
+        image: redis:7.4-alpine
+        imagePullPolicy: IfNotPresent
+        command: ["redis-server", "/etc/redis/redis.conf"]
+        ports:
+        - containerPort: 6379
+        volumeMounts:
+        - name: config
+          mountPath: /etc/redis
+      volumes:
+      - name: config
+        configMap:
+          name: redis-config
+---
+# The RayCluster reads the password from this Secret. Create it with
+# --from-literal rather than from a file: a trailing newline produces a
+# WRONGPASS failure at head startup.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: redis-password-secret
+type: Opaque
+stringData:
+  password: "5241590000000000"

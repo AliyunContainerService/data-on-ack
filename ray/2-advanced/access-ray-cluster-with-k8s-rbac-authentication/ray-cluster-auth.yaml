@@ -1,0 +1,155 @@
+# RayCluster with Kubernetes RBAC authentication.
+# Verified with the ACK managed KubeRay operator (v1.5.1) and Ray 2.55.0.
+#
+# This file targets the `default` namespace. The two ClusterRoles are
+# cluster-scoped and shared by every Ray cluster; everything else is namespaced.
+# To use another namespace, edit the ClusterRoleBinding below in two places:
+# its subject namespace and its own name. The Ray containers need no edit — they
+# read their namespace from the Downward API.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ray-cluster-auth
+---
+# Lets Ray call the Kubernetes authn/authz APIs. Both are cluster-scoped
+# resources, so this must be a ClusterRole. Create once per K8s cluster.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ray-authenticator
+rules:
+- apiGroups: ["authentication.k8s.io"]
+  resources: ["tokenreviews"]
+  verbs: ["create"]
+- apiGroups: ["authorization.k8s.io"]
+  resources: ["subjectaccessreviews"]
+  verbs: ["create"]
+---
+# Defines the custom `ray:write` verb. Create once per K8s cluster.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ray-writer
+rules:
+- apiGroups: ["ray.io"]
+  resources: ["rayclusters"]
+  verbs: ["ray:write"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  # A ClusterRoleBinding is cluster-scoped, but its subject is a namespaced
+  # ServiceAccount, whose full identity is system:serviceaccount:<ns>:<name> —
+  # subjects have no namespace wildcard. So this object is per Ray cluster, not
+  # per Kubernetes cluster, and its name embeds the namespace and cluster name
+  # so that Ray clusters in different namespaces do not overwrite each other's
+  # binding.
+  name: ray-authenticator-default-ray-cluster-auth
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ray-authenticator
+subjects:
+- kind: ServiceAccount
+  name: ray-cluster-auth
+  namespace: default
+---
+# Ray authenticates its own processes (head <-> worker) through the same
+# mechanism, so the cluster's ServiceAccount also needs `ray:write` on its own
+# cluster.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ray-cluster-auth
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ray-writer
+subjects:
+- kind: ServiceAccount
+  name: ray-cluster-auth
+---
+apiVersion: ray.io/v1
+kind: RayCluster
+metadata:
+  name: ray-cluster-auth
+spec:
+  rayVersion: '2.55.0'
+  headGroupSpec:
+    rayStartParams:
+      dashboard-host: "0.0.0.0"
+      num-cpus: "0"
+    serviceType: ClusterIP
+    template:
+      spec:
+        serviceAccountName: ray-cluster-auth
+        containers:
+        - name: ray-head
+          image: rayproject/ray:2.55.0
+          imagePullPolicy: IfNotPresent
+          env:
+          - name: RAY_AUTH_MODE
+            value: "token"
+          - name: RAY_ENABLE_K8S_TOKEN_AUTH
+            value: "true"
+          # Namespace for the SubjectAccessReview. KubeRay v1.5.1 does not inject
+          # it. Reading it from the Downward API keeps this file free of a
+          # hardcoded namespace: Ray pods always run in the RayCluster's own
+          # namespace, so metadata.namespace is always the right value.
+          # RAY_CLUSTER_NAME needs no entry here — KubeRay already injects it
+          # from the `ray.io/cluster` pod label.
+          - name: RAY_CLUSTER_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          resources:
+            limits:   {cpu: "4", memory: "8Gi"}
+            requests: {cpu: "2", memory: "4Gi"}
+          ports:
+          - {containerPort: 6379,  name: gcs-server}
+          - {containerPort: 8265,  name: dashboard}
+          - {containerPort: 10001, name: client}
+          volumeMounts:
+          # Credential Ray processes use to authenticate to each other.
+          - mountPath: /var/run/secrets/ray.io/serviceaccount
+            name: ray-token
+        volumes:
+        - name: ray-token
+          projected:
+            sources:
+            - serviceAccountToken:
+                path: token
+  workerGroupSpecs:
+  - groupName: workergroup
+    replicas: 1
+    minReplicas: 1
+    maxReplicas: 5
+    rayStartParams: {}
+    template:
+      spec:
+        serviceAccountName: ray-cluster-auth
+        containers:
+        - name: ray-worker
+          image: rayproject/ray:2.55.0
+          imagePullPolicy: IfNotPresent
+          env:
+          - name: RAY_AUTH_MODE
+            value: "token"
+          - name: RAY_ENABLE_K8S_TOKEN_AUTH
+            value: "true"
+          - name: RAY_CLUSTER_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          resources:
+            limits:   {cpu: "4", memory: "8Gi"}
+            requests: {cpu: "4", memory: "8Gi"}
+          volumeMounts:
+          - mountPath: /var/run/secrets/ray.io/serviceaccount
+            name: ray-token
+        volumes:
+        - name: ray-token
+          projected:
+            sources:
+            - serviceAccountToken:
+                path: token
