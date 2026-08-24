@@ -1,0 +1,98 @@
+# RayCluster with GCS fault tolerance backed by an external Redis.
+# Verified with the ACK managed KubeRay operator (v1.5.1) and Ray 2.51.0.
+#
+# Apply redis.yaml first: the head pod crash-loops until it can reach Redis.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ray-example
+data:
+  detached_actor.py: |
+    import ray
+
+    @ray.remote(num_cpus=1)
+    class Counter:
+        def __init__(self):
+            self.value = 0
+
+        def increment(self):
+            self.value += 1
+            return self.value
+
+    ray.init(namespace="default_namespace")
+    Counter.options(name="counter_actor", lifetime="detached").remote()
+  increment_counter.py: |
+    import ray
+
+    ray.init(namespace="default_namespace")
+    counter = ray.get_actor("counter_actor")
+    print(ray.get(counter.increment.remote()))
+---
+apiVersion: ray.io/v1
+kind: RayCluster
+metadata:
+  name: raycluster-gcs-ft
+spec:
+  rayVersion: '2.51.0'
+
+  # Adding this field is all it takes to enable GCS fault tolerance. KubeRay
+  # then injects RAY_REDIS_ADDRESS, REDIS_PASSWORD and
+  # RAY_external_storage_namespace into the head, appends --redis-password to
+  # its start command, and sets RAY_gcs_rpc_server_reconnect_timeout_s=600 on
+  # every worker.
+  gcsFaultToleranceOptions:
+    # Bare host:port. A redis:// prefix is treated as part of the hostname and
+    # the head fails to start with "resolve: Host not found".
+    # if use tair，r-xxx.redis.region.rds.aliyuncs.com
+    redisAddress: "r-t4nhi038v3wx5nmbpp.redis.singapore.rds.aliyuncs.com:6379"
+    redisPassword:
+      valueFrom:
+        secretKeyRef:
+          name: redis-password-secret
+          key: password
+    # redisUsername is only needed when Redis uses ACL accounts.
+    # externalStorageNamespace is deliberately left unset: KubeRay then uses the
+    # RayCluster UID, which keeps clusters isolated inside a shared Redis.
+
+  headGroupSpec:
+    rayStartParams:
+      dashboard-host: "0.0.0.0"
+      # Keeps the head out of scheduling, so actors always land on a worker and
+      # survive a head restart.
+      num-cpus: "0"
+    serviceType: ClusterIP
+    template:
+      spec:
+        containers:
+        - name: ray-head
+          image: rayproject/ray:2.51.0-py311-cpu
+          imagePullPolicy: IfNotPresent
+          resources:
+            limits:   {cpu: "2", memory: "4Gi"}
+            requests: {cpu: "1", memory: "2Gi"}
+          ports:
+          - {containerPort: 6379,  name: gcs-server}
+          - {containerPort: 8265,  name: dashboard}
+          - {containerPort: 10001, name: client}
+          volumeMounts:
+          - name: ray-example
+            mountPath: /home/ray/samples
+        volumes:
+        - name: ray-example
+          configMap:
+            name: ray-example
+  workerGroupSpecs:
+  - groupName: small-group
+    replicas: 1
+    minReplicas: 1
+    maxReplicas: 3
+    rayStartParams: {}
+    template:
+      spec:
+        containers:
+        - name: ray-worker
+          image: rayproject/ray:2.51.0-py311-cpu
+          imagePullPolicy: IfNotPresent
+          resources:
+            limits:   {cpu: "2", memory: "4Gi"}
+            requests: {cpu: "1", memory: "2Gi"}
