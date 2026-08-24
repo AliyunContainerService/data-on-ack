@@ -19,29 +19,11 @@ Ray 官方对象溢出文档是本文的重要参考：[Object Spilling — Ray 
 
 > 更多详细语义请参考官方 [Object Spilling](https://docs.ray.io/en/latest/ray-core/objects/object-spilling.html) 文档。
 
-## 1. 通过 ray.init() 设置对象溢出目录
-
-在本地或单机 Ray 集群中，可以直接在 `ray.init()` 中传入溢出目录路径：
-
-```python
-import ray
-
-ray.init(object_spilling_directory="/path/to/spill/dir")
-```
-
-手动启动 Ray 时也可以通过命令行选项指定：
-
-```bash
-ray start --head --object-spilling-directory=/path/to/spill/dir
-```
-
-> `object_spilling_directory`（以及 `object-store-memory`）是 **raylet** 参数：它们在 Ray 节点启动时生效。当你的 Driver 通过 `ray.init(address="auto")` 连接已有集群时，这些参数会被忽略——运行中节点的配置已经固定。在 KubeRay 上，节点由 Operator 根据 RayCluster 的 `rayStartParams` 启动，因此配置应放在那里（见下一节）。
-
-## 2. 在 RayCluster 中溢出到 ESSD 卷
+## 1. 在 RayCluster 中溢出到 ESSD 卷
 
 本节部署一个 RayCluster，其 head 和 worker 节点都通过 `volumeClaimTemplate`（临时卷模板）挂载独立的 ESSD 云盘到 `/spill`，并将 `object-spilling-directory` 设置为该路径。在本示例中，对象存储大小限制为 1 GiB，以便示例程序能快速填满它并触发溢出。
 
-### 2.1 部署 RayCluster
+### 1.1 部署 RayCluster
 
 `ray-cluster.yaml` 使用 Kubernetes 的通用临时卷（`volumeClaimTemplate`）来声明溢出目录。每个 Pod 自动获得独立的 PVC 和 ESSD 云盘，PVC 和磁盘在 Pod 终止时自动删除。
 
@@ -111,71 +93,70 @@ raycluster-object-spill-head-mskhh-spill                     Bound    d-2zecrrxs
 raycluster-object-spill-worker-group-worker-4n8r2-spill      Bound    d-2ze70w3khfxqavlc3772   20Gi       RWO            alicloud-disk-topology-alltype  60s
 ```
 
-### 2.2 运行触发溢出的示例程序
+### 1.2 运行触发溢出的示例程序
 
-`object_spill_sample.py` 通过 `ray.put` 向对象存储中放入 240 个大小为 8 MiB 的对象（总计约 1.88 GiB）。由于对象存储上限为 1 GiB，Ray 必须将超出部分溢出到 ESSD 卷。将该文件复制到 head Pod 并运行：
+`object_spill_sample.py` 通过 `ray.put` 向对象存储中放入 240 个大小为 8 MiB 的对象（总计约 1.88 GiB）。由于对象存储上限为 1 GiB，Ray 必须将超出部分溢出到 ESSD 卷。将该文件复制到 head Pod 并运行（`-u` 保证输出顺序）：
 
 ```bash
 kubectl cp object_spill_sample.py $HEAD_POD:/tmp/object_spill_sample.py
-kubectl exec $HEAD_POD -- python /tmp/object_spill_sample.py
+kubectl exec $HEAD_POD -- python -u /tmp/object_spill_sample.py
 ```
 
-预期输出（Ray INFO 日志已省略）：
+脚本会先放入对象，等待几秒让异步溢出稳定，然后测量溢出卷的占用情况，并保持引用 30 秒以便你在另一个终端检查集群状态。整个运行约一分钟。
+
+预期输出（Ray INFO 日志已省略，`/spill` 的占用大小会变化）：
 
 ```
 Put 240 objects, ~1920 MiB total
-All objects are alive. Check spill stats with 'ray memory --stats-only'.
+Spill directory usage while the objects are alive:
+1.7G	/spill
+Holding the references for 30 seconds; inspect the cluster from another terminal...
+Driver exiting; references released.
+The spilled objects under /spill are deleted once the script exits.
 ```
 
-### 2.3 验证溢出是否发生
+在引用存活期间，无法放入内存对象存储的对象（对象存储大约保留最近 1 GiB 在内存中）以溢出文件的形式存放在 ESSD 卷上。
 
-查看集群维度的溢出统计：
+### 1.3 观察溢出对象的生命周期
+
+在 30 秒的保持窗口内，从另一个终端执行以下检查：对象被拆分存放在内存对象存储和溢出卷中。
 
 ```bash
+kubectl exec $HEAD_POD -- du -sh /spill
+kubectl exec $HEAD_POD -- ray memory --stats-only
+```
+
+预期输出（数值随集群情况变化）：
+
+```
+1.7G	/spill
+======== Object references status: 2026-08-24 00:52:28.365640 ========
+--- Aggregate object store stats across all nodes ---
+Plasma memory usage 984 MiB, 123 objects, 32.03% full, 8.59% needed
+Spilled 6728 MiB, 841 objects, avg write throughput 214 MiB/s
+```
+
+- `Plasma memory usage` 是对象存储当前的内存占用。
+- `Spilled ...` 是 **自 raylet 启动以来的累计计数器**（测试集群运行过多次示例），不是当前磁盘占用。当前磁盘占用以 `du -sh /spill` 的输出为准。
+
+脚本退出后，driver 释放引用，Ray 会在几秒内删除溢出文件。验证如下：
+
+```bash
+kubectl exec $HEAD_POD -- du -sh /spill
 kubectl exec $HEAD_POD -- ray memory --stats-only
 ```
 
 预期输出：
 
 ```
-======== Object references status: 2026-08-17 20:49:20.210899 ========
+24K	/spill
+======== Object references status: 2026-08-24 00:52:54.909951 ========
 --- Aggregate object store stats across all nodes ---
-Plasma memory usage 720 MiB, 90 objects, 35.16% full, 0.0% needed
-Spilled 1144 MiB, 143 objects, avg write throughput 223 MiB/s
+Plasma memory usage 0 MiB, 0 objects, 0.0% full, 0.0% needed
+Spilled 1856 MiB, 232 objects, avg write throughput 184 MiB/s
 ```
 
-溢出的文件位于 ESSD 卷上：
-
-```bash
-kubectl exec $HEAD_POD -- ls /spill
-```
-
-预期输出：
-
-```
-lost+found
-ray_spilled_objects_37d6d74ae053d78680b44210f0f1ed7dd77010c97bf6582dad9a8e67
-```
-
-Raylet 也会在日志中打印 INFO 级别的溢出消息（如[官方文档](https://docs.ray.io/en/latest/ray-core/objects/object-spilling.html)所述）。查看 raylet 日志：
-
-```bash
-kubectl exec $HEAD_POD -- grep "Spilled" /tmp/ray/session_latest/logs/raylet.out
-```
-
-预期输出：
-
-```
-[2026-08-17 20:49:11,455 I 660 660] (raylet) local_object_manager.cc:267: :info_message:Spilled 112 MiB, 14 objects, write throughput 62 MiB/s.
-[2026-08-17 20:49:14,781 I 660 660] (raylet) local_object_manager.cc:267: :info_message:Spilled 1144 MiB, 143 objects, write throughput 223 MiB/s.
-```
-
-当溢出的对象再次被访问时（例如通过 `ray.get`），Ray 从卷中恢复它们。恢复部分的统计如下：
-
-```
-Spilled 3416 MiB, 427 objects, avg write throughput 194 MiB/s
-Restored 1360 MiB, 170 objects, avg read throughput 1842 MiB/s
-```
+溢出目录中只保留空的 `ray_spilled_objects_...` 子目录。如果对象在存活期间再次被访问（例如通过 `ray.get`），Ray 会先从溢出卷中透明地恢复它们；具体语义请参考[官方 Object Spilling 文档](https://docs.ray.io/en/latest/ray-core/objects/object-spilling.html)。
 
 ## 调优建议
 
@@ -196,4 +177,4 @@ kubectl delete -f ray-cluster.yaml
 
 - [Object Spilling — Ray Core 官方文档](https://docs.ray.io/en/latest/ray-core/objects/object-spilling.html)
 - [RayCluster 配置 — KubeRay 官方文档](https://docs.ray.io/en/latest/cluster/kubernetes/user-guides/config.html)
-- [在 ACK 中使用云盘](https://help.aliyun.com/zh/ack/ack-managed-and-ack-dedicated/user-guide/use-cloud-disks)
+- [在 ACK 中使用云盘](https://help.aliyun.com/zh/ack/ack-managed-and-ack-dedicated/user-guide/disk-volume-overview-3)

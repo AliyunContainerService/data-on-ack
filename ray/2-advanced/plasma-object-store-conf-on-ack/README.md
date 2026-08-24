@@ -14,34 +14,16 @@ Ray's official documentation on object spilling is a good companion to this guid
 
 - Every Ray node runs a shared-memory **object store** for objects passed between tasks and actors. By default the store is 30% of the container's memory (capped at 200 GiB). It can be overridden with `object-store-memory` (bytes).
 - When the object store is full, Ray **spills** objects to a directory in the local filesystem, and transparently **restores** them (reads them back) when they are needed again. The default spill directory is a temporary directory under `/tmp/ray/session_...`.
-- On Kubernetes, `/tmp` inside a container is small and ephemeral: it is lost when the pod is recreated and it shares the pod's writable layer with everything else. For a RayCluster on ACK you should therefore mount a dedicated Kubernetes volume — an ESSD cloud disk is a good choice — and point Ray's spilling at it.
+- On Kubernetes, `/tmp` inside a container is small and ephemeral: it is lost when the pod is recreated and it shares the pod's writable layer with everything else. For a RayCluster on ACK you should therefore mount a dedicated Kubernetes volume (for example, an ESSD cloud disk) and point Ray's spilling at it.
 - Spilling is a per-node behavior: each raylet spills to its own local directory. A spilled object is still lost if its node dies; spilling is for absorbing capacity bursts, not for durability.
 
 > See also the official [Object Spilling](https://docs.ray.io/en/latest/ray-core/objects/object-spilling.html) documentation for the exact semantics.
 
-## 1. Set Object Spilling via ray.init()
+## 1. Spill to an ESSD Volume in a RayCluster
 
-In a local or standalone Ray cluster you can pass the spill directory directly to `ray.init()`:
+This section deploys a RayCluster whose head and worker each mount an ESSD cloud disk at `/spill`, with `object-spilling-directory` set to that path. In this example, the object store is capped at 1 GiB so the sample program can fill it quickly.
 
-```python
-import ray
-
-ray.init(object_spilling_directory="/path/to/spill/dir")
-```
-
-The same setting exists as a command line option when starting Ray manually:
-
-```bash
-ray start --head --object-spilling-directory=/path/to/spill/dir
-```
-
-> `object_spilling_directory` (and `object-store-memory`) are **raylet** parameters: they take effect when the Ray node is started. When your driver connects to an existing cluster with `ray.init(address="auto")`, these parameters are ignored — the configuration of the running nodes already exists. On KubeRay, nodes are started by the operator from the `rayStartParams` of the `RayCluster` (next section), so that is where the configuration goes.
-
-## 2. Spill to an ESSD Volume in a RayCluster
-
-This section deploys a RayCluster whose head and worker each mount an ESSD cloud disk at `/spill`, with `object-spilling-directory` set to that path. The object store is capped at 1 GiB so the sample program can fill it quickly.
-
-### 2.1 Deploy the RayCluster
+### 1.1 Deploy the RayCluster
 
 `ray-cluster.yaml` uses a Kubernetes generic ephemeral volume (`volumeClaimTemplate`) for the spill directory. Each pod gets its own PVC and ESSD disk, created from the template and deleted automatically together with the pod.
 
@@ -111,71 +93,70 @@ raycluster-object-spill-head-mskhh-spill                     Bound    d-2zecrrxs
 raycluster-object-spill-worker-group-worker-4n8r2-spill      Bound    d-2ze70w3khfxqavlc3772   20Gi       RWO            alicloud-disk-topology-alltype  60s
 ```
 
-### 2.2 Run a Sample That Spills
+### 1.2 Run a Sample That Spills
 
-`object_spill_sample.py` puts 240 objects of 8 MiB each (~1.88 GiB in total) into the object store with `ray.put`. Since the store is capped at 1 GiB, Ray has to spill the overflow to the ESSD volume. Copy it into the head pod and run it:
+`object_spill_sample.py` puts 240 objects of 8 MiB each (~1.88 GiB in total) into the object store with `ray.put`. Since the store is capped at 1 GiB, Ray has to spill the overflow to the ESSD volume. Copy it into the head pod and run it (`-u` keeps the output in order):
 
 ```bash
 kubectl cp object_spill_sample.py $HEAD_POD:/tmp/object_spill_sample.py
-kubectl exec $HEAD_POD -- python /tmp/object_spill_sample.py
+kubectl exec $HEAD_POD -- python -u /tmp/object_spill_sample.py
 ```
 
-Expected output (the Ray INFO lines are abbreviated):
+The script puts the objects, waits a few seconds for the asynchronous spilling to settle, measures how much of the spill volume is occupied, and then holds the references for 30 seconds so you can inspect the cluster from another terminal. It takes about a minute to finish.
+
+Expected output (Ray INFO lines are abbreviated; the `/spill` usage varies):
 
 ```
 Put 240 objects, ~1920 MiB total
-All objects are alive. Check spill stats with 'ray memory --stats-only'.
+Spill directory usage while the objects are alive:
+1.7G	/spill
+Holding the references for 30 seconds; inspect the cluster from another terminal...
+Driver exiting; references released.
+The spilled objects under /spill are deleted once the script exits.
 ```
 
-### 2.3 Verify That Spilling Happened
+While the references are alive, the objects that do not fit into the in-memory object store (the store keeps roughly the most recent 1 GiB in RAM) sit on the ESSD volume as spill files.
 
-Check the cluster-wide spill statistics:
+### 1.3 Observe the Spilled Objects' Lifecycle
+
+During the 30-second hold window, run the checks below from another terminal: the objects are split between the in-memory object store and the spill volume.
 
 ```bash
+kubectl exec $HEAD_POD -- du -sh /spill
+kubectl exec $HEAD_POD -- ray memory --stats-only
+```
+
+Expected output (numbers vary with the cluster):
+
+```
+1.7G	/spill
+======== Object references status: 2026-08-24 00:52:28.365640 ========
+--- Aggregate object store stats across all nodes ---
+Plasma memory usage 984 MiB, 123 objects, 32.03% full, 8.59% needed
+Spilled 6728 MiB, 841 objects, avg write throughput 214 MiB/s
+```
+
+- `Plasma memory usage` is the current in-memory usage of the object store.
+- `Spilled ...` is a **cumulative counter** since the raylet started (the test cluster had run the sample several times), not the current disk usage. The current usage is what `du -sh /spill` shows.
+
+Once the script exits, the driver releases the references and Ray deletes the spill files within a few seconds. Verify it:
+
+```bash
+kubectl exec $HEAD_POD -- du -sh /spill
 kubectl exec $HEAD_POD -- ray memory --stats-only
 ```
 
 Expected output:
 
 ```
-======== Object references status: 2026-08-17 20:49:20.210899 ========
+24K	/spill
+======== Object references status: 2026-08-24 00:52:54.909951 ========
 --- Aggregate object store stats across all nodes ---
-Plasma memory usage 720 MiB, 90 objects, 35.16% full, 0.0% needed
-Spilled 1144 MiB, 143 objects, avg write throughput 223 MiB/s
+Plasma memory usage 0 MiB, 0 objects, 0.0% full, 0.0% needed
+Spilled 1856 MiB, 232 objects, avg write throughput 184 MiB/s
 ```
 
-The spilled files are on the ESSD volume:
-
-```bash
-kubectl exec $HEAD_POD -- ls /spill
-```
-
-Expected output:
-
-```
-lost+found
-ray_spilled_objects_37d6d74ae053d78680b44210f0f1ed7dd77010c97bf6582dad9a8e67
-```
-
-The raylet also prints INFO-level messages about spilling, as described in the [official docs](https://docs.ray.io/en/latest/ray-core/objects/object-spilling.html). Find them in the raylet log:
-
-```bash
-kubectl exec $HEAD_POD -- grep "Spilled" /tmp/ray/session_latest/logs/raylet.out
-```
-
-Expected output:
-
-```
-[2026-08-17 20:49:11,455 I 660 660] (raylet) local_object_manager.cc:267: :info_message:Spilled 112 MiB, 14 objects, write throughput 62 MiB/s.
-[2026-08-17 20:49:14,781 I 660 660] (raylet) local_object_manager.cc:267: :info_message:Spilled 1144 MiB, 143 objects, write throughput 223 MiB/s.
-```
-
-When the spilled objects are accessed again (for example with `ray.get`), Ray restores them from the volume. The restore side of the stats looks like:
-
-```
-Spilled 3416 MiB, 427 objects, avg write throughput 194 MiB/s
-Restored 1360 MiB, 170 objects, avg read throughput 1842 MiB/s
-```
+The spill directory only keeps the empty `ray_spilled_objects_...` subdirectory. If the objects are accessed again (for example with `ray.get`) while they are alive, Ray transparently restores them from the spill volume first; see the [official Object Spilling](https://docs.ray.io/en/latest/ray-core/objects/object-spilling.html) documentation for the exact semantics.
 
 ## Tuning Notes
 
@@ -197,4 +178,4 @@ Deleting the RayCluster terminates the pods, which triggers the automatic remova
 
 - [Object Spilling — Ray Core official documentation](https://docs.ray.io/en/latest/ray-core/objects/object-spilling.html)
 - [RayCluster Configuration — KubeRay official documentation](https://docs.ray.io/en/latest/cluster/kubernetes/user-guides/config.html)
-- [Using cloud disks in ACK](https://help.aliyun.com/zh/ack/ack-managed-and-ack-dedicated/user-guide/use-cloud-disks)
+- [Using cloud disks in ACK](https://help.aliyun.com/zh/ack/ack-managed-and-ack-dedicated/user-guide/disk-volume-overview-3)
