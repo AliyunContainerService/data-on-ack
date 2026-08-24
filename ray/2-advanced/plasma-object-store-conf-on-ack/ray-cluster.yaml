@@ -1,0 +1,82 @@
+apiVersion: ray.io/v1
+kind: RayCluster
+metadata:
+  name: raycluster-object-spill
+  namespace: default
+spec:
+  suspend: false
+  headGroupSpec:
+    rayStartParams:
+      dashboard-host: 0.0.0.0
+      num-cpus: "0"
+      # 1 GiB object store on the head (default is 30% of container memory)
+      object-store-memory: "1073741824"
+      # Spill objects to the mounted ESSD volume once the store is full
+      object-spilling-directory: /spill
+    serviceType: ClusterIP
+    template:
+      spec:
+        securityContext:
+          # Ray runs as UID 1000; make the ESSD volume writable by that group
+          fsGroup: 1000
+        containers:
+        - image: <IMAGE_REGISTRY>/ray:2.56.1-py312-with-iris
+          imagePullPolicy: Always
+          name: ray-head
+          resources:
+            limits:
+              cpu: "1"
+              memory: 4Gi
+            requests:
+              cpu: "1"
+              memory: 4Gi
+          volumeMounts:
+          - name: spill
+            mountPath: /spill
+        volumes:
+        - name: spill
+          ephemeral:
+            volumeClaimTemplate:
+              spec:
+                accessModes:
+                - ReadWriteOnce
+                storageClassName: alicloud-disk-topology-alltype
+                resources:
+                  requests:
+                    storage: 20Gi
+  workerGroupSpecs:
+  - groupName: worker-group
+    numOfHosts: 1
+    rayStartParams:
+      object-store-memory: "1073741824"
+      object-spilling-directory: /spill
+    replicas: 1
+    template:
+      spec:
+        securityContext:
+          fsGroup: 1000
+        containers:
+        - image: <IMAGE_REGISTRY>/ray:2.56.1-py312-with-iris
+          imagePullPolicy: Always
+          name: ray-worker
+          resources:
+            limits:
+              cpu: "2"
+              memory: 4Gi
+            requests:
+              cpu: "2"
+              memory: 4Gi
+          volumeMounts:
+          - name: spill
+            mountPath: /spill
+        volumes:
+        - name: spill
+          ephemeral:
+            volumeClaimTemplate:
+              spec:
+                accessModes:
+                - ReadWriteOnce
+                storageClassName: alicloud-disk-topology-alltype
+                resources:
+                  requests:
+                    storage: 20Gi
