@@ -11,13 +11,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```
 data-on-ack/
 ├── ai-dashboard/          # Cluster admin operations dashboard
-│   ├── backend/           # Spring Boot (JDK 8/11, Maven, MySQL, MyBatis)
-│   └── frontend/          # Vue 2 + Element UI (vue-admin-template)
+│   ├── backend/           # Go (Gin) backend; entry: backend/cmd/server/main.go
+│   └── frontend/          # React 18 + Vite + antd (TypeScript)
 ├── ai-dev-console/        # Model dev/training console for engineers
-│   ├── cmd/               # Go CLI entry points
-│   ├── console/           # Gin-based Go web server + Vue frontend
-│   ├── controllers/       # Kubernetes controllers
-│   └── pkg/               # Shared Go packages
+│   ├── console/backend/   # Go backends:
+│   │   ├── cmd/server/    #   new stack entry point (canonical)
+│   │   ├── internal/      #   new stack implementation (canonical)
+│   │   ├── cmd/backend-server/ # legacy entry point (deprecated)
+│   │   └── pkg/           #   legacy implementation (deprecated)
+│   ├── console/frontend-new/ # React + Vite frontend (canonical)
+│   ├── console/frontend/  # legacy umi frontend (deprecated)
+│   ├── apis/              # CRD type definitions (training/notebook/data)
+│   └── pkg/               # Shared Go packages (infra backends, job controller)
 ├── commit-agent/          # gRPC sidecar for Jupyter notebook pods
 │   ├── cmd/               # CLI client (commit-ctl)
 │   ├── pkg/               # gRPC server implementation
@@ -35,22 +40,19 @@ data-on-ack/
 
 ### ai-dashboard
 
-**Backend (Spring Boot):**
+**Backend (Go/Gin):**
 ```bash
-cd ai-dashboard/backend
-mvn spring-boot:run          # Run dev server
-mvn clean package -DskipTests # Build JAR
-mvn test                     # Run tests
+cd ai-dashboard
+go build ./...               # Build all packages (entry: backend/cmd/server)
+go test ./backend/internal/... -count=1
 ```
 
-**Frontend (Vue 2):**
+**Frontend (React + Vite):**
 ```bash
 cd ai-dashboard/frontend
-npm install
-npm run dev                  # Dev server at http://localhost:9528
-npm run build:prod           # Production build
-npm run lint                 # Lint check
-npm run test:unit            # Jest unit tests
+npm ci --legacy-peer-deps
+npm run dev                  # Dev server (proxies /user /ops /k8s ... to :8080)
+npm run build                # tsc -b && vite build
 ```
 
 **Full Docker image build (from ai-dashboard/):**
@@ -63,12 +65,11 @@ make docker-build            # Builds frontend, packages backend, creates Docker
 
 ```bash
 cd ai-dev-console
-make manager                 # Build operator binary
-make build-backend           # Build console Go server
-make build-frontend          # Build console Vue frontend (npm)
-make console-build           # Docker build for console
-make operator-build          # Docker build for operator
-make docker-build            # Build all images
+make build-backend-new       # Build new backend binary (bin/server)
+make build-frontend-new      # Build new frontend (frontend-new/dist)
+make console-build           # Docker build for console (new stack, Dockerfile.console-new)
+make docker-build            # Build all images (new stack)
+make vet && make test        # Go vet / tests
 ```
 
 ### commit-agent
@@ -97,7 +98,7 @@ Charts in `charts/ack-ai-dashboard/` and `charts/ack-ai-dev-console/` use standa
 
 ## Key Architecture Notes
 
-- **ai-dashboard**: Backend uses fabric8 kubernetes-client to interact with the cluster, OAuth2 for auth, MyBatis + MySQL for persistence, and Zuul as API gateway. Frontend is a vue-admin-template scaffold with i18n (zh/en), Element UI components, and Vue Router.
-- **ai-dev-console**: Two binaries — an operator (controller-runtime based K8s controller) and a console server (Gin web framework with MySQL/GORM). Uses ack-arena SDK for job management.
+- **ai-dashboard**: Go backend (Gin) talking to the cluster via client-go and to Alibaba Cloud IMS for RAM OAuth2 login; session cookies (gorilla sessions). Frontend is React 18 + antd + zustand with i18n (zh/en). The backend entry point is `backend/cmd/server/main.go`; most management APIs require the admin role (`adminOnly` middleware).
+- **ai-dev-console**: Canonical stack is the new backend (`console/backend/internal`, Gin + client-go + IMS OAuth, per-tenant clients via SA tokens) with the `frontend-new` React frontend, built by `Dockerfile.console-new`. The legacy backend (`console/backend/pkg`, Gin + MySQL/GORM + arena SDK) is deprecated but still buildable. The standalone operator was removed in 2024-09; Notebook CRs are reconciled by the root `notebook-controller` module and training jobs by in-cluster operators.
 - **commit-agent**: gRPC service supporting both Docker and containerd runtimes. Runs as sidecar in Jupyter pods for code sync.
 - **notebook-controller**: kubeflow-style controller using controller-runtime. Manages `Notebook` CRDs (kubeflow.org/v1alpha1) and reconciles pods/services.

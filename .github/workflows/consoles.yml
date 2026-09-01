@@ -1,0 +1,106 @@
+name: consoles
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "ai-dashboard/**"
+      - "ai-dev-console/**"
+      - "charts/**"
+      - ".github/workflows/consoles.yml"
+  pull_request:
+    paths:
+      - "ai-dashboard/**"
+      - "ai-dev-console/**"
+      - "charts/**"
+      - ".github/workflows/consoles.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  dashboard-backend:
+    name: ai-dashboard backend (build/vet/test)
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        working-directory: ai-dashboard
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache-dependency-path: ai-dashboard/go.sum
+      - name: go build
+        run: go build ./...
+      - name: go vet
+        run: go vet ./backend/...
+      - name: go test
+        run: go test ./backend/internal/... -count=1
+
+  dev-console-backend:
+    name: ai-dev-console backend (build/vet/test)
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        working-directory: ai-dev-console
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache-dependency-path: ai-dev-console/go.sum
+      - name: go build
+        run: go build ./...
+      - name: go vet
+        run: go vet ./console/... ./apis/... ./pkg/infra/... ./pkg/util/... ./cmd/...
+      - name: go test
+        run: go test ./pkg/... ./apis/... -count=1
+
+  dashboard-frontend:
+    name: ai-dashboard frontend (build)
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        working-directory: ai-dashboard/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: npm ci
+        run: npm ci --legacy-peer-deps || npm install --legacy-peer-deps
+      - name: build
+        run: npm run build
+
+  dev-console-frontend-new:
+    name: ai-dev-console frontend-new (build)
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        working-directory: ai-dev-console/console/frontend-new
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: npm ci
+        run: npm ci || npm install
+      - name: build
+        run: npm run build
+
+  dev-console-frontend-legacy:
+    name: ai-dev-console legacy frontend (build)
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        working-directory: ai-dev-console/console/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: npm ci
+        run: npm ci --legacy-peer-deps || npm install --legacy-peer-deps
+      - name: build
+        run: npm run build

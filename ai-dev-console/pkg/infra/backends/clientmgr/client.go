@@ -17,10 +17,11 @@ limitations under the License.
 package clientmgr
 
 import (
+	"fmt"
 	"github.com/kubeflow/arena/pkg/apis/arenaclient"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientset "k8s.io/client-go/kubernetes"
-	"k8s.io/klog"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 

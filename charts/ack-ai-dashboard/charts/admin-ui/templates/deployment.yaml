@@ -64,17 +64,17 @@ spec:
               value: "{{ .Values.credentials.rrsa.oidcProviderArn }}"
             - name: OIDC_TOKEN_FILE
               value: "{{ .Values.credentials.rrsa.oidcTokenFile }}"
+            - name: OIDC_ROLE_ARN
+              value: "{{ .Values.credentials.rrsa.roleArn }}"
             - name: FRONTEND_DIR
               value: "/app/dist"
             - name: GRAFANA_PROXY_TARGET
               value: "{{ .Values.dashboard.grafanaProxyTarget | default "ack-ai-dashboard-grafana.kube-ai:80" }}"
-            {{- if .Values.auth.existingSecret }}
             - name: SESSION_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.auth.existingSecret }}
+                  name: {{ .Values.auth.existingSecret | default (printf "%s-session" (include "admin-ui.fullname" .)) }}
                   key: sessionSecret
-            {{- end }}
             - name: ENABLE_SECURE_COOKIE
               value: "{{ .Values.auth.secureCookie }}"
             {{- if .Values.auth.oauthSigninURL }}

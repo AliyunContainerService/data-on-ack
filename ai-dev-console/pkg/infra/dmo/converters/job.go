@@ -27,6 +27,7 @@ import (
 	"github.com/AliyunContainerService/data-on-ack/ai-dev-console/pkg/infra/dmo"
 	v1 "github.com/AliyunContainerService/data-on-ack/ai-dev-console/pkg/job_controller/api/v1"
 	"github.com/AliyunContainerService/data-on-ack/ai-dev-console/pkg/util"
+	"github.com/AliyunContainerService/data-on-ack/ai-dev-console/pkg/util/tenancy"
 	"github.com/kubeflow/arena/pkg/apis/types"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -75,8 +76,7 @@ func ConvertJobToDMOJob(job metav1.Object, kind string, specs map[v1.ReplicaType
 		dmoJob.RegionID = &region
 	}
 
-	/*
-		if tn, err := tenancy.GetTenancy(job); err == nil && tn != nil {
+	if tn, err := tenancy.GetTenancy(job); err == nil && tn != nil {
 			dmoJob.Tenant = &tn.Tenant
 			dmoJob.Group = &tn.Group
 			dmoJob.User = &tn.User
@@ -90,15 +90,6 @@ func ConvertJobToDMOJob(job metav1.Object, kind string, specs map[v1.ReplicaType
 			dmoJob.Tenant = pointer.StringPtr("")
 			dmoJob.User = pointer.StringPtr("")
 		}
-
-		serviceAccount := job.GetAnnotations()["arena.kubeflow.org/username"]
-		if serviceAccount != "" {
-			strArray := strings.Split(serviceAccount, ":")
-			if len(strArray) == 4 {
-				dmoJob.User = pointer.StringPtr(strArray[3])
-			}
-		}
-	*/
 
 	dmoJob.Status = v1.JobCreated
 	if condLen := len(jobStatus.Conditions); condLen > 0 {

@@ -77,38 +77,60 @@ type RamUser struct {
 	UpdateDate  string `json:"updateDate"`
 }
 
-// ListUsers lists all RAM users via IMS API.
+// maxListUsersPages guards against infinite pagination loops.
+const maxListUsersPages = 200
+
+// ListUsers lists all RAM users via IMS API, following Marker/IsTruncated
+// pagination until every page has been fetched.
 func (c *IMSClient) ListUsers() ([]RamUser, error) {
 	client, err := c.GetClient()
 	if err != nil {
 		return nil, err
 	}
 
-	req := &ims.ListUsersRequest{}
-	resp, err := client.ListUsers(req)
-	if err != nil {
-		return nil, fmt.Errorf("IMS ListUsers: %w", err)
-	}
-
 	users := make([]RamUser, 0)
-	for _, u := range resp.Body.Users.User {
-		ru := RamUser{}
-		if u.UserId != nil {
-			ru.UserID = *u.UserId
+	marker := ""
+	for page := 0; page < maxListUsersPages; page++ {
+		req := &ims.ListUsersRequest{}
+		if marker != "" {
+			req.Marker = &marker
 		}
-		if u.UserPrincipalName != nil {
-			ru.UserName = *u.UserPrincipalName
+		resp, err := client.ListUsers(req)
+		if err != nil {
+			return nil, fmt.Errorf("IMS ListUsers: %w", err)
 		}
-		if u.DisplayName != nil {
-			ru.DisplayName = *u.DisplayName
+		if resp.Body == nil {
+			break
 		}
-		if u.CreateDate != nil {
-			ru.CreateDate = *u.CreateDate
+		if resp.Body.Users != nil {
+			for _, u := range resp.Body.Users.User {
+				ru := RamUser{}
+				if u.UserId != nil {
+					ru.UserID = *u.UserId
+				}
+				if u.UserPrincipalName != nil {
+					ru.UserName = *u.UserPrincipalName
+				}
+				if u.DisplayName != nil {
+					ru.DisplayName = *u.DisplayName
+				}
+				if u.CreateDate != nil {
+					ru.CreateDate = *u.CreateDate
+				}
+				if u.UpdateDate != nil {
+					ru.UpdateDate = *u.UpdateDate
+				}
+				users = append(users, ru)
+			}
 		}
-		if u.UpdateDate != nil {
-			ru.UpdateDate = *u.UpdateDate
+
+		if resp.Body.IsTruncated == nil || !*resp.Body.IsTruncated {
+			break
 		}
-		users = append(users, ru)
+		if resp.Body.Marker == nil || *resp.Body.Marker == "" || *resp.Body.Marker == marker {
+			break
+		}
+		marker = *resp.Body.Marker
 	}
 	return users, nil
 }

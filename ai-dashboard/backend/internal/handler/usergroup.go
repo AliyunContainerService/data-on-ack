@@ -17,11 +17,12 @@ func newUserGroupHandler(ugSvc *service.UserGroupService, qSvc *service.QuotaSer
 }
 
 func (h *UserGroupHandler) RegisterRoutes(rg *gin.RouterGroup) {
-	rg.GET("/user_group/list", h.List)
-	rg.GET("/user_group/get_group_namespaces", h.GetGroupNamespaces)
-	rg.POST("/user_group/create", h.Create)
-	rg.PUT("/user_group/update", h.Update)
-	rg.PUT("/user_group/delete", h.Delete)
+	// User group management is a cluster-admin capability.
+	rg.GET("/user_group/list", adminOnly, h.List)
+	rg.GET("/user_group/get_group_namespaces", adminOnly, h.GetGroupNamespaces)
+	rg.POST("/user_group/create", adminOnly, h.Create)
+	rg.PUT("/user_group/update", adminOnly, h.Update)
+	rg.PUT("/user_group/delete", adminOnly, h.Delete)
 }
 
 func (h *UserGroupHandler) List(c *gin.Context) {

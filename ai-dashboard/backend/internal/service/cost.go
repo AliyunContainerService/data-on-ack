@@ -12,6 +12,12 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
+// podListLimit bounds cluster-wide pod listings so a single API call cannot
+// stream an unbounded number of objects.
+// TODO: for very large clusters, follow ListOptions.Continue pagination (or a
+// metrics-based data source) instead of truncating.
+const podListLimit = 2000
+
 // CostService provides GPU usage and cost tracking.
 type CostService struct {
 	kubeClient *k8s.Client
@@ -84,8 +90,13 @@ func (s *CostService) GetGPUUsage(timeRange string) (*CostSummary, error) {
 	duration := parseDuration(timeRange)
 	cutoff := time.Now().Add(-duration)
 
-	// List all completed and running training pods across all namespaces
-	allPods, err := s.kubeClient.Typed().CoreV1().Pods("").List(context.TODO(), metav1.ListOptions{})
+	// List completed and running training pods across all namespaces.
+	// Bounded by podListLimit: the time-window filter below is computed from
+	// pod timestamps, which cannot be expressed as a field selector, so very
+	// large clusters may be truncated (see podListLimit comment).
+	allPods, err := s.kubeClient.Typed().CoreV1().Pods("").List(context.TODO(), metav1.ListOptions{
+		Limit: podListLimit,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("list pods: %w", err)
 	}
@@ -187,6 +198,7 @@ func (s *CostService) getNamespaceResourceUsage() map[string]map[string]int64 {
 
 	pods, err := s.kubeClient.Typed().CoreV1().Pods("").List(context.TODO(), metav1.ListOptions{
 		FieldSelector: "status.phase=Running",
+		Limit:         podListLimit,
 	})
 	if err != nil {
 		return nsUsage

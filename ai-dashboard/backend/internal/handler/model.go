@@ -18,10 +18,11 @@ func newModelAdminHandler(modelService *service.ModelAdminService) *ModelAdminHa
 }
 
 func (h *ModelAdminHandler) RegisterRoutes(rg *gin.RouterGroup) {
-	rg.GET("/ops/models", h.ListModels)
-	rg.GET("/ops/models/:name/versions", h.GetVersions)
-	rg.POST("/ops/models/:name/versions", h.CreateVersion)
-	rg.GET("/ops/models/:name/lineage", h.GetLineage)
+	// Model registry administration is a cluster-admin capability.
+	rg.GET("/ops/models", adminOnly, h.ListModels)
+	rg.GET("/ops/models/:name/versions", adminOnly, h.GetVersions)
+	rg.POST("/ops/models/:name/versions", adminOnly, h.CreateVersion)
+	rg.GET("/ops/models/:name/lineage", adminOnly, h.GetLineage)
 }
 
 // ListModels returns all registered models with version counts.

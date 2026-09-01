@@ -28,8 +28,11 @@ func newUserHandler(ramSvc *service.RamService, userSvc *service.UserService, au
 }
 
 func (h *UserHandler) RegisterRoutes(rg *gin.RouterGroup) {
-	rg.GET("/user/list/ramUsers", h.ListRamUsers)
-	rg.GET("/user/get", h.GetUserByAliuid)
+	// User management is a cluster-admin capability.
+	rg.GET("/user/list/ramUsers", adminOnly, h.ListRamUsers)
+	rg.GET("/user/get", adminOnly, h.GetUserByAliuid)
+	// /user/info returns the *current* user info used by the frontend top bar
+	// on every page, and /user/logout is self-logout: both stay at login level.
 	rg.GET("/user/info", h.UserInfo)
 	rg.POST("/user/logout", h.Logout)
 }

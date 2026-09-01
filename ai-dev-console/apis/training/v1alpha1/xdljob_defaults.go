@@ -43,6 +43,11 @@ func setDefaults_XDLJobSpec(spec *XDLJobSpec) {
 
 // setDefaults_XDLJobPort sets the default ports for xdl container.
 func setDefaults_XDLJobPort(spec *corev1.PodSpec) {
+	// Malformed CRs may carry an empty container list; defaulting must not panic.
+	if len(spec.Containers) == 0 {
+		return
+	}
+
 	index := 0
 	for i, container := range spec.Containers {
 		if container.Name == XDLJobDefaultContainerName {

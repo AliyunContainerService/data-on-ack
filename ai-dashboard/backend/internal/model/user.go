@@ -17,7 +17,6 @@ type UserSpec struct {
 	Aliuid           string           `json:"aliuid,omitempty"`
 	UserName         string           `json:"userName,omitempty"`
 	UserId           string           `json:"userId,omitempty"`
-	Password         string           `json:"password,omitempty"`
 	Groups           []string         `json:"groups,omitempty"`
 	ApiRoles         []string         `json:"apiRoles,omitempty"`
 	Deletable        *bool            `json:"deletable,omitempty"`

@@ -27,6 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery"
 	"k8s.io/klog"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 )
 
@@ -110,7 +111,11 @@ func workloadCRDInstalled(gvk schema.GroupVersionKind) bool {
 	if discoveryClient == nil && atomic.LoadInt32(&initialized) == 0 {
 		initClient()
 	}
-	if discoveryClient == nil && atomic.LoadInt32(&initialized) == 1 {
+	if discoveryClient == nil {
+		// Discovery client could not be built (e.g. no kube config in the
+		// current environment). Fall back to "installed" rather than silently
+		// disabling workloads; detection will retry once a config is available.
+		klog.Warningf("workload CRD detection unavailable for %s, assuming installed", gvk)
 		return true
 	}
 	crdList, err := discoveryClient.ServerResourcesForGroupVersion(gvk.GroupVersion().String())
@@ -133,5 +138,17 @@ func initClient() {
 	if atomic.LoadInt32(&initialized) == 1 {
 		return
 	}
+	cfg, err := ctrl.GetConfig()
+	if err != nil {
+		// Leave initialized==0 so detection retries when a config appears.
+		klog.Warningf("workload gate: get rest config failed: %v", err)
+		return
+	}
+	dc, err := discovery.NewDiscoveryClientForConfig(cfg)
+	if err != nil {
+		klog.Warningf("workload gate: create discovery client failed: %v", err)
+		return
+	}
+	discoveryClient = dc
 	atomic.StoreInt32(&initialized, 1)
 }

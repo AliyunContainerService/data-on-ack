@@ -14,18 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package options
+package apis
 
-var (
-	// CtrlConfig holds the default configuration of the job controller.
-	// MaxConcurrentReconciles defaults to 1.
-	CtrlConfig = JobControllerConfiguration{
-		MaxConcurrentReconciles: 1,
-	}
-)
+import "github.com/AliyunContainerService/data-on-ack/ai-dev-console/apis/data/v1"
 
-type JobControllerConfiguration struct {
-	// MaxConcurrentReconciles is the maximum number of concurrent Reconciles which can be run.
-	// Defaults to 1.
-	MaxConcurrentReconciles int
+func init() {
+	AddToSchemes = append(AddToSchemes, v1.AddToScheme)
 }

@@ -23,6 +23,11 @@ import (
 
 // setDefaultPort sets the default ports for mpi container.
 func setDefaults_MPIJobPort(spec *corev1.PodSpec) {
+	// Malformed CRs may carry an empty container list; defaulting must not panic.
+	if len(spec.Containers) == 0 {
+		return
+	}
+
 	index := 0
 	for i, container := range spec.Containers {
 		if container.Name == MPIJobDefaultContainerName {

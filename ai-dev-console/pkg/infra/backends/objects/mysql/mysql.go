@@ -17,6 +17,7 @@ limitations under the License.
 package mysql
 
 import (
+	"errors"
 	"strconv"
 	"sync/atomic"
 	"time"
@@ -44,6 +45,12 @@ const (
 	// initListSize defines the initial capacity when list objects from backend.
 	initListSize = 32
 )
+
+// errEtcdVersionConflict is returned when a job update loses the optimistic
+// lock race, i.e. the row has been advanced to a newer etcd_version by
+// another writer between the read and the update. Callers should re-read the
+// record and retry.
+var errEtcdVersionConflict = errors.New("mysql: job etcd_version conflict, row was updated by another writer")
 
 func NewMysqlBackendService() backends.ObjectStorageBackend {
 	klog.Info("use mysql backend for object storage")
@@ -737,7 +744,76 @@ func (b *mysqlBackend) updateCron(oldCron, newCron *dmo.Cron) error {
 			Name:      oldCron.Name,
 			Namespace: oldCron.Namespace,
 			UID:       oldCron.UID,
-		}).Updates(newCron).Error
+		}).Updates(cronUpdatesMap(newCron)).Error
+}
+
+// cronUpdatesMap mirrors jobUpdatesMap for dmo.Cron: gorm v1 struct-based
+// Updates skip zero-value fields, which would drop is_in_k8s = 0 when a cron
+// is deleted (DeleteCron). Nil/zero fields are omitted to keep the previous
+// semantics for every other column.
+func cronUpdatesMap(cron *dmo.Cron) map[string]interface{} {
+	updates := map[string]interface{}{
+		"is_in_k8s":    cron.IsInK8s,
+		"gmt_modified": time.Now(),
+	}
+	if cron.Name != "" {
+		updates["name"] = cron.Name
+	}
+	if cron.Namespace != "" {
+		updates["namespace"] = cron.Namespace
+	}
+	if cron.UID != "" {
+		updates["uid"] = cron.UID
+	}
+	if cron.Kind != "" {
+		updates["kind"] = cron.Kind
+	}
+	if cron.Status != "" {
+		updates["status"] = cron.Status
+	}
+	if cron.RegionID != nil {
+		updates["region_id"] = *cron.RegionID
+	}
+	if cron.ClusterID != nil {
+		updates["cluster_id"] = *cron.ClusterID
+	}
+	if cron.Schedule != "" {
+		updates["schedule"] = cron.Schedule
+	}
+	if cron.ConcurrencyPolicy != "" {
+		updates["concurrency_policy"] = cron.ConcurrencyPolicy
+	}
+	if cron.Active != "" {
+		updates["active"] = cron.Active
+	}
+	if cron.History != "" {
+		updates["history"] = cron.History
+	}
+	if cron.HistoryLimit != nil {
+		updates["history_limit"] = *cron.HistoryLimit
+	}
+	if cron.IsDeleted != nil {
+		updates["is_deleted"] = *cron.IsDeleted
+	}
+	if cron.Suspend != nil {
+		updates["suspend"] = *cron.Suspend
+	}
+	if cron.Deadline != nil {
+		updates["deadline"] = *cron.Deadline
+	}
+	if cron.User != nil {
+		updates["user_id"] = *cron.User
+	}
+	if cron.LastScheduleTime != nil {
+		updates["last_schedule_time"] = *cron.LastScheduleTime
+	}
+	if !cron.GmtCreated.IsZero() {
+		updates["gmt_created"] = cron.GmtCreated
+	}
+	if !cron.GmtModified.IsZero() {
+		updates["gmt_modified"] = cron.GmtModified
+	}
+	return updates
 }
 
 func (b *mysqlBackend) createNewPod(pod *corev1.Pod) error {
@@ -852,30 +928,26 @@ func (b *mysqlBackend) updateJob(oldJob, newJob *dmo.Job) error {
 		newJob.GmtJobRunning = oldJob.GmtJobRunning
 	}
 
+	// Build an explicit column->value map: gorm v1 struct-based Updates skip
+	// zero-value fields, which would silently drop legitimate writes such as
+	// is_in_k8s = 0 when a job leaves the cluster.
 	result := b.db.Model(&dmo.Job{}).Where(&dmo.Job{
 		Name:      oldJob.Name,
 		Namespace: oldJob.Namespace,
 		UID:       oldJob.UID,
-	}).Updates(&dmo.Job{
-		Name:            newJob.Name,
-		Namespace:       newJob.Namespace,
-		UID:             newJob.UID,
-		Status:          newJob.Status,
-		RegionID:        newJob.RegionID,
-		EtcdVersion:     newJob.EtcdVersion,
-		JobJson:         newJob.JobJson,
-		Extended:        newJob.Extended,
-		IsDeleted:       newJob.IsDeleted,
-		IsInK8s:         newJob.IsInK8s,
-		GmtJobSubmitted: newJob.GmtJobSubmitted,
-		GmtJobRunning:   newJob.GmtJobRunning,
-		GmtJobStopped:   newJob.GmtJobStopped,
-		GmtJobFinished:  newJob.GmtJobFinished,
-		ReasonCode:      newJob.ReasonCode,
-		Reason:          newJob.Reason,
-	})
+	}).
+		// Optimistic locking: only update the row if it still carries the
+		// etcd_version observed at read time. A concurrent writer that already
+		// advanced the version makes this UPDATE affect zero rows.
+		Where("etcd_version = ?", oldJob.EtcdVersion).
+		Updates(jobUpdatesMap(newJob))
 	if result.Error != nil {
 		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		klog.Warningf("[mysql.updateJob] etcd_version conflict, job %s/%s (uid: %s) expected version: %s",
+			oldJob.Namespace, oldJob.Name, oldJob.UID, oldJob.EtcdVersion)
+		return errEtcdVersionConflict
 	}
 
 	if oldJob.Status != apiv1.JobSucceeded && oldJob.Status != apiv1.JobFailed && oldJob.Status != utils.JobStopped {
@@ -888,6 +960,68 @@ func (b *mysqlBackend) updateJob(oldJob, newJob *dmo.Job) error {
 		}
 	}
 	return nil
+}
+
+// jobUpdatesMap builds the explicit column->value update map for a dmo.Job row.
+// It mirrors the fields previously passed to the struct-based Updates call,
+// with two differences:
+//   - is_in_k8s is always written, so resetting it to 0 (job removed from the
+//     cluster) is actually persisted instead of being skipped as a zero value;
+//   - nil pointer / zero-value fields are omitted to preserve the previous
+//     "never overwrite with zero" semantics for every other column.
+func jobUpdatesMap(job *dmo.Job) map[string]interface{} {
+	updates := map[string]interface{}{
+		"is_in_k8s": job.IsInK8s,
+		// gorm v1 map-based Updates do not touch gmt_modified automatically,
+		// keep it fresh explicitly.
+		"gmt_modified": time.Now(),
+	}
+	if job.Name != "" {
+		updates["name"] = job.Name
+	}
+	if job.Namespace != "" {
+		updates["namespace"] = job.Namespace
+	}
+	if job.UID != "" {
+		updates["uid"] = job.UID
+	}
+	if job.Status != "" {
+		updates["status"] = string(job.Status)
+	}
+	if job.RegionID != nil {
+		updates["region_id"] = *job.RegionID
+	}
+	if job.EtcdVersion != "" {
+		updates["etcd_version"] = job.EtcdVersion
+	}
+	if job.JobJson != "" {
+		updates["job_json"] = job.JobJson
+	}
+	if job.Extended != nil {
+		updates["extended"] = *job.Extended
+	}
+	if job.IsDeleted != nil {
+		updates["is_deleted"] = *job.IsDeleted
+	}
+	if !job.GmtJobSubmitted.IsZero() {
+		updates["gmt_job_submitted"] = job.GmtJobSubmitted
+	}
+	if job.GmtJobRunning != nil {
+		updates["gmt_job_running"] = *job.GmtJobRunning
+	}
+	if job.GmtJobStopped != nil {
+		updates["gmt_job_stopped"] = *job.GmtJobStopped
+	}
+	if job.GmtJobFinished != nil {
+		updates["gmt_job_finished"] = *job.GmtJobFinished
+	}
+	if job.ReasonCode != nil {
+		updates["reason_code"] = *job.ReasonCode
+	}
+	if job.Reason != nil {
+		updates["reason"] = *job.Reason
+	}
+	return updates
 }
 
 func (b *mysqlBackend) init() error {
@@ -934,6 +1068,9 @@ func (b *mysqlBackend) init() error {
 	if !b.db.HasTable(&dmo.EvaluateJob{}) {
 		klog.Infof("database has not table %s, try to create it", dmo.EvaluateJob{}.TableName())
 		err = b.db.CreateTable(&dmo.EvaluateJob{}).Error
+		if err != nil {
+			return err
+		}
 	}
 	if !b.db.HasTable(&dmo.Notebook{}) {
 		klog.Infof("database has not table %s, try to create it", dmo.Notebook{}.TableName())
@@ -943,11 +1080,26 @@ func (b *mysqlBackend) init() error {
 		}
 	}
 
-	//如果数据库已创建，在以下表中增加字段
-	b.db.Exec("ALTER TABLE cron ADD user_id VARCHAR(128)")
-	b.db.Exec("ALTER TABLE model ADD user_id VARCHAR(128)")
-	b.db.Exec("ALTER TABLE evaluate ADD user_id VARCHAR(128)")
-	b.db.Exec("ALTER TABLE notebook ADD user_id VARCHAR(128)")
+	// Add the user_id column to pre-existing tables. The column check makes
+	// the migration idempotent so restarts no longer rely on ignoring
+	// "duplicate column" errors.
+	migrations := []struct {
+		model interface{}
+		table string
+	}{
+		{&dmo.Cron{}, "cron"},
+		{&dmo.Model{}, "model"},
+		{&dmo.EvaluateJob{}, "evaluate"},
+		{&dmo.Notebook{}, "notebook"},
+	}
+	for _, m := range migrations {
+		if b.db.HasTable(m.model) && !b.db.NewScope(m.model).HasColumn("user_id") {
+			if err := b.db.Exec("ALTER TABLE " + m.table + " ADD user_id VARCHAR(128)").Error; err != nil {
+				klog.Errorf("add user_id column to %s failed: %v", m.table, err)
+				return err
+			}
+		}
+	}
 
 	return nil
 }

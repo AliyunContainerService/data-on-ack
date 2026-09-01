@@ -61,6 +61,8 @@ console:
   rrsa:
     oidcProviderArn: ""
     oidcTokenFile: "/var/run/secrets/tokens/oidc-token"
+    # RAM role ARN to assume (required for rrsa mode), e.g. acs:ram::<UID>:role/<role-name>
+    roleArn: ""
 
 # Authentication and session configuration
 auth:

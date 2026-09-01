@@ -19,6 +19,7 @@ package arena
 import (
 	"fmt"
 	trainingv1alpha1 "github.com/AliyunContainerService/data-on-ack/ai-dev-console/apis/training/v1alpha1"
+	"github.com/AliyunContainerService/data-on-ack/ai-dev-console/pkg/code_sync"
 	"github.com/AliyunContainerService/data-on-ack/ai-dev-console/pkg/infra/backends"
 	"github.com/AliyunContainerService/data-on-ack/ai-dev-console/pkg/infra/backends/clientmgr"
 	clientregistry "github.com/AliyunContainerService/data-on-ack/ai-dev-console/pkg/infra/backends/tenant"
@@ -63,7 +64,7 @@ func (a *arenaBackend) UserName(userName string) backends.ObjectClientBackend {
 	return copyArenaBackend
 }
 
-func (a *arenaBackend) getArenaClient() *arenaclient.ArenaClient {
+func (a *arenaBackend) getArenaClient() (*arenaclient.ArenaClient, error) {
 	var arena *arenaclient.ArenaClient
 	var err error
 	if a.userName == "" {
@@ -72,9 +73,13 @@ func (a *arenaBackend) getArenaClient() *arenaclient.ArenaClient {
 		arena, err = clientregistry.GetArenaClient(a.userName)
 		if err != nil {
 			klog.Errorf("get arena client of user %s failed, err:%v", a.userName, err)
+			return nil, err
 		}
 	}
-	return arena
+	if arena == nil {
+		return nil, fmt.Errorf("arena client is not available (user: %q)", a.userName)
+	}
+	return arena, nil
 }
 
 func (a *arenaBackend) SubmitEvaluateJob(evaluateJob *dmo.SubmitEvaluateJobInfo) error {
@@ -88,7 +93,11 @@ func (a *arenaBackend) SubmitEvaluateJob(evaluateJob *dmo.SubmitEvaluateJobInfo)
 		ns = "default"
 	}
 
-	if err := a.getArenaClient().Evaluate().Namespace(ns).SubmitEvaluateJob(submitEvaluateJob); err != nil {
+	arenaClient, err := a.getArenaClient()
+	if err != nil {
+		return err
+	}
+	if err := arenaClient.Evaluate().Namespace(ns).SubmitEvaluateJob(submitEvaluateJob); err != nil {
 		klog.Errorf("failed to submit evaluateJob, reason: %v\n", err)
 		return err
 	}
@@ -109,7 +118,11 @@ func (a *arenaBackend) SubmitJob(job *dmo.SubmitJobInfo) error {
 		ns = "default"
 	}
 
-	if err := a.getArenaClient().Training().Namespace(ns).Submit(submitJob); err != nil {
+	arenaClient, err := a.getArenaClient()
+	if err != nil {
+		return err
+	}
+	if err := arenaClient.Training().Namespace(ns).Submit(submitJob); err != nil {
 		klog.Errorf("failed to submit job, reason: %v\n", err)
 		return err
 	}
@@ -127,7 +140,11 @@ func (a *arenaBackend) submitCron(job *dmo.SubmitJobInfo) error {
 	if ns == "" {
 		ns = "default"
 	}
-	if err = a.getArenaClient().Cron().Namespace(ns).SubmitCronTrainingJob(cronJob); err != nil {
+	arenaClient, err := a.getArenaClient()
+	if err != nil {
+		return err
+	}
+	if err = arenaClient.Cron().Namespace(ns).SubmitCronTrainingJob(cronJob); err != nil {
 		klog.Errorf("failed to submit cron, reason: %v\n", err)
 		return err
 	}
@@ -138,7 +155,11 @@ func (a *arenaBackend) SuspendCron(ns, name, cronID string) error {
 	if ns == "" {
 		ns = "default"
 	}
-	err := a.getArenaClient().Cron().Namespace(ns).Suspend(name)
+	arenaClient, err := a.getArenaClient()
+	if err != nil {
+		return err
+	}
+	err = arenaClient.Cron().Namespace(ns).Suspend(name)
 	if err != nil {
 		klog.Errorf("suspend cron %v/%v error: %v", ns, name, err)
 		return err
@@ -150,7 +171,11 @@ func (a *arenaBackend) ResumeCron(ns, name, cronID string) error {
 	if ns == "" {
 		ns = "default"
 	}
-	err := a.getArenaClient().Cron().Namespace(ns).Resume(name)
+	arenaClient, err := a.getArenaClient()
+	if err != nil {
+		return err
+	}
+	err = arenaClient.Cron().Namespace(ns).Resume(name)
 	if err != nil {
 		klog.Errorf("resume cron %v/%v error: %v", ns, name, err)
 		return err
@@ -162,7 +187,11 @@ func (a *arenaBackend) StopCron(ns, name, cronID string) error {
 	if ns == "" {
 		ns = "default"
 	}
-	err := a.getArenaClient().Cron().Namespace(ns).Delete(name)
+	arenaClient, err := a.getArenaClient()
+	if err != nil {
+		return err
+	}
+	err = arenaClient.Cron().Namespace(ns).Delete(name)
 	if err != nil {
 		klog.Errorf("delete cron %v/%v error: %v", ns, name, err)
 	}
@@ -170,7 +199,11 @@ func (a *arenaBackend) StopCron(ns, name, cronID string) error {
 }
 
 func (a *arenaBackend) StopJob(ns, name, jobID, kind string) error {
-	err := a.getArenaClient().Training().Namespace(ns).Delete(utils.GetArenaJobTypeFromKind(kind), name)
+	arenaClient, err := a.getArenaClient()
+	if err != nil {
+		return err
+	}
+	err = arenaClient.Training().Namespace(ns).Delete(utils.GetArenaJobTypeFromKind(kind), name)
 	if err != nil {
 		klog.Errorf("delete job %v/%v error: %v", ns, name, err)
 		return err
@@ -179,7 +212,11 @@ func (a *arenaBackend) StopJob(ns, name, jobID, kind string) error {
 }
 
 func (a *arenaBackend) DeleteEvaluateJob(ns, name string) error {
-	err := a.getArenaClient().Evaluate().Namespace(ns).Delete(name)
+	arenaClient, err := a.getArenaClient()
+	if err != nil {
+		return err
+	}
+	err = arenaClient.Evaluate().Namespace(ns).Delete(name)
 	if err != nil {
 		klog.Errorf("delete evaluateJob %v/%v error: %v", ns, name, err)
 		return err
@@ -190,11 +227,14 @@ func (a *arenaBackend) DeleteEvaluateJob(ns, name string) error {
 func genArenaSubmitEvaluateJob(evaluateJob *dmo.SubmitEvaluateJobInfo) (*evaluate.EvaluateJob, error) {
 	envs := evaluateJob.Envs
 	if evaluateJob.CodeBranch != "" {
-		envs["GIT_SYNC_BRANCH"] = evaluateJob.CodeBranch
+		envs[code_sync.GitSyncBranchEnv] = evaluateJob.CodeBranch
 	}
 	if evaluateJob.CodeUser != "" && evaluateJob.CodePassword != "" {
-		envs["GIT_SYNC_USERNAME"] = evaluateJob.CodeUser
-		envs["GIT_SYNC_PASSWORD"] = evaluateJob.CodePassword
+		// SECURITY: git credentials are injected into the Pod as plaintext
+		// env vars; see the note on code_sync.GitSyncUsernameEnv for the risk
+		// and the planned Secret-based mitigation.
+		envs[code_sync.GitSyncUsernameEnv] = evaluateJob.CodeUser
+		envs[code_sync.GitSyncPasswordEnv] = evaluateJob.CodePassword
 	}
 	builder := evaluate.NewEvaluateJobBuilder().
 		Name(evaluateJob.Name).
@@ -287,11 +327,12 @@ func genArenaSubmitJob(job *dmo.SubmitJobInfo) (*training.Job, error) {
 		}
 
 		if job.CodeBranch != "" {
-			envs["GIT_SYNC_BRANCH"] = job.CodeBranch
+			envs[code_sync.GitSyncBranchEnv] = job.CodeBranch
 		}
 		if job.CodeUser != "" && job.CodePassword != "" {
-			envs["GIT_SYNC_USERNAME"] = job.CodeUser
-			envs["GIT_SYNC_PASSWORD"] = job.CodePassword
+			// SECURITY: plaintext credential injection, see code_sync.GitSyncUsernameEnv.
+			envs[code_sync.GitSyncUsernameEnv] = job.CodeUser
+			envs[code_sync.GitSyncPasswordEnv] = job.CodePassword
 		}
 		if len(envs) > 0 {
 			builder.Envs(envs)
@@ -337,11 +378,12 @@ func genArenaSubmitJob(job *dmo.SubmitJobInfo) (*training.Job, error) {
 		}
 
 		if job.CodeBranch != "" {
-			envs["GIT_SYNC_BRANCH"] = job.CodeBranch
+			envs[code_sync.GitSyncBranchEnv] = job.CodeBranch
 		}
 		if job.CodeUser != "" && job.CodePassword != "" {
-			envs["GIT_SYNC_USERNAME"] = job.CodeUser
-			envs["GIT_SYNC_PASSWORD"] = job.CodePassword
+			// SECURITY: plaintext credential injection, see code_sync.GitSyncUsernameEnv.
+			envs[code_sync.GitSyncUsernameEnv] = job.CodeUser
+			envs[code_sync.GitSyncPasswordEnv] = job.CodePassword
 		}
 		if len(envs) > 0 {
 			builder.Envs(envs)
@@ -411,11 +453,12 @@ func genArenaSubmitCron(job *dmo.SubmitJobInfo) (*cron.Job, error) {
 		}
 
 		if job.CodeBranch != "" {
-			envs["GIT_SYNC_BRANCH"] = job.CodeBranch
+			envs[code_sync.GitSyncBranchEnv] = job.CodeBranch
 		}
 		if job.CodeUser != "" && job.CodePassword != "" {
-			envs["GIT_SYNC_USERNAME"] = job.CodeUser
-			envs["GIT_SYNC_PASSWORD"] = job.CodePassword
+			// SECURITY: plaintext credential injection, see code_sync.GitSyncUsernameEnv.
+			envs[code_sync.GitSyncUsernameEnv] = job.CodeUser
+			envs[code_sync.GitSyncPasswordEnv] = job.CodePassword
 		}
 		if len(envs) > 0 {
 			builder.Envs(envs)

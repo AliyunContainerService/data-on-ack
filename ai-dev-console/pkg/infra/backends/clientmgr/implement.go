@@ -110,7 +110,7 @@ func (c *clientMgr) GetCtrlClientWithConfig(kubeConfig []byte) client.Client {
 
 	cl, err := client.New(restConfig, client.Options{Scheme: cmgr.scheme})
 	if err != nil {
-		return nil, fmt.Errorf("new ctrl client with config: %w", err)
+		return nil
 	}
 
 	return cl

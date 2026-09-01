@@ -17,6 +17,7 @@ limitations under the License.
 package utils
 
 import (
+	"sync"
 	"context"
 	"encoding/json"
 	datav1 "github.com/AliyunContainerService/data-on-ack/ai-dev-console/apis/data/v1"
@@ -27,6 +28,26 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
+var (
+	userDynOnce   sync.Once
+	userDynClient dynamic.Interface
+	userDynErr    error
+)
+
+// getUserDynamicClient lazily builds (and caches) a dynamic client. Unlike
+// ctrl.GetConfigOrDie it never kills the process on the request path.
+func getUserDynamicClient() (dynamic.Interface, error) {
+	userDynOnce.Do(func() {
+		cfg, err := ctrl.GetConfig()
+		if err != nil {
+			userDynErr = err
+			return
+		}
+		userDynClient, userDynErr = dynamic.NewForConfig(cfg)
+	})
+	return userDynClient, userDynErr
+}
+
 func GetUserByName(name string) (user datav1.User, err error) {
 	gvr := schema.GroupVersionResource{
 		Group:    "data.kubeai.alibabacloud.com",
@@ -34,7 +55,12 @@ func GetUserByName(name string) (user datav1.User, err error) {
 		Resource: "users",
 	}
 
-	userData, err := dynamic.NewForConfigOrDie(ctrl.GetConfigOrDie()).Resource(gvr).Namespace("kube-ai").Get(context.TODO(), name, metav1.GetOptions{})
+	dyn, err := getUserDynamicClient()
+	if err != nil {
+		log.Errorf("init dynamic client failed err:%s", err)
+		return datav1.User{}, err
+	}
+	userData, err := dyn.Resource(gvr).Namespace("kube-ai").Get(context.TODO(), name, metav1.GetOptions{})
 	if err != nil {
 		log.Errorf("get user failed err:%s", err)
 		return datav1.User{}, err

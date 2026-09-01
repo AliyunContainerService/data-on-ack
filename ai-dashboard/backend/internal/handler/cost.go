@@ -16,9 +16,10 @@ func newCostHandler(costService *service.CostService) *CostHandler {
 }
 
 func (h *CostHandler) RegisterRoutes(rg *gin.RouterGroup) {
-	rg.GET("/ops/quotas", h.GetQuotaUsage)
-	rg.GET("/ops/gpu-usage", h.GetGPUUsage)
-	rg.PUT("/ops/quotas/update", h.UpdateQuotaNode)
+	// Cost/quota usage views and quota updates are cluster-admin capabilities.
+	rg.GET("/ops/quotas", adminOnly, h.GetQuotaUsage)
+	rg.GET("/ops/gpu-usage", adminOnly, h.GetGPUUsage)
+	rg.PUT("/ops/quotas/update", adminOnly, h.UpdateQuotaNode)
 }
 
 // GetQuotaUsage returns the quota tree with current resource usage.

@@ -19,12 +19,14 @@ func newResearcherHandler(userSvc *service.UserService) *ResearcherHandler {
 }
 
 func (h *ResearcherHandler) RegisterRoutes(rg *gin.RouterGroup) {
-	rg.GET("/researcher/list", h.List)
-	rg.POST("/researcher/create", h.Create)
-	rg.PUT("/researcher/update", h.Update)
-	rg.PUT("/researcher/delete", h.Delete)
-	rg.GET("/researcher/getBearerToken", h.GetBearerToken)
-	rg.GET("/researcher/download/kubeconfig", h.DownloadKubeConfig)
+	// Researcher/user management (incl. RBAC binding creation and bearer
+	// token / kubeconfig issuance) is a cluster-admin capability.
+	rg.GET("/researcher/list", adminOnly, h.List)
+	rg.POST("/researcher/create", adminOnly, h.Create)
+	rg.PUT("/researcher/update", adminOnly, h.Update)
+	rg.PUT("/researcher/delete", adminOnly, h.Delete)
+	rg.GET("/researcher/getBearerToken", adminOnly, h.GetBearerToken)
+	rg.GET("/researcher/download/kubeconfig", adminOnly, h.DownloadKubeConfig)
 }
 
 func (h *ResearcherHandler) List(c *gin.Context) {

@@ -61,7 +61,7 @@ func (a *arenaEventBackend) UserName(userName string) backends.EventStorageBacke
 	return copyArenaEventBackend
 }
 
-func (a *arenaEventBackend) getArenaClient() *arenaclient.ArenaClient {
+func (a *arenaEventBackend) getArenaClient() (*arenaclient.ArenaClient, error) {
 	var arena *arenaclient.ArenaClient
 	var err error
 	if a.userName == "" {
@@ -70,9 +70,13 @@ func (a *arenaEventBackend) getArenaClient() *arenaclient.ArenaClient {
 		arena, err = clientregistry.GetArenaClient(a.userName)
 		if err != nil {
 			klog.Errorf("get arena client of user %s failed, err:%v", a.userName, err)
+			return nil, err
 		}
 	}
-	return arena
+	if arena == nil {
+		return nil, fmt.Errorf("arena client is not available (user: %q)", a.userName)
+	}
+	return arena, nil
 }
 
 func (a *arenaEventBackend) ListLogs(namespace, jobKind, jobName, name string, maxLine int64, from, to time.Time) ([]string, error) {
@@ -84,7 +88,11 @@ func (a *arenaEventBackend) ListLogs(namespace, jobKind, jobName, name string, m
 		return nil, err
 	}
 
-	err = a.getArenaClient().Training().Namespace(namespace).Logs(jobName, utils.GetArenaJobTypeFromKind(jobKind), logArgs)
+	arenaClient, err := a.getArenaClient()
+	if err != nil {
+		return nil, err
+	}
+	err = arenaClient.Training().Namespace(namespace).Logs(jobName, utils.GetArenaJobTypeFromKind(jobKind), logArgs)
 	if err != nil {
 		klog.Errorf("list %v/%v logs error: %v", namespace, name, err)
 		return []string{}, err

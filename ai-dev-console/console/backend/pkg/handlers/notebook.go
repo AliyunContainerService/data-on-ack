@@ -93,6 +93,9 @@ func NewNotebookHandler(objStorage string) (*NotebookHandler, error) {
 	}, nil
 }
 
+// NotebookMessage is the list-response view of a notebook.
+// Security fix: the Token field is the notebook access credential and must
+// never be populated in list responses; keep it empty.
 type NotebookMessage struct {
 	Name       string   `json:"name"`
 	Namespace  string   `json:"namespace"`
@@ -396,7 +399,8 @@ func (nh *NotebookHandler) ListNotebookFromStorage(namespace, userName, userId s
 			Gpus:       item.Gpu,
 			Status:     item.Status,
 			Event:      event,
-			Token:      item.Token,
+			// Security fix: never return the notebook access token in list
+			// responses.
 			ErrMessage: errMessage,
 			UserName:   userIdMap[item.Name],
 		})
@@ -509,11 +513,82 @@ func (nh *NotebookHandler) DeleteNotebook(name, namespace string) error {
 	return err
 }
 
+// NotebookStopAnnotation follows the kubeflow notebook-controller convention:
+// when the annotation is present the controller scales the notebook
+// StatefulSet to 0 (stopped); removing it starts the notebook again.
+// See notebook-controller/pkg/culler (STOP_ANNOTATION).
+const NotebookStopAnnotation = "kubeflow-resource-stopped"
+
+// StopNotebook stops a running notebook by setting the stop annotation on the
+// Notebook CR; the notebook-controller then scales its StatefulSet to 0.
+func (nh *NotebookHandler) StopNotebook(name, namespace string) error {
+	if namespace == "" || name == "" {
+		return errors.New("stop notebook with name or namespace empty")
+	}
+	notebook := &v1.Notebook{}
+	if err := nh.client.Get(context.Background(), types.NamespacedName{
+		Namespace: namespace,
+		Name:      name,
+	}, notebook); err != nil {
+		klog.Errorf("Get notebook err : %s", err.Error())
+		return err
+	}
+	if notebook.Annotations == nil {
+		notebook.Annotations = make(map[string]string)
+	}
+	if _, stopped := notebook.Annotations[NotebookStopAnnotation]; stopped {
+		// already stopped
+		return nil
+	}
+	notebook.Annotations[NotebookStopAnnotation] = time.Now().Format(time.RFC3339)
+	if err := nh.client.Update(context.Background(), notebook); err != nil {
+		klog.Errorf("Stop notebook err : %s", err.Error())
+		return err
+	}
+	// Pod/service endpoints become stale once the notebook is stopped.
+	nh.routeCache.Delete(utils2.GetCacheKey(namespace, name, utils2.NotebookSvc))
+	nh.routeCache.Delete(utils2.GetCacheKey(namespace, name, utils2.NotebookPod))
+	return nil
+}
+
+// StartNotebook starts a stopped notebook by removing the stop annotation;
+// the notebook-controller scales the StatefulSet back to 1 replica.
+func (nh *NotebookHandler) StartNotebook(name, namespace string) error {
+	if namespace == "" || name == "" {
+		return errors.New("start notebook with name or namespace empty")
+	}
+	notebook := &v1.Notebook{}
+	if err := nh.client.Get(context.Background(), types.NamespacedName{
+		Namespace: namespace,
+		Name:      name,
+	}, notebook); err != nil {
+		klog.Errorf("Get notebook err : %s", err.Error())
+		return err
+	}
+	if _, stopped := notebook.Annotations[NotebookStopAnnotation]; !stopped {
+		// not stopped, nothing to do
+		return nil
+	}
+	delete(notebook.Annotations, NotebookStopAnnotation)
+	if err := nh.client.Update(context.Background(), notebook); err != nil {
+		klog.Errorf("Start notebook err : %s", err.Error())
+		return err
+	}
+	// Cached pod/service endpoints are stale after a restart.
+	nh.routeCache.Delete(utils2.GetCacheKey(namespace, name, utils2.NotebookSvc))
+	nh.routeCache.Delete(utils2.GetCacheKey(namespace, name, utils2.NotebookPod))
+	return nil
+}
+
 type VolumeData struct {
 	Name string `json:"name"`
 	Path string `json:"path"`
 }
 
+// NotebookSubmitData is the create-notebook request payload.
+// Security fix: UserId/UserName/Token are overwritten by the router from the
+// login session (token is generated server-side); values sent by the client
+// are never trusted.
 type NotebookSubmitData struct {
 	Name             string                        `json:"name"`
 	Namespace        string                        `json:"namespace"`
@@ -526,7 +601,7 @@ type NotebookSubmitData struct {
 	UserId           string                        `json:"userId"`
 	UserName         string                        `json:"userName"`
 	Token            string                        `json:"token"`
-	NotebookType     string                        `json:"NotebookType"`
+	NotebookType     string                        `json:"notebookType"`
 	ImagePullSecrets []string                      `json:"imagePullSecrets"`
 	NodeSelectors    map[string]string             `json:"nodeSelectors"`
 	Annotations      map[string]string             `json:"annotations"`

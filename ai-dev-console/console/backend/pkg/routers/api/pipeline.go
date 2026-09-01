@@ -62,6 +62,16 @@ func (pc *PipelineAPIsController) PipelineReverseProxy(c *gin.Context) {
 	// construct pipeline server url
 	c.Request.URL.Path = strings.Replace(c.Request.URL.Path, "/pipeline", "", 1)
 
+	// Enforce server-side identity for Kubeflow Pipelines multi-user mode:
+	// always overwrite any client-supplied kubeflow-user-id with the session
+	// identity so users cannot impersonate others through this proxy.
+	session := sessions.Default(c)
+	if loginName, _ := session.Get(auth.SessionKeyLoginName).(string); loginName != "" {
+		c.Request.Header.Set("kubeflow-user-id", loginName)
+	} else {
+		c.Request.Header.Del("kubeflow-user-id")
+	}
+
 	// request pipeline server
 	pc.reverseProxy.ServeHTTP(c.Writer, c.Request)
 }

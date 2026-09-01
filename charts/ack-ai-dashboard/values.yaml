@@ -126,3 +126,5 @@ admin-ui:
     rrsa:
       oidcProviderArn: ""
       oidcTokenFile: "/var/run/secrets/tokens/oidc-token"
+      # RAM 角色 ARN (rrsa 模式必填)，如 acs:ram::<UID>:role/<role-name>
+      roleArn: ""

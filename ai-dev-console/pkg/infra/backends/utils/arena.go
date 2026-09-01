@@ -28,6 +28,7 @@ import (
 	"github.com/kubeflow/arena/pkg/apis/types"
 	"github.com/tidwall/gjson"
 	"io/ioutil"
+	authenticationv1 "k8s.io/api/authentication/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
@@ -35,11 +36,33 @@ import (
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	"k8s.io/klog"
 	"os"
+	"path/filepath"
+	"strings"
+	"time"
 )
 
 const (
 	kubeAINamespace = "kube-ai"
 	kubeConfigPath  = "/var/kube/"
+
+	// kubeConfigFileMode is the permission enforced on generated kubeconfig
+	// files: they carry tenant credentials and must stay owner-only.
+	kubeConfigFileMode os.FileMode = 0600
+
+	// tokenRequestExpiration is the lifetime requested when minting a service
+	// account token via the TokenRequest API, which is the only supported way
+	// to obtain SA tokens on Kubernetes >= 1.24 (token secrets are no longer
+	// auto-created there).
+	tokenRequestExpiration = 24 * time.Hour
+
+	// tokenExpiryRefreshSkew refreshes TokenRequest-backed kubeconfigs a bit
+	// before their real expiry to tolerate clock skew and client reuse.
+	tokenExpiryRefreshSkew = 10 * time.Minute
+
+	// tokenKubeConfigExpirySuffix names the sidecar file recording the expiry
+	// of a TokenRequest-backed kubeconfig; legacy (secret-backed) kubeconfigs
+	// have no sidecar and never expire.
+	tokenKubeConfigExpirySuffix = ".expiry"
 )
 
 func GetArenaJobTypeFromKind(kind string) types.TrainingJobType {
@@ -92,6 +115,90 @@ func GetJobStatusFromString(status string) apiv1.JobConditionType {
 	return ""
 }
 
+// validateLoginUserName rejects user names that could escape the kubeconfig
+// base directory when used as a file name component (path traversal).
+func validateLoginUserName(loginUserName string) error {
+	if loginUserName == "" || loginUserName == "." || loginUserName == ".." {
+		return fmt.Errorf("invalid login user name %q: must not be empty or a relative path", loginUserName)
+	}
+	if strings.ContainsAny(loginUserName, "/\\") || strings.Contains(loginUserName, "..") {
+		return fmt.Errorf("invalid login user name %q: must not contain path separators or '..'", loginUserName)
+	}
+	return nil
+}
+
+// userKubeConfigPath derives the on-disk kubeconfig path for a tenant user,
+// guaranteeing it stays inside kubeConfigPath.
+func userKubeConfigPath(loginUserName string) (string, error) {
+	if err := validateLoginUserName(loginUserName); err != nil {
+		return "", err
+	}
+	kubeConfigFile := filepath.Join(kubeConfigPath, loginUserName)
+	// Defense in depth: even after Join/Clean the result must remain under
+	// the base directory.
+	if !strings.HasPrefix(kubeConfigFile, filepath.Clean(kubeConfigPath)+string(os.PathSeparator)) {
+		return "", fmt.Errorf("kube config path of user %q escapes base dir %s", loginUserName, kubeConfigPath)
+	}
+	return kubeConfigFile, nil
+}
+
+// cachedKubeConfigExpired reports whether a cached kubeconfig was minted from
+// a time-limited TokenRequest token that has (nearly) expired. Kubeconfigs
+// backed by static SA token secrets carry no expiry sidecar and never expire.
+func cachedKubeConfigExpired(kubeConfigFile string) bool {
+	expiryBytes, err := ioutil.ReadFile(kubeConfigFile + tokenKubeConfigExpirySuffix)
+	if err != nil {
+		return false
+	}
+	expiry, err := time.Parse(time.RFC3339, strings.TrimSpace(string(expiryBytes)))
+	if err != nil {
+		return false
+	}
+	return time.Now().Add(tokenExpiryRefreshSkew).After(expiry)
+}
+
+// requestServiceAccountToken mints a time-limited token for the service
+// account through the TokenRequest API (Kubernetes >= 1.24 compatible).
+func requestServiceAccountToken(namespace, name string) (string, time.Time, error) {
+	expiration := int64(tokenRequestExpiration.Seconds())
+	tr, err := clientmgr.GetKubeClient().CoreV1().ServiceAccounts(namespace).CreateToken(
+		context.TODO(), name,
+		&authenticationv1.TokenRequest{
+			Spec: authenticationv1.TokenRequestSpec{
+				ExpirationSeconds: &expiration,
+			},
+		},
+		metav1.CreateOptions{})
+	if err != nil {
+		klog.Errorf("request token for serviceaccount %s/%s failed, err:%v", namespace, name, err)
+		return "", time.Time{}, err
+	}
+	if tr.Status.Token == "" {
+		return "", time.Time{}, fmt.Errorf("token request for service account %s/%s returned an empty token", namespace, name)
+	}
+	expiry := tr.Status.ExpirationTimestamp.Time
+	if expiry.IsZero() {
+		expiry = time.Now().Add(tokenRequestExpiration)
+	}
+	return tr.Status.Token, expiry, nil
+}
+
+// getClusterCAData fetches the cluster CA bundle for the kubeconfig. Since
+// Kubernetes 1.21 every namespace carries a kube-root-ca.crt configmap, so
+// the one in the service account namespace is used.
+func getClusterCAData(namespace string) ([]byte, error) {
+	cm, err := clientmgr.GetKubeClient().CoreV1().ConfigMaps(namespace).Get(context.TODO(), "kube-root-ca.crt", metav1.GetOptions{})
+	if err != nil {
+		klog.Errorf("get kube-root-ca.crt configmap in namespace %s failed, err:%v", namespace, err)
+		return nil, err
+	}
+	caData := []byte(cm.Data["ca.crt"])
+	if len(caData) == 0 {
+		return nil, fmt.Errorf("configmap %s/kube-root-ca.crt does not contain ca.crt data", namespace)
+	}
+	return caData, nil
+}
+
 func GenerateUserArenaClient(loginUserName string) (*arenaclient.ArenaClient, error) {
 	_, filepath, err := GenerateUserKubeConfig(loginUserName, "")
 	if err != nil {
@@ -102,14 +209,18 @@ func GenerateUserArenaClient(loginUserName string) (*arenaclient.ArenaClient, er
 }
 
 func GenerateUserKubeConfig(loginUserName string, namespace string) ([]byte, string, error) {
-	kubeConfigFile := kubeConfigPath + loginUserName
+	kubeConfigFile, err := userKubeConfigPath(loginUserName)
+	if err != nil {
+		return nil, "", err
+	}
 
-	// check if kube config exist
-	_, err := os.Stat(kubeConfigFile)
-	if err == nil {
+	// check if kube config exist; TokenRequest-backed kubeconfigs carry a
+	// limited-lifetime token, so refresh them once (nearly) expired.
+	if _, err := os.Stat(kubeConfigFile); err == nil && !cachedKubeConfigExpired(kubeConfigFile) {
 		file, err := os.Open(kubeConfigFile)
 		if err == nil {
 			configBytes, err := ioutil.ReadAll(file)
+			file.Close()
 			//klog.Infof("found local kube config file %s of user %s \n%s", kubeConfigFile, uid, string(configBytes))
 			if err == nil {
 				return configBytes, kubeConfigFile, nil
@@ -169,12 +280,37 @@ func GenerateUserKubeConfig(loginUserName string, namespace string) ([]byte, str
 		return nil, "", err
 	}
 
-	secretName := sa.Secrets[0].Name
-
-	secret, err := clientmgr.GetKubeClient().CoreV1().Secrets(serviceAccountNamespace).Get(context.TODO(), secretName, metav1.GetOptions{})
-	if err != nil {
-		klog.Errorf("get secret failed, ns:%s name:%s, err:%v", serviceAccountNamespace, secretName, err)
-		return nil, "", err
+	// Resolve the token and CA data for the kubeconfig. The legacy path reads
+	// the auto-created SA token secret (never expires, so cached kubeconfigs
+	// stay valid); on Kubernetes >= 1.24 such secrets no longer exist, so fall
+	// back to minting a bounded token through the TokenRequest API.
+	var (
+		token       string
+		caData      []byte
+		tokenExpiry time.Time
+	)
+	if len(sa.Secrets) > 0 {
+		secretName := sa.Secrets[0].Name
+		secret, err := clientmgr.GetKubeClient().CoreV1().Secrets(serviceAccountNamespace).Get(context.TODO(), secretName, metav1.GetOptions{})
+		if err != nil {
+			klog.Errorf("get secret failed, ns:%s name:%s, err:%v", serviceAccountNamespace, secretName, err)
+			return nil, "", err
+		}
+		if len(secret.Data["token"]) == 0 || len(secret.Data["ca.crt"]) == 0 {
+			return nil, "", fmt.Errorf("secret %s/%s does not contain a valid SA token / ca.crt", serviceAccountNamespace, secretName)
+		}
+		token = string(secret.Data["token"])
+		caData = secret.Data["ca.crt"]
+	} else {
+		klog.Infof("service account %s/%s has no token secret, falling back to TokenRequest API", serviceAccountNamespace, serviceAccountName)
+		token, tokenExpiry, err = requestServiceAccountToken(serviceAccountNamespace, serviceAccountName)
+		if err != nil {
+			return nil, "", err
+		}
+		caData, err = getClusterCAData(serviceAccountNamespace)
+		if err != nil {
+			return nil, "", err
+		}
 	}
 
 	svc, err := clientmgr.GetKubeClient().CoreV1().Services("default").Get(context.TODO(), "kubernetes", metav1.GetOptions{})
@@ -183,6 +319,9 @@ func GenerateUserKubeConfig(loginUserName string, namespace string) ([]byte, str
 		return nil, "", err
 	}
 
+	if len(svc.Spec.Ports) == 0 {
+		return nil, "", fmt.Errorf("service default/kubernetes has no ports")
+	}
 	portName := svc.Spec.Ports[0].Name
 	portNum := svc.Spec.Ports[0].Port
 	addrIp := svc.Spec.ClusterIP
@@ -192,7 +331,7 @@ func GenerateUserKubeConfig(loginUserName string, namespace string) ([]byte, str
 	clusters := make(map[string]*clientcmdapi.Cluster)
 	clusters["default-cluster"] = &clientcmdapi.Cluster{
 		Server:                   clusterHost,
-		CertificateAuthorityData: secret.Data["ca.crt"],
+		CertificateAuthorityData: caData,
 	}
 
 	contexts := make(map[string]*clientcmdapi.Context)
@@ -204,7 +343,7 @@ func GenerateUserKubeConfig(loginUserName string, namespace string) ([]byte, str
 
 	authInfos := make(map[string]*clientcmdapi.AuthInfo)
 	authInfos[serviceAccountName] = &clientcmdapi.AuthInfo{
-		Token: string(secret.Data["token"]),
+		Token: token,
 	}
 
 	clientConfig := clientcmdapi.Config{
@@ -227,9 +366,21 @@ func GenerateUserKubeConfig(loginUserName string, namespace string) ([]byte, str
 	if err != nil {
 		klog.Errorf("save kube config of %s to %s failed, err: %v", loginUserName, kubeConfigFile, err)
 		return configBytes, "", err
-	} else {
-		klog.Infof("save kube config of %s to %s", loginUserName, kubeConfigFile)
 	}
+	// The kubeconfig carries tenant credentials; enforce owner-only
+	// permissions regardless of umask or clientcmd defaults.
+	if err = os.Chmod(kubeConfigFile, kubeConfigFileMode); err != nil {
+		klog.Warningf("chmod kube config of %s to %v failed, err: %v", loginUserName, kubeConfigFileMode, err)
+	}
+	// Record the expiry of TokenRequest-backed kubeconfigs so the cache check
+	// above refreshes them before the bounded token lapses.
+	if !tokenExpiry.IsZero() {
+		expiryFile := kubeConfigFile + tokenKubeConfigExpirySuffix
+		if err = ioutil.WriteFile(expiryFile, []byte(tokenExpiry.UTC().Format(time.RFC3339)), kubeConfigFileMode); err != nil {
+			klog.Warningf("save kube config expiry of %s to %s failed, err: %v", loginUserName, expiryFile, err)
+		}
+	}
+	klog.Infof("save kube config of %s to %s", loginUserName, kubeConfigFile)
 
 	return configBytes, kubeConfigFile, nil
 }

@@ -1,6 +1,8 @@
 package auth
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"os"
@@ -108,6 +110,14 @@ func (m *Manager) HandleLoginCallback(c *gin.Context) {
 		return
 	}
 
+	// Anti-CSRF: the state echoed back by the provider must match the nonce
+	// we generated in HandleLoginRedirect and stored in the session.
+	if !verifyAndConsumeOAuthState(c, c.Query("state")) {
+		logrus.Warn("OAuth callback rejected: state mismatch or missing")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid OAuth state"})
+		return
+	}
+
 	callbackURL := m.callbackURL(c)
 	accessToken, err := ExchangeToken(m.cfg, *m.oauthInfo, callbackURL, code)
 	if err != nil {
@@ -129,9 +139,10 @@ func (m *Manager) HandleLoginCallback(c *gin.Context) {
 		loginName = userInfo.LoginName
 	}
 
-	// Determine role: main account (no upn) is admin, sub-account is researcher
+	// Determine role: main account (no upn) is admin, sub-account is researcher.
+	// A sub-account explicitly configured via --admin-uid/DASHBOARD_ADMINUID is also admin.
 	role := RoleResearcher
-	if userInfo.Upn == "" {
+	if userInfo.Upn == "" || (m.cfg.AdminUID != "" && userInfo.Uid == m.cfg.AdminUID) {
 		role = RoleAdmin
 	}
 
@@ -162,8 +173,22 @@ func (m *Manager) HandleLoginRedirect(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "OAuth not configured"})
 		return
 	}
+	// Generate an anti-CSRF state nonce, persist it in the session and attach
+	// it to the authorization URL. It is validated (and consumed) in the callback.
+	state, err := newOAuthState()
+	if err != nil {
+		logrus.Errorf("generate OAuth state: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate OAuth state"})
+		return
+	}
+	session := sessions.Default(c)
+	session.Set(SessionKeyOAuthState, state)
+	if err := session.Save(); err != nil {
+		logrus.Errorf("save session: %v", err)
+	}
+
 	callbackURL := m.callbackURL(c)
-	loginURL := GetLoginURL(m.cfg, *m.oauthInfo, callbackURL)
+	loginURL := GetLoginURL(m.cfg, *m.oauthInfo, callbackURL, state)
 	c.Redirect(http.StatusFound, loginURL)
 }
 
@@ -175,6 +200,7 @@ func (m *Manager) HandleLogout(c *gin.Context) {
 	session.Delete(SessionKeyLoginName)
 	session.Delete(SessionKeyRole)
 	session.Delete(SessionKeyToken)
+	session.Delete(SessionKeyOAuthState)
 	session.Save()
 	c.Redirect(http.StatusFound, "/login")
 }
@@ -209,6 +235,31 @@ func (m *Manager) Cleanup() {
 
 func (m *Manager) callbackURL(c *gin.Context) string {
 	return fmt.Sprintf("http://%s%s", c.Request.Host, defaultFilterURL)
+}
+
+// newOAuthState generates a random hex-encoded nonce for the OAuth state parameter.
+func newOAuthState() (string, error) {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
+}
+
+// verifyAndConsumeOAuthState checks the callback state against the value stored
+// in the session and clears it afterwards so it cannot be replayed.
+func verifyAndConsumeOAuthState(c *gin.Context, state string) bool {
+	session := sessions.Default(c)
+	defer func() {
+		session.Delete(SessionKeyOAuthState)
+		_ = session.Save()
+	}()
+
+	expected, _ := session.Get(SessionKeyOAuthState).(string)
+	if state == "" || expected == "" || state != expected {
+		return false
+	}
+	return true
 }
 
 func getEnvOrEmpty(key string) string {

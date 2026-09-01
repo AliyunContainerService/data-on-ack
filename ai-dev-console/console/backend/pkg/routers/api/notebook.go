@@ -16,6 +16,8 @@
 package api
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"github.com/AliyunContainerService/data-on-ack/ai-dev-console/console/backend/pkg/auth"
@@ -47,11 +49,22 @@ type NotebookAPIsController struct {
 	proxyCache      *proxy.SyncMapCache
 }
 
+// allowedCommonProxyPorts whitelists the service ports the /common proxy may
+// forward to. Security fix: clients must not be able to proxy arbitrary ports.
+var allowedCommonProxyPorts = map[string]bool{
+	"80":   true,
+	"443":  true,
+	"8080": true,
+	"8888": true,
+	"6006": true,
+}
+
 func (nc *NotebookAPIsController) RegisterRoutes(routes *gin.RouterGroup) {
 	routes.POST("/notebook/create", nc.SubmitNotebook)
 	routes.GET("/notebook/list", nc.GetNotebookList)
-	//routes.GET("/notebook/stop", nc.DeleteNotebookByName)
-	//routes.GET("/notebook/start", nc.DeleteNotebookByName)
+	// Bug fix: the stop/start routes were disabled so the frontend always got 404.
+	routes.GET("/notebook/stop", nc.StopNotebook)
+	routes.GET("/notebook/start", nc.StartNotebook)
 	routes.GET("/notebook/delete", nc.DeleteNotebookByName)
 	routes.GET("/notebook/maxGpu", nc.GetAvailableGpu)
 	routes.GET("/notebook/listPVC", nc.GetAvailablePVCList)
@@ -105,24 +118,31 @@ func (nc *NotebookAPIsController) RegisterAllReverseProxy(routes *gin.RouterGrou
 	routes.Any("/*path", reverseProxyFunc)
 }
 
-// checkNotebookNamespaceOwnership verifies that the authenticated user has access
-// to the specified namespace. Admin users can access all namespaces.
-func checkNotebookNamespaceOwnership(c *gin.Context, namespace string) bool {
+// sessionNamespaces returns the namespaces allocated to the logged-in user
+// (taken from the login session) and whether the user is an admin.
+func sessionNamespaces(c *gin.Context) ([]string, bool) {
 	session := sessions.Default(c)
 	if session == nil {
-		return false
+		return nil, false
 	}
 	loginName, _ := session.Get(auth.SessionKeyLoginName).(string)
 	accountId, _ := session.Get(auth.SessionKeyAccountID).(string)
 
 	// Admin users can access all namespaces
 	if IsAdminUser(loginName) || IsAdminUser(accountId) {
-		return true
+		return nil, true
 	}
 
-	userNamespaces, ok := session.Get(auth.SessionKeyUserNS).([]string)
-	if !ok || len(userNamespaces) == 0 {
-		return false
+	userNamespaces, _ := session.Get(auth.SessionKeyUserNS).([]string)
+	return userNamespaces, false
+}
+
+// checkNotebookNamespaceOwnership verifies that the authenticated user has access
+// to the specified namespace. Admin users can access all namespaces.
+func checkNotebookNamespaceOwnership(c *gin.Context, namespace string) bool {
+	userNamespaces, isAdmin := sessionNamespaces(c)
+	if isAdmin {
+		return true
 	}
 	for _, ns := range userNamespaces {
 		if ns == namespace {
@@ -132,16 +152,55 @@ func checkNotebookNamespaceOwnership(c *gin.Context, namespace string) bool {
 	return false
 }
 
+// filterNamespacesBySession intersects the requested namespaces with the
+// namespaces allocated to the logged-in user, so users can only operate on
+// their own namespaces. Admin users keep all requested namespaces.
+func filterNamespacesBySession(c *gin.Context, requested []string) []string {
+	userNamespaces, isAdmin := sessionNamespaces(c)
+	if isAdmin {
+		return requested
+	}
+	if len(userNamespaces) == 0 {
+		return nil
+	}
+	allowed := make(map[string]bool, len(userNamespaces))
+	for _, ns := range userNamespaces {
+		allowed[ns] = true
+	}
+	filtered := make([]string, 0, len(requested))
+	for _, ns := range requested {
+		if allowed[ns] {
+			filtered = append(filtered, ns)
+		}
+	}
+	return filtered
+}
+
+// generateNotebookToken returns a random access token generated server-side
+// with crypto/rand. Security fix: client-supplied tokens are never trusted.
+func generateNotebookToken() (string, error) {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
+}
+
 func (nc *NotebookAPIsController) GetNotebookListFromStorage(c *gin.Context) {
 	namespacesStr := c.Query("namespaces")
-	userName := c.Query("userName")
-	uid := c.Query("userId") //此处前端传过来的userId为uid
 	var namespaces []string
 	if err := json.Unmarshal([]byte(namespacesStr), &namespaces); err != nil {
 		klog.Errorf("unmarshal namespace error:%s", err)
 		utils.Failed(c, fmt.Sprintf("Namespace format error:%s", namespacesStr))
 		return
 	}
+	// Security fix: identity must come from the login session; the
+	// userName/userId query parameters are not trusted.
+	session := sessions.Default(c)
+	userName, _ := session.Get(auth.SessionKeyLoginName).(string)
+	uid, _ := session.Get(auth.SessionKeyLoginID).(string)
+	// Security fix: only operate on namespaces allocated to the session user.
+	namespaces = filterNamespacesBySession(c, namespaces)
 	namespacesMap := make(map[string]bool)
 	for _, namespace := range namespaces {
 		namespacesMap[namespace] = true
@@ -150,7 +209,7 @@ func (nc *NotebookAPIsController) GetNotebookListFromStorage(c *gin.Context) {
 	if IsAdminUser(userName) || IsAdminUser(uid) {
 		userName, uid = "", ""
 	}
-	for namespace, _ := range namespacesMap {
+	for namespace := range namespacesMap {
 		notebookList, err := nc.notebookHandler.ListNotebookFromStorage(namespace, userName, uid, c)
 		if err != nil {
 			klog.Errorf("list notebook in namespace err:%s", err)
@@ -170,6 +229,8 @@ func (nc *NotebookAPIsController) SyncNotebooks(c *gin.Context) {
 		utils.Failed(c, fmt.Sprintf("Namespace format error:%s", namespacesStr))
 		return
 	}
+	// Security fix: only sync namespaces allocated to the session user.
+	namespaces = filterNamespacesBySession(c, namespaces)
 	for _, namespace := range namespaces {
 		err := nc.notebookHandler.CompatibleNotebook(namespace)
 		if err != nil {
@@ -188,6 +249,13 @@ func (nc *NotebookAPIsController) GetAvailablePVCList(c *gin.Context) {
 		utils.Failed(c, "Namespace is Empty.")
 		return
 	}
+	// Security fix: only list PVCs in namespaces owned by the session user.
+	if !checkNotebookNamespaceOwnership(c, namespace) {
+		c.JSON(http.StatusForbidden, gin.H{"code": 403, "message": "access denied: you do not have permission to access this namespace"})
+		c.Abort()
+		return
+	}
+
 	pvcs, err := nc.notebookHandler.ListPVC(namespace)
 	if err != nil {
 		log.Errorf("GetPVCList err : %s", err.Error())
@@ -211,6 +279,13 @@ func (nc *NotebookAPIsController) DeleteNotebookByName(c *gin.Context) {
 		return
 	}
 
+	// Security fix: only delete notebooks in namespaces owned by the session user.
+	if !checkNotebookNamespaceOwnership(c, namespace) {
+		c.JSON(http.StatusForbidden, gin.H{"code": 403, "message": "access denied: you do not have permission to delete this notebook"})
+		c.Abort()
+		return
+	}
+
 	nc.proxyCache.Delete(utils.GetProxyCacheKey(namespace, name, utils.JupyterProxy))
 	nc.proxyCache.Delete(utils.GetProxyCacheKey(namespace, name, utils.VSCodeProxy))
 	nc.proxyCache.Delete(utils.GetProxyCacheKey(namespace, name, utils.StableDiffusionProxy))
@@ -225,6 +300,50 @@ func (nc *NotebookAPIsController) DeleteNotebookByName(c *gin.Context) {
 	utils.Succeed(c, "Delete success!")
 }
 
+func (nc *NotebookAPIsController) StopNotebook(c *gin.Context) {
+	namespace := c.Query("namespace")
+	name := c.Query("name")
+	if namespace == "" || name == "" {
+		utils.Failed(c, "Namespace or Name is Empty.")
+		return
+	}
+	// Security fix: only stop notebooks in namespaces owned by the session user.
+	if !checkNotebookNamespaceOwnership(c, namespace) {
+		c.JSON(http.StatusForbidden, gin.H{"code": 403, "message": "access denied: you do not have permission to stop this notebook"})
+		c.Abort()
+		return
+	}
+	log.Infof("stop notebook name: %s namespace: %s", name, namespace)
+	if err := nc.notebookHandler.StopNotebook(name, namespace); err != nil {
+		log.Errorf("StopNotebook err : %s", err.Error())
+		utils.Failed(c, err.Error())
+		return
+	}
+	utils.Succeed(c, "Stop success!")
+}
+
+func (nc *NotebookAPIsController) StartNotebook(c *gin.Context) {
+	namespace := c.Query("namespace")
+	name := c.Query("name")
+	if namespace == "" || name == "" {
+		utils.Failed(c, "Namespace or Name is Empty.")
+		return
+	}
+	// Security fix: only start notebooks in namespaces owned by the session user.
+	if !checkNotebookNamespaceOwnership(c, namespace) {
+		c.JSON(http.StatusForbidden, gin.H{"code": 403, "message": "access denied: you do not have permission to start this notebook"})
+		c.Abort()
+		return
+	}
+	log.Infof("start notebook name: %s namespace: %s", name, namespace)
+	if err := nc.notebookHandler.StartNotebook(name, namespace); err != nil {
+		log.Errorf("StartNotebook err : %s", err.Error())
+		utils.Failed(c, err.Error())
+		return
+	}
+	utils.Succeed(c, "Start success!")
+}
+
 func (nc *NotebookAPIsController) GetNotebookList(c *gin.Context) {
 	namespacesStr := c.Query("namespaces")
 	if namespacesStr == "" {
@@ -237,6 +356,8 @@ func (nc *NotebookAPIsController) GetNotebookList(c *gin.Context) {
 		utils.Failed(c, fmt.Sprintf("Namespace format error:%s", namespacesStr))
 		return
 	}
+	// Security fix: only list namespaces allocated to the session user.
+	namespaces = filterNamespacesBySession(c, namespaces)
 	var resNotebookList []handlers.NotebookMessage
 	for _, namespace := range namespaces {
 		notebookList, err := nc.notebookHandler.ListNotebook(namespace)
@@ -418,6 +539,14 @@ func (nc *NotebookAPIsController) CommonReverseProxy(c *gin.Context) {
 
 	namespace, name, port := pathArr[1], pathArr[2], pathArr[3]
 
+	// Security fix: only whitelisted service ports may be proxied, reject
+	// arbitrary ports.
+	if !allowedCommonProxyPorts[port] {
+		c.JSON(http.StatusForbidden, gin.H{"code": 403, "message": "access denied: port is not allowed"})
+		c.Abort()
+		return
+	}
+
 	if !checkNotebookNamespaceOwnership(c, namespace) {
 		c.JSON(http.StatusForbidden, gin.H{"code": 403, "message": "access denied: you do not have permission to access this notebook"})
 		c.Abort()
@@ -464,6 +593,40 @@ func (nc *NotebookAPIsController) SubmitNotebook(c *gin.Context) {
 		utils.Failed(c, err.Error())
 		return
 	}
+
+	// Security fix: identity must come from the login session. The
+	// Namespace/UserName/UserId/Token fields in the request body are never
+	// trusted.
+	session := sessions.Default(c)
+	loginName, _ := session.Get(auth.SessionKeyLoginName).(string)
+	loginID, _ := session.Get(auth.SessionKeyLoginID).(string)
+	if loginName == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "message": "user not login"})
+		c.Abort()
+		return
+	}
+	if message.Namespace == "" {
+		utils.Failed(c, "Namespace is Empty.")
+		return
+	}
+	// The requested namespace must be allocated to the session user,
+	// otherwise reject with 403 (admin users may use any namespace).
+	if !checkNotebookNamespaceOwnership(c, message.Namespace) {
+		c.JSON(http.StatusForbidden, gin.H{"code": 403, "message": "access denied: namespace is not allocated to current user"})
+		c.Abort()
+		return
+	}
+	message.UserName = loginName
+	message.UserId = loginID
+	// The notebook access token must be generated server-side; any
+	// client-supplied value is ignored.
+	message.Token, err = generateNotebookToken()
+	if err != nil {
+		log.Errorf("SubmitNotebook generate token err : %s", err.Error())
+		utils.Failed(c, err.Error())
+		return
+	}
+
 	if message.NodeSelectors == nil {
 		message.NodeSelectors = map[string]string{}
 	}

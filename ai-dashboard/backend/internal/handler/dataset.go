@@ -21,10 +21,11 @@ func newDatasetHandler(dsSvc *service.DatasetService, kubeClient *k8s.Client) *D
 }
 
 func (h *DatasetHandler) RegisterRoutes(rg *gin.RouterGroup) {
-	rg.GET("/dataset/list", h.List)
-	rg.POST("/dataset/create", h.Create)
-	rg.PUT("/dataset/delete", h.Delete)
-	rg.POST("/dataset/update", h.Update)
+	// Dataset management is a cluster-admin capability.
+	rg.GET("/dataset/list", adminOnly, h.List)
+	rg.POST("/dataset/create", adminOnly, h.Create)
+	rg.PUT("/dataset/delete", adminOnly, h.Delete)
+	rg.POST("/dataset/update", adminOnly, h.Update)
 }
 
 type DatasetItem struct {

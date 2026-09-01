@@ -17,6 +17,7 @@ limitations under the License.
 package code_sync
 
 import (
+	"fmt"
 	"path"
 
 	apiv1 "github.com/AliyunContainerService/data-on-ack/ai-dev-console/pkg/job_controller/api/v1"
@@ -68,6 +69,12 @@ func InjectCodeSyncInitContainers(metaObj metav1.Object, specTemplate *v1.PodTem
 }
 
 func injectCodeSyncInitContainer(optsConfig []byte, handler CodeSyncHandler, specTemplate *v1.PodTemplateSpec, mountVolume *v1.Volume) error {
+	// Defensive: a pod template without main containers has nothing to sync
+	// code for; fail explicitly instead of panicking on the index below.
+	if specTemplate == nil || len(specTemplate.Spec.Containers) == 0 {
+		return fmt.Errorf("code sync: pod template spec has no main containers to inject init container into")
+	}
+
 	initContainer, relativeCodePath, repoName, err := handler.InitContainer(optsConfig, mountVolume)
 	if err != nil {
 		return err

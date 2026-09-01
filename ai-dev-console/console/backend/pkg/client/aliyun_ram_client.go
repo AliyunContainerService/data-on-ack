@@ -87,7 +87,11 @@ func NewRamClientConfigFromAKInfo(akInfo model.AKInfo) (config *openapi.Config) 
 	config.AccessKeySecret = &akInfo.AccessKeySecret
 	config.SecurityToken = &akInfo.SecurityToken
 	endPoint := RamDefaultVPCEndpoint
-	if !utils.IsDomainNameAvailable(RamDefaultEndpoint) {
+	// Bug fix: the fallback condition was inverted (it probed the public
+	// endpoint while defaulting to the VPC endpoint). Probe the preferred
+	// VPC endpoint itself and only fall back to the public one when it is
+	// unavailable.
+	if !utils.IsDomainNameAvailable(RamDefaultVPCEndpoint) {
 		endPoint = RamDefaultEndpoint
 	}
 	log.Infof("using ram endpoint:%s", endPoint)

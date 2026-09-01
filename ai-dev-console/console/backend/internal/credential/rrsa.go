@@ -19,11 +19,14 @@ func NewRRSAProvider(cfg *config.AppConfig) (*RRSAProvider, error) {
 	if cfg.OIDCProviderARN == "" {
 		return nil, fmt.Errorf("rrsa credential mode requires OIDC_PROVIDER_ARN env var")
 	}
+	if cfg.RoleARN == "" {
+		return nil, fmt.Errorf("rrsa credential mode requires OIDC_ROLE_ARN env var (the RAM role ARN to assume)")
+	}
 
 	// Set environment variables that credentials-go reads for OIDC
 	os.Setenv("ALIBABA_CLOUD_OIDC_PROVIDER_ARN", cfg.OIDCProviderARN)
 	os.Setenv("ALIBABA_CLOUD_OIDC_TOKEN_FILE", cfg.OIDCTokenFile)
-	os.Setenv("ALIBABA_CLOUD_ROLE_ARN", cfg.OIDCProviderARN)
+	os.Setenv("ALIBABA_CLOUD_ROLE_ARN", cfg.RoleARN)
 
 	credConfig := new(credentials.Config).SetType("oidc_role_arn")
 	cred, err := credentials.NewCredential(credConfig)

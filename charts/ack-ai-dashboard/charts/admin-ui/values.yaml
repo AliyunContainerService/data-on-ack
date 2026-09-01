@@ -72,6 +72,8 @@ credentials:
   #     -n kube-ai
   rrsa:
     oidcProviderArn: ""
+    # RAM role ARN to assume (required for rrsa mode), e.g. acs:ram::<UID>:role/<role-name>
+    roleArn: ""
     oidcTokenFile: "/var/run/secrets/tokens/oidc-token"
 
 ingress:

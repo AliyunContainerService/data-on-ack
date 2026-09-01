@@ -36,11 +36,15 @@ func newDashboardHandler(cfg *config.AppConfig, kubeClient *k8s.Client) *Dashboa
 }
 
 func (h *DashboardHandler) RegisterRoutes(r *gin.Engine, rg *gin.RouterGroup) {
-	rg.GET("/dashboard/url", h.GetDashboardURL)
+	// Dashboard/Grafana is an admin-facing capability: both the dashboard URL
+	// and the Grafana reverse proxy require an admin session.
+	rg.GET("/dashboard/url", adminOnly, h.GetDashboardURL)
 
-	// Grafana reverse proxy — must be on the main engine (not the auth-protected group)
-	// to match the original Zuul route: /grafana/** → arena-exporter-grafana:80/grafana/
-	r.Any("/grafana/*path", h.GrafanaProxy)
+	// Grafana reverse proxy, matching the original Zuul route:
+	// /grafana/** → arena-exporter-grafana:80/grafana/.
+	// Registered inside the auth-protected group (path prefix is "") so that
+	// session authentication + adminOnly apply.
+	rg.Any("/grafana/*path", adminOnly, h.GrafanaProxy)
 }
 
 func (h *DashboardHandler) GetDashboardURL(c *gin.Context) {

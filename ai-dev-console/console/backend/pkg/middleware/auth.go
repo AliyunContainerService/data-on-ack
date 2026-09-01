@@ -48,12 +48,10 @@ func CheckAuthMiddleware(loginAuth auth.Auth) gin.HandlerFunc {
 			}
 		}()
 
-		// Skip static js and css files checking auth.
-		if c.Request.URL != nil && (strings.HasSuffix(c.Request.URL.Path, ".js") ||
-			strings.HasSuffix(c.Request.URL.Path, ".css") ||
-			strings.HasSuffix(c.Request.URL.Path, ".png") ||
-			strings.HasSuffix(c.Request.URL.Path, ".ico") ||
-			strings.HasSuffix(c.Request.URL.Path, ".html")) {
+		// Skip auth for real static resources only.
+		// Security fix: appending a static-looking suffix to an API/proxy
+		// path must not bypass login.
+		if c.Request.URL != nil && isStaticResourcePath(c.Request.URL.Path) {
 			c.Next()
 			return
 		}
@@ -138,4 +136,41 @@ func CheckAuthMiddleware(loginAuth auth.Auth) gin.HandlerFunc {
 		c.Abort()
 		return
 	}
+}
+
+// dynamicRoutePrefixes are path prefixes served by handlers/reverse proxies
+// instead of the static file server; they must never skip authentication.
+var dynamicRoutePrefixes = []string{
+	constants.ApiV1Routes, // /api/v1
+	"/pipeline",
+	"/mlflow",
+	"/ml_metadata",
+	"/notebook",
+	"/vscode",
+	"/sd",
+	"/common",
+}
+
+// staticResourceSuffixes are file suffixes of assets served from the dist dir.
+var staticResourceSuffixes = []string{".js", ".css", ".png", ".ico", ".html"}
+
+// isStaticResourcePath reports whether the path is a static resource served
+// from the frontend dist directory. Only real static paths skip auth.
+func isStaticResourcePath(path string) bool {
+	hasStaticSuffix := false
+	for _, suffix := range staticResourceSuffixes {
+		if strings.HasSuffix(path, suffix) {
+			hasStaticSuffix = true
+			break
+		}
+	}
+	if !hasStaticSuffix {
+		return false
+	}
+	for _, prefix := range dynamicRoutePrefixes {
+		if strings.HasPrefix(path, prefix) {
+			return false
+		}
+	}
+	return true
 }
