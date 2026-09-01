@@ -188,6 +188,25 @@ helm install ai-dev-console charts/ack-ai-dev-console \
 | `dev-console.auth.existingSecret` | 否 | Session 持久化 Secret 名称 |
 | `dev-console.console.intlAccount` | 否 | 国际站账号设为 `"true"` |
 | `dev-console.console.credentialMode` | 否 | `static`(AK/SK) 或 `rrsa` |
+| `dev-console.agent.enabled` | 否 | 设为 `true` 启用 AI 助手（Agentic Console） |
+| `dev-console.agent.model.provider` | 否 | `dashscope`（默认）或 `openai-compatible` |
+| `dev-console.agent.model.name` | 否 | 模型名，默认 `qwen-plus` |
+| `dev-console.agent.budget.maxDailyCostUSD` | 否 | 每用户每日模型花费硬上限（美元），默认 2 |
+
+#### 启用 AI 助手（可选）
+
+AI 助手需要模型 API 密钥（Secret 提供，未配置时入口自动隐藏）：
+
+```bash
+kubectl create secret generic ai-dev-console-agent-credentials \
+  --from-literal=apiKey=<DASHSCOPE_API_KEY> -n kube-ai
+
+helm upgrade ai-dev-console charts/ack-ai-dev-console -n kube-ai \
+  --reuse-values --set dev-console.agent.enabled=true
+```
+
+> **数据边界说明**：启用后，任务日志/事件摘要会发送到所配置的模型 API 用于推理。
+> 私有化/离线集群请使用 `agent.model.baseURL` 指向内网兼容网关，或保持禁用。
 
 ### 验证部署
 

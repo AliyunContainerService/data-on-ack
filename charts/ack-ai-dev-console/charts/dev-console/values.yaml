@@ -10,7 +10,9 @@ image:
 resources:
   limits:
     cpu: 2000m
-    memory: 500Mi
+    # 1Gi: agent sessions (in-memory history) + SSE connections need headroom
+    # beyond the previous 500Mi (design §7).
+    memory: 1Gi
   requests:
     cpu: 500m
     memory: 100Mi
@@ -65,6 +67,22 @@ console:
     roleArn: ""
 
 # Authentication and session configuration
+# Agentic console (docs/design/agentic-console.md). The agent is an optional
+# add-on: entry points stay hidden unless enabled AND a model key is present.
+agent:
+  enabled: false
+  model:
+    # "dashscope" or "openai-compatible"
+    provider: dashscope
+    # diagnosis contexts are token-heavy; plus keeps cost predictable
+    name: qwen-plus
+    # Optional gateway override (must be an allowlisted/internal endpoint)
+    baseURL: ""
+    # API key is read from Secret ai-dev-console-agent-credentials (key: apiKey)
+  budget:
+    # Hard per-user daily model spend cap in USD
+    maxDailyCostUSD: 2
+
 auth:
   # Name of an existing Secret containing 'sessionSecret' key.
   # Create with: kubectl create secret generic ai-dev-console-auth --from-literal=sessionSecret=$(openssl rand -hex 32) -n kube-ai

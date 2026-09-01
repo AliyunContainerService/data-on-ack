@@ -75,6 +75,26 @@ spec:
                   key: sessionSecret
             - name: ENABLE_SECURE_COOKIE
               value: "{{ .Values.auth.secureCookie }}"
+            {{- if .Values.agent.enabled }}
+            - name: AGENT_ENABLED
+              value: "true"
+            - name: AGENT_MODEL_PROVIDER
+              value: "{{ .Values.agent.model.provider }}"
+            - name: AGENT_MODEL_NAME
+              value: "{{ .Values.agent.model.name }}"
+            {{- if .Values.agent.model.baseURL }}
+            - name: AGENT_MODEL_BASE_URL
+              value: "{{ .Values.agent.model.baseURL }}"
+            {{- end }}
+            - name: AGENT_MODEL_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ai-dev-console-agent-credentials
+                  key: apiKey
+                  optional: true
+            - name: AGENT_MAX_DAILY_COST_USD
+              value: "{{ .Values.agent.budget.maxDailyCostUSD }}"
+            {{- end }}
             {{- if .Values.auth.oauthSigninURL }}
             - name: OAUTH_SIGNIN_URL
               value: "{{ .Values.auth.oauthSigninURL }}"

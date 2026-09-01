@@ -16,9 +16,12 @@ import {
   TranslationOutlined,
   LogoutOutlined,
   SettingOutlined,
+  RobotOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useUserStore } from '../store/user';
+import { useAssistantStore } from '../store/assistant';
+import AssistantDrawer from '../components/Assistant/AssistantDrawer';
 
 const { Header, Sider, Content } = Layout;
 const { Text } = Typography;
@@ -29,6 +32,7 @@ const MainLayout: React.FC = () => {
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
   const { user, fetchUser, logout, locale, setLocale } = useUserStore();
+  const { available: assistantAvailable, open: assistantOpen, fetchAvailability, setOpen: setAssistantOpen } = useAssistantStore();
 
   // Block rendering of protected content until the session has been verified.
   // Previously a 1.5s timer redirected after the content was already shown; now we
@@ -50,6 +54,13 @@ const MainLayout: React.FC = () => {
       cancelled = true;
     };
   }, [authChecked, fetchUser, navigate]);
+
+  // Probe the backend agent once the session is verified. When the agent is
+  // disabled/unreachable (route not registered -> 404, edge/offline clusters)
+  // the Assistant entry point is not rendered at all.
+  useEffect(() => {
+    if (authChecked) fetchAvailability();
+  }, [authChecked, fetchAvailability]);
 
   if (!authChecked || !user) {
     return (
@@ -199,6 +210,30 @@ const MainLayout: React.FC = () => {
           <Outlet />
         </Content>
       </Layout>
+
+      {assistantAvailable && (
+        <>
+          {!assistantOpen && (
+            <Button
+              type="primary"
+              shape="round"
+              size="large"
+              icon={<RobotOutlined />}
+              onClick={() => setAssistantOpen(true)}
+              style={{
+                position: 'fixed',
+                right: 24,
+                bottom: 24,
+                zIndex: 998,
+                boxShadow: '0 4px 16px rgba(0, 113, 227, 0.35)',
+              }}
+            >
+              {t('assistant.title')}
+            </Button>
+          )}
+          <AssistantDrawer />
+        </>
+      )}
     </Layout>
   );
 };
