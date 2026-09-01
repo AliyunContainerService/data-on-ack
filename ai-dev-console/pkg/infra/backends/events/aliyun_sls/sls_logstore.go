@@ -40,6 +40,12 @@ const (
 	serverErrorHoldupDuration      = 200 * time.Millisecond
 
 	slsMaxLineNum int64 = 100
+
+	// maxEventsPerQuery caps the total number of events fetched for a single
+	// ListEvents query. The histogram count is untrusted input for capacity
+	// planning: preallocating by it could exhaust memory, and pagination may
+	// race with concurrently written logs.
+	maxEventsPerQuery int64 = 1000
 )
 
 func NewSLSEventBackend() backends.EventStorageBackend {
@@ -107,7 +113,9 @@ func (s *slsEventBackend) SaveEvent(event *corev1.Event, region string) error {
 	return err
 }
 func (s *slsEventBackend) ListEvents(jobNamespace, jobName string, from, to time.Time) ([]*dmo.Event, error) {
-	query := fmt.Sprintf("%s AND %s", jobNamespace, jobName)
+	// Namespace and job name are user-influenced values; quote and escape them
+	// so they cannot break out of the query terms and inject SLS query syntax.
+	query := fmt.Sprintf("%s AND %s", quoteSLSQueryValue(jobNamespace), quoteSLSQueryValue(jobName))
 	// Get histogram statistical information of logs satisfied with query.
 	hist, err := s.slsClient.GetHistograms(s.projectName, s.logStore, "", from.Unix(), to.Unix(), query)
 	if err != nil {
@@ -115,14 +123,20 @@ func (s *slsEventBackend) ListEvents(jobNamespace, jobName string, from, to time
 	}
 
 	var (
-		logsCnt            = hist.Count
-		offset       int64 = 0
-		eventsBuffer       = make([]*dmo.Event, logsCnt)
+		logsCnt       = hist.Count
+		offset  int64 = 0
 	)
+	// Never preallocate from the (unbounded, possibly stale) histogram count;
+	// cap both the initial capacity and the total number of fetched events.
+	initCap := logsCnt
+	if initCap > maxEventsPerQuery {
+		initCap = maxEventsPerQuery
+	}
+	eventsBuffer := make([]*dmo.Event, 0, initCap)
 
 	// SLS allows client gets maximum 100 segments of logs onetime, so we'd try to pull slsMaxLineNum log
 	// once a time and finally aggregate them into logs buffer.
-	for logsCnt > 0 {
+	for logsCnt > 0 && int64(len(eventsBuffer)) < maxEventsPerQuery {
 		getCnt := slsMaxLineNum
 		if logsCnt < slsMaxLineNum {
 			getCnt = logsCnt
@@ -131,18 +145,36 @@ func (s *slsEventBackend) ListEvents(jobNamespace, jobName string, from, to time
 		if err != nil {
 			return nil, err
 		}
+		if logResp == nil || logResp.Count <= 0 {
+			break
+		}
 		events, err := s.unwrapSLSLogs(logResp)
 		if err != nil {
 			return nil, err
 		}
 
-		// Copy fetched logs and update progress flags.
-		copy(eventsBuffer[offset:offset+logResp.Count], events)
-		logsCnt -= slsMaxLineNum
-		offset += slsMaxLineNum
+		// Append fetched logs and advance by the number of logs actually
+		// returned: new logs may be written while paginating, so relying on
+		// the histogram count for offsets could overrun or skip entries.
+		eventsBuffer = append(eventsBuffer, events...)
+		logsCnt -= logResp.Count
+		offset += logResp.Count
 	}
 
+	if int64(len(eventsBuffer)) > maxEventsPerQuery {
+		eventsBuffer = eventsBuffer[:maxEventsPerQuery]
+	}
 	return eventsBuffer, nil
+}
+
+// quoteSLSQueryValue wraps a value in double quotes for use as a literal term
+// in an SLS query expression, escaping embedded backslashes and double quotes
+// so the value is matched verbatim instead of being interpreted as query
+// syntax (query injection).
+func quoteSLSQueryValue(v string) string {
+	escaped := strings.ReplaceAll(v, `\`, `\\`)
+	escaped = strings.ReplaceAll(escaped, `"`, `\"`)
+	return `"` + escaped + `"`
 }
 
 func (s *slsEventBackend) ListLogs(namespace, jobKind, jobName, name string, maxLine int64, from, to time.Time) ([]string, error) {

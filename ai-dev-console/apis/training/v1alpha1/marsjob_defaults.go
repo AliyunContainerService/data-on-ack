@@ -27,6 +27,11 @@ import (
 
 // setDefaults_MarsJobPort sets the default ports for pytorch container.
 func setDefaults_MarsJobPort(spec *v1.PodSpec) {
+	// Malformed CRs may carry an empty container list; defaulting must not panic.
+	if len(spec.Containers) == 0 {
+		return
+	}
+
 	index := 0
 	for i, container := range spec.Containers {
 		if container.Name == MarsJobDefaultContainerName {

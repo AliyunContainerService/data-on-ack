@@ -13,6 +13,7 @@ export default defineConfig({
     port: 9528,
     proxy: {
       '/user': 'http://localhost:8080',
+      '/ops': 'http://localhost:8080',
       '/researcher': 'http://localhost:8080',
       '/group': 'http://localhost:8080',
       '/user_group': 'http://localhost:8080',

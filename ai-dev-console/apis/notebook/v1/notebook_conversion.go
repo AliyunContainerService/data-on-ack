@@ -24,7 +24,17 @@ import (
 // ConvertTo converts this Notebook to the Hub version (v1beta1).
 func (src *Notebook) ConvertTo(dstRaw conversion.Hub) error {
 	dst := dstRaw.(*nbv1beta1.Notebook)
+
+	// ObjectMeta
+	// NOTE: TypeMeta is intentionally not copied here: the conversion
+	// machinery (scheme) owns it and sets the correct apiVersion/kind for
+	// the target version; copying it would leak the source version.
+	dst.ObjectMeta = src.ObjectMeta
+
+	// Spec
 	dst.Spec.Template.Spec = src.Spec.Template.Spec
+
+	// Status
 	dst.Status.ReadyReplicas = src.Status.ReadyReplicas
 	dst.Status.ContainerState = src.Status.ContainerState
 	conditions := []nbv1beta1.NotebookCondition{}
@@ -50,7 +60,17 @@ Most of the conversion is straightforward copying, except for converting our cha
 // ConvertFrom converts from the Hub version (v1beta1) to this version.
 func (dst *Notebook) ConvertFrom(srcRaw conversion.Hub) error {
 	src := srcRaw.(*nbv1beta1.Notebook)
+
+	// ObjectMeta
+	// NOTE: TypeMeta is intentionally not copied here: the conversion
+	// machinery (scheme) owns it and sets the correct apiVersion/kind for
+	// the target version; copying it would leak the source version.
+	dst.ObjectMeta = src.ObjectMeta
+
+	// Spec
 	dst.Spec.Template.Spec = src.Spec.Template.Spec
+
+	// Status
 	dst.Status.ReadyReplicas = src.Status.ReadyReplicas
 	dst.Status.ContainerState = src.Status.ContainerState
 	conditions := []NotebookCondition{}

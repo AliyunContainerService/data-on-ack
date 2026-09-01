@@ -127,4 +127,17 @@ export default {
       changeOrigin: true,
     },
   },
+
+  // Node >= 17 / webpack 4 compat: swr 2.x ships .mjs modules that import named
+  // exports from the CJS 'react' build. webpack 4 treats .mjs as strict ESM by
+  // default, which fails with "Can't import the named export ... from non
+  // EcmaScript module". Parsing .mjs as javascript/auto restores CJS interop.
+  chainWebpack(config) {
+    config.module
+      .rule('mjs-compat')
+      .test(/\.mjs$/)
+      .include.add(/node_modules/)
+      .end()
+      .type('javascript/auto');
+  },
 };

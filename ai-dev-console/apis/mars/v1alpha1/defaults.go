@@ -32,6 +32,11 @@ func addDefaultingFuncs(scheme *runtime.Scheme) error {
 
 // setDefaultPort sets the default ports for mars container.
 func setDefaultPort(spec *v1.PodSpec) {
+	// Malformed CRs may carry an empty container list; defaulting must not panic.
+	if len(spec.Containers) == 0 {
+		return
+	}
+
 	index := 0
 	for i, container := range spec.Containers {
 		if container.Name == DefaultContainerName {

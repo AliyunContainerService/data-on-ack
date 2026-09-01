@@ -131,6 +131,11 @@ func FilterPodCount(pods []*v1.Pod, phase v1.PodPhase) int32 {
 func GetTotalReplicas(replicas map[apiv1.ReplicaType]*apiv1.ReplicaSpec) int32 {
 	jobReplicas := int32(0)
 	for _, r := range replicas {
+		// Undefaulted specs may carry nil Replicas; treat as 1 (the API default).
+		if r == nil || r.Replicas == nil {
+			jobReplicas++
+			continue
+		}
 		jobReplicas += *r.Replicas
 	}
 	return jobReplicas

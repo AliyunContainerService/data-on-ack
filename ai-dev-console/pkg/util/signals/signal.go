@@ -48,7 +48,8 @@ func SetupSignalHandler() (stopCh <-chan struct{}) {
 
 func GlobalSetupSignal() <-chan struct{} {
 	if globalSig == nil {
-		globalSig = controllerruntime.SetupSignalHandler()
+		// controller-runtime >= v0.15 returns context.Context; adapt to <-chan struct{}
+		globalSig = controllerruntime.SetupSignalHandler().Done()
 	}
 	return globalSig
 }

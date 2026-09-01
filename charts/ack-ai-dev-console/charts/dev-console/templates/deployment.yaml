@@ -64,15 +64,15 @@ spec:
               value: "{{ .Values.console.rrsa.oidcProviderArn }}"
             - name: OIDC_TOKEN_FILE
               value: "{{ .Values.console.rrsa.oidcTokenFile }}"
+            - name: OIDC_ROLE_ARN
+              value: "{{ .Values.console.rrsa.roleArn }}"
             - name: FRONTEND_DIR
               value: "/app/dist"
-            {{- if .Values.auth.existingSecret }}
             - name: SESSION_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.auth.existingSecret }}
+                  name: {{ .Values.auth.existingSecret | default (printf "%s-session" (include "dev-console.fullname" .)) }}
                   key: sessionSecret
-            {{- end }}
             - name: ENABLE_SECURE_COOKIE
               value: "{{ .Values.auth.secureCookie }}"
             {{- if .Values.auth.oauthSigninURL }}

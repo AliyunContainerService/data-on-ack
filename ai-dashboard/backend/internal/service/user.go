@@ -3,10 +3,13 @@ package service
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/AliyunContainerService/data-on-ack/ai-dashboard/backend/internal/k8s"
 	"github.com/AliyunContainerService/data-on-ack/ai-dashboard/backend/internal/model"
+	authenticationv1 "k8s.io/api/authentication/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/tools/clientcmd"
@@ -26,6 +29,11 @@ const (
 var userGVR = schema.GroupVersionResource{
 	Group: "data.kubeai.alibabacloud.com", Version: "v1", Resource: "users",
 }
+
+// longTokenExpirationSeconds is the requested lifetime for tokens issued via
+// the TokenRequest API when no SA token secret exists (K8s >= 1.24). The API
+// server may cap it to --service-account-max-token-expiration.
+const longTokenExpirationSeconds int64 = 365 * 24 * 3600 // 1 year
 
 type UserService struct {
 	kubeClient *k8s.Client
@@ -147,8 +155,15 @@ func (s *UserService) UpdateUser(user *model.User) error {
 }
 
 func (s *UserService) DeleteUser(userID string) error {
+	if userID == "" || s == nil || s.crdClient == nil {
+		return fmt.Errorf("invalid user delete request")
+	}
 	user, err := s.GetUser(userID)
 	if err != nil {
+		// Treat "not found" as already deleted instead of failing.
+		if errors.IsNotFound(err) {
+			return nil
+		}
 		return err
 	}
 	if user == nil {
@@ -158,14 +173,16 @@ func (s *UserService) DeleteUser(userID string) error {
 		return fmt.Errorf("user %s is not deletable", userID)
 	}
 
+	// Clean up the associated service account and its admin cluster role
+	// binding. Both are optional: users without a service account must not
+	// trigger a nil dereference.
 	saConfig := user.Spec.K8sServiceAccount
 	if saConfig != nil && saConfig.Name != "" {
 		_ = s.kubeClient.Typed().CoreV1().ServiceAccounts(UserNamespace).Delete(
 			context.TODO(), saConfig.Name, metav1.DeleteOptions{})
+		_ = s.kubeClient.Typed().RbacV1().ClusterRoleBindings().Delete(
+			context.TODO(), saConfig.Name+"-"+AdminClusterRole, metav1.DeleteOptions{})
 	}
-
-	_ = s.kubeClient.Typed().RbacV1().ClusterRoleBindings().Delete(
-		context.TODO(), saConfig.Name+"-"+AdminClusterRole, metav1.DeleteOptions{})
 
 	return s.crdClient.Delete(userGVR, UserNamespace, userID)
 }
@@ -175,7 +192,7 @@ func (s *UserService) GetBearerToken(userID string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if user == nil || user.Spec.K8sServiceAccount == nil {
+	if user == nil || user.Spec.K8sServiceAccount == nil || user.Spec.K8sServiceAccount.Name == "" {
 		return "", fmt.Errorf("user or service account not found")
 	}
 	saName := user.Spec.K8sServiceAccount.Name
@@ -184,30 +201,77 @@ func (s *UserService) GetBearerToken(userID string) (string, error) {
 		saNs = UserNamespace
 	}
 
-	// K8s 1.24+: SA no longer auto-populates .secrets field.
-	// Look for the token secret by naming convention: <saName>-token
-	secretName := saName + "-token"
-	secret, err := s.kubeClient.GetSecret(secretName, saNs)
+	token, _, _, err := s.resolveSAToken(saName, saNs)
 	if err != nil {
-		// Fallback: try legacy .secrets field on the SA
-		sa, saErr := s.kubeClient.GetServiceAccount(saName, saNs)
-		if saErr != nil {
-			return "", fmt.Errorf("service account %s not found: %w", saName, saErr)
-		}
-		if len(sa.Secrets) == 0 {
-			return "", fmt.Errorf("no token secret found for service account %s (tried %s)", saName, secretName)
-		}
-		secret, err = s.kubeClient.GetSecret(sa.Secrets[0].Name, saNs)
-		if err != nil {
-			return "", fmt.Errorf("get secret %s: %w", sa.Secrets[0].Name, err)
+		return "", err
+	}
+	return token, nil
+}
+
+// resolveSAToken returns a bearer token for the given service account, plus
+// the CA bundle / default namespace when they are stored alongside the token.
+// It prefers the classic SA token secret paths (naming convention first, then
+// the SA's legacy .secrets field) and falls back to the TokenRequest API,
+// which is required on K8s >= 1.24 clusters where no token secret exists.
+func (s *UserService) resolveSAToken(saName, saNs string) (token string, ca []byte, ns string, err error) {
+	if s == nil || s.kubeClient == nil {
+		return "", nil, "", fmt.Errorf("user service not initialized")
+	}
+
+	// Preferred: token secret named <saName>-token (created by this platform).
+	secretName := saName + "-token"
+	if secret, serr := s.kubeClient.GetSecret(secretName, saNs); serr == nil && secret != nil {
+		if t, ok := secret.Data["token"]; ok && len(t) > 0 {
+			return string(t), secret.Data["ca.crt"], string(secret.Data["namespace"]), nil
 		}
 	}
 
-	tokenBytes, ok := secret.Data["token"]
-	if !ok {
-		return "", fmt.Errorf("token data not found in secret %s", secret.Name)
+	// Legacy (K8s < 1.24): token secret referenced by the SA's .secrets field.
+	sa, saErr := s.kubeClient.GetServiceAccount(saName, saNs)
+	if saErr != nil {
+		return "", nil, "", fmt.Errorf("service account %s not found: %w", saName, saErr)
 	}
-	return string(tokenBytes), nil
+	if len(sa.Secrets) > 0 {
+		secret, gerr := s.kubeClient.GetSecret(sa.Secrets[0].Name, saNs)
+		if gerr == nil && secret != nil {
+			if t, ok := secret.Data["token"]; ok && len(t) > 0 {
+				return string(t), secret.Data["ca.crt"], string(secret.Data["namespace"]), nil
+			}
+		}
+	}
+
+	// Fallback: TokenRequest API with a long expiration (K8s >= 1.24).
+	exp := longTokenExpirationSeconds
+	tr, terr := s.kubeClient.Typed().CoreV1().ServiceAccounts(saNs).CreateToken(
+		context.TODO(), saName,
+		&authenticationv1.TokenRequest{
+			Spec: authenticationv1.TokenRequestSpec{ExpirationSeconds: &exp},
+		},
+		metav1.CreateOptions{})
+	if terr != nil {
+		return "", nil, "", fmt.Errorf(
+			"no token secret found for service account %s (tried %s and SA secrets) and TokenRequest failed: %w",
+			saName, secretName, terr)
+	}
+	return tr.Status.Token, nil, "", nil
+}
+
+// clusterCA returns the cluster CA bundle from the current rest config,
+// used when no SA token secret carries ca.crt (TokenRequest path).
+func (s *UserService) clusterCA() []byte {
+	cfg := s.kubeClient.Config()
+	if cfg == nil {
+		return nil
+	}
+	if len(cfg.TLSClientConfig.CAData) > 0 {
+		return cfg.TLSClientConfig.CAData
+	}
+	if cfg.TLSClientConfig.CAFile != "" {
+		if b, err := os.ReadFile(cfg.TLSClientConfig.CAFile); err == nil {
+			return b
+		}
+	}
+	return nil
 }
 
 func (s *UserService) GenKubeConfig(userID, namespace string) (string, error) {
@@ -224,22 +288,20 @@ func (s *UserService) GenKubeConfig(userID, namespace string) (string, error) {
 		saNs = UserNamespace
 	}
 
-	sa, err := s.kubeClient.GetServiceAccount(saName, saNs)
+	token, caCrt, tokenNs, err := s.resolveSAToken(saName, saNs)
 	if err != nil {
 		return "", err
 	}
-	if len(sa.Secrets) == 0 {
-		return "", fmt.Errorf("no secrets for sa %s", saName)
+	// The TokenRequest path carries no ca.crt/namespace; take the CA from the
+	// current cluster config and default to the SA namespace.
+	if len(caCrt) == 0 {
+		caCrt = s.clusterCA()
 	}
-	secret, err := s.kubeClient.GetSecret(sa.Secrets[0].Name, saNs)
-	if err != nil {
-		return "", err
-	}
-
-	caCrt := secret.Data["ca.crt"] // already base64-decoded by client-go
-	token := string(secret.Data["token"])
 	if namespace == "" {
-		namespace = string(secret.Data["namespace"])
+		namespace = tokenNs
+	}
+	if namespace == "" {
+		namespace = saNs
 	}
 
 	host, port, err := s.kubeClient.GetEndpointAddress(KubernetesEndpointName, "default")

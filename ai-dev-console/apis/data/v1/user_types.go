@@ -31,7 +31,6 @@ type UserSpec struct {
 	// Foo is an example field of User. Edit User_types.go to remove/update
 	UserName          string            `json:"userName,omitempty"`
 	UserId            string            `json:"userId,omitempty"`
-	Password          string            `json:"password,omitempty"`
 	Aliuid            string            `json:"aliuid,omitempty"`
 	ExternalUser      ExternalUser      `json:"externalUser,omitempty"`
 	ApiRoles          []string          `json:"apiRoles,omitempty"`

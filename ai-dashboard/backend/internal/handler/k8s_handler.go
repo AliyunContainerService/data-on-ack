@@ -19,10 +19,12 @@ func newK8sHandler(kubeClient *k8s.Client) *K8sHandler {
 }
 
 func (h *K8sHandler) RegisterRoutes(rg *gin.RouterGroup) {
-	rg.GET("/k8s/pvc/list", h.ListPVCs)
-	rg.GET("/k8s/secret/list", h.ListSecrets)
-	rg.GET("/k8s/namespace/list", h.ListNamespaces)
-	rg.GET("/k8s/rbac/options", h.ListRBACOptions)
+	// Cluster inventory (PVCs, secret metadata, namespaces, RBAC options)
+	// is a cluster-admin capability.
+	rg.GET("/k8s/pvc/list", adminOnly, h.ListPVCs)
+	rg.GET("/k8s/secret/list", adminOnly, h.ListSecrets)
+	rg.GET("/k8s/namespace/list", adminOnly, h.ListNamespaces)
+	rg.GET("/k8s/rbac/options", adminOnly, h.ListRBACOptions)
 }
 
 // ListRBACOptions returns available Roles and ClusterRoles for user group configuration.

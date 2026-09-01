@@ -19,9 +19,9 @@ package apiserver
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"io"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -77,25 +77,35 @@ func (a *apiServerEventBackend) ListEvents(namespace, name string, from, to time
 		klog.Errorf("list events failed, error: %v", err)
 		return nil, err
 	}
-
-	b, _ := json.Marshal(events)
-	klog.Infof("find events: %s", string(b))
+	klog.V(4).Infof("ListEvents fetched %d events in namespace %s", len(events.Items), namespace)
 
 	var ret []*dmo.Event
 	sort.SliceStable(events.Items, func(i, j int) bool {
-		return events.Items[i].ResourceVersion < events.Items[j].ResourceVersion
+		return resourceVersionLess(events.Items[i].ResourceVersion, events.Items[j].ResourceVersion)
 	})
 	for _, ev := range events.Items {
-		if !strings.HasPrefix(ev.InvolvedObject.Name, name) {
+		// Match the involved object exactly: prefix matching leaks events of
+		// unrelated objects sharing a name prefix across the namespace.
+		if ev.InvolvedObject.Name != name {
 			continue
 		}
 		dmoEvents, _ := converters.ConvertEventToDMOEvent(ev, "")
 		ret = append(ret, dmoEvents)
 	}
-
-	b, _ = json.Marshal(ret)
-	klog.Infof("filtered result: %s", string(b))
+	klog.V(4).Infof("ListEvents matched %d events for %s/%s", len(ret), namespace, name)
 	return ret, nil
+}
+
+// resourceVersionLess compares resource versions numerically. ResourceVersion
+// is an opaque string but on etcd-backed clusters it is a monotonically
+// increasing integer; lexicographic comparison orders "9" after "10".
+func resourceVersionLess(i, j string) bool {
+	vi, ei := strconv.ParseUint(i, 10, 64)
+	vj, ej := strconv.ParseUint(j, 10, 64)
+	if ei == nil && ej == nil {
+		return vi < vj
+	}
+	return i < j
 }
 
 func (a *apiServerEventBackend) ListLogs(namespace, jobKind, jobName, name string, maxLine int64, from, to time.Time) ([]string, error) {

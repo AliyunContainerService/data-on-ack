@@ -86,7 +86,9 @@ func ConvertPodToDMOPod(pod *v1.Pod) (*dmo.Pod, error) {
 
 	// Pod status Unknown defaulted.
 	dmoPod.Status = v1.PodUnknown
-	dmoPod.Status = pod.Status.Phase
+	if pod.Status.Phase != "" {
+		dmoPod.Status = pod.Status.Phase
+	}
 	if len(pod.Status.ContainerStatuses) == 0 {
 		return dmoPod, nil
 	}

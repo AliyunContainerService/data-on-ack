@@ -52,8 +52,6 @@ spec:
                 items:
                   type: string
                 type: array
-              password:
-                type: string
               k8sServiceAccount:
                 properties:
                   name:

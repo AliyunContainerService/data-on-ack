@@ -17,7 +17,11 @@ limitations under the License.
 package options
 
 var (
-	CtrlConfig JobControllerConfiguration
+	// CtrlConfig holds the default configuration of the job controller.
+	// MaxConcurrentReconciles defaults to 1.
+	CtrlConfig = JobControllerConfiguration{
+		MaxConcurrentReconciles: 1,
+	}
 )
 
 type JobControllerConfiguration struct {

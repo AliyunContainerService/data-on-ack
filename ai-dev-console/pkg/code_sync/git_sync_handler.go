@@ -28,6 +28,33 @@ const (
 	defaultGitSyncImage = "kubedl/git-sync:v1"
 )
 
+// Environment variable names understood by the git-sync toolkit. They are
+// centralized here because they form the wire contract with the git-sync
+// container and are referenced from multiple submission paths (init-container
+// injection below and arena submission builders).
+//
+// SECURITY: GitSyncUsernameEnv/GitSyncPasswordEnv carry user git credentials
+// as PLAINTEXT Pod environment variables; anyone able to read Pod specs in
+// the tenant namespace (e.g. `kubectl get pod -o yaml`) can obtain them.
+// The env-injection protocol is kept for backward compatibility. Mitigation
+// plan: inject credentials via Kubernetes Secrets instead (secretKeyRef env
+// sources or a mounted GIT_SYNC_CREDENTIAL file) so that no literal secret
+// value ever appears in the Pod spec, then remove the plaintext path.
+const (
+	GitSyncRepoEnv        = "GIT_SYNC_REPO"
+	GitSyncOneTimeEnv     = "GIT_SYNC_ONE_TIME"
+	GitSyncMaxFailuresEnv = "GIT_SYNC_MAX_SYNC_FAILURES"
+	GitSyncBranchEnv      = "GIT_SYNC_BRANCH"
+	GitSyncRevisionEnv    = "GIT_SYNC_REV"
+	GitSyncDepthEnv       = "GIT_SYNC_DEPTH"
+	GitSyncRootEnv        = "GIT_SYNC_ROOT"
+	GitSyncDestEnv        = "GIT_SYNC_DEST"
+	GitSyncSSHEnv         = "GIT_SYNC_SSH"
+	GitSSHKeyFileEnv      = "GIT_SSH_KEY_FILE"
+	GitSyncUsernameEnv    = "GIT_SYNC_USERNAME"
+	GitSyncPasswordEnv    = "GIT_SYNC_PASSWORD"
+)
+
 var _ CodeSyncHandler = &gitSyncHandler{}
 
 type GitSyncOptions struct {
@@ -103,71 +130,72 @@ func setDefaultSyncOpts(opts *GitSyncOptions) {
 
 func setSyncOptsEnvs(opts *GitSyncOptions) {
 	opts.Envs = append(opts.Envs, v1.EnvVar{
-		Name:  "GIT_SYNC_REPO",
+		Name:  GitSyncRepoEnv,
 		Value: opts.Source,
 	})
 	// Critical: if it's false the init container will never exit.
 	opts.Envs = append(opts.Envs, v1.EnvVar{
-		Name:  "GIT_SYNC_ONE_TIME",
+		Name:  GitSyncOneTimeEnv,
 		Value: "true",
 	})
 	if opts.MaxFailures >= 0 {
 		opts.Envs = append(opts.Envs, v1.EnvVar{
-			Name:  "GIT_SYNC_MAX_SYNC_FAILURES",
+			Name:  GitSyncMaxFailuresEnv,
 			Value: strconv.Itoa(opts.MaxFailures),
 		})
 	}
 	if opts.Branch != "" {
 		opts.Envs = append(opts.Envs, v1.EnvVar{
-			Name:  "GIT_SYNC_BRANCH",
+			Name:  GitSyncBranchEnv,
 			Value: opts.Branch,
 		})
 	}
 	if opts.Revision != "" {
 		opts.Envs = append(opts.Envs, v1.EnvVar{
-			Name:  "GIT_SYNC_REV",
+			Name:  GitSyncRevisionEnv,
 			Value: opts.Revision,
 		})
 	}
 	if opts.Depth != "" {
 		opts.Envs = append(opts.Envs, v1.EnvVar{
-			Name:  "GIT_SYNC_DEPTH",
+			Name:  GitSyncDepthEnv,
 			Value: opts.Depth,
 		})
 	}
 	if opts.RootPath != "" {
 		opts.Envs = append(opts.Envs, v1.EnvVar{
-			Name:  "GIT_SYNC_ROOT",
+			Name:  GitSyncRootEnv,
 			Value: opts.RootPath,
 		})
 	}
 	if opts.DestPath != "" {
 		opts.Envs = append(opts.Envs, v1.EnvVar{
-			Name:  "GIT_SYNC_DEST",
+			Name:  GitSyncDestEnv,
 			Value: opts.DestPath,
 		})
 	}
 	if opts.SSH {
 		opts.Envs = append(opts.Envs, v1.EnvVar{
-			Name:  "GIT_SYNC_SSH",
+			Name:  GitSyncSSHEnv,
 			Value: "true",
 		})
 	}
 	if opts.SSH && opts.SSHFile != "" {
 		opts.Envs = append(opts.Envs, v1.EnvVar{
-			Name:  "GIT_SSH_KEY_FILE",
+			Name:  GitSSHKeyFileEnv,
 			Value: opts.SSHFile,
 		})
 	}
 	if opts.User != "" {
+		// See SECURITY note on GitSyncUsernameEnv/GitSyncPasswordEnv above.
 		opts.Envs = append(opts.Envs, v1.EnvVar{
-			Name:  "GIT_SYNC_USERNAME",
+			Name:  GitSyncUsernameEnv,
 			Value: opts.User,
 		})
 	}
 	if opts.Password != "" {
 		opts.Envs = append(opts.Envs, v1.EnvVar{
-			Name:  "GIT_SYNC_PASSWORD",
+			Name:  GitSyncPasswordEnv,
 			Value: opts.Password,
 		})
 	}

@@ -23,7 +23,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"regexp"
 	"strings"
 	"sync"
 
@@ -32,9 +31,9 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/tidwall/gjson"
 	authenticationapi "k8s.io/api/authentication/v1"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/dynamic"
 
 	"github.com/AliyunContainerService/data-on-ack/ai-dev-console/console/backend/pkg/constants"
@@ -124,7 +123,7 @@ func (auth *AliCloudAuth) getRamCallbackUri(c *gin.Context, oauthInfo *model.OAu
 func (auth *AliCloudAuth) LoginByToken(c *gin.Context) error {
 	session := sessions.Default(c)
 	token, ok := c.GetQuery("token")
-	log.Infof("c%p:%v", c, token)
+	// Security fix: never log tokens.
 	if !ok || token == "" {
 		return fmt.Errorf("token empty")
 	}
@@ -350,16 +349,9 @@ func getToken(oauthInfo model.OAuthInfo, redirectUrl string, accessCode string) 
 	return dat["access_token"], nil
 }
 
-func getUsernameFromError(err error) string {
-	re := regexp.MustCompile(`^.* User "(.*)" cannot .*$`)
-	return re.ReplaceAllString(err.Error(), "$1")
-}
-
-// test token
-// "eyJhbGciOiJSUzI1NiIsImtpZCI6IldmbVBub1lNNFdlWGdlQnlTcDlxX0laMGM1dTVnR3l1bkh4XzZYTE8ydWMifQ.eyJpc3MiOiJrdWJlcm5ldGVzL3NlcnZpY2VhY2NvdW50Iiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9uYW1lc3BhY2UiOiJrdWJlLWFpIiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9zZWNyZXQubmFtZSI6ImFpZGFzaGJvYXJkLTE5ODM3MDYxMTc4NjAzMDUub25hbGl5dW4uY29tLXRva2VuLW50dmRzIiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9zZXJ2aWNlLWFjY291bnQubmFtZSI6ImFpZGFzaGJvYXJkLTE5ODM3MDYxMTc4NjAzMDUub25hbGl5dW4uY29tIiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9zZXJ2aWNlLWFjY291bnQudWlkIjoiMTc5OWYxNTEtZGQ3MC00OTQzLTllODktZTY1NGJjY2M4MmIxIiwic3ViIjoic3lzdGVtOnNlcnZpY2VhY2NvdW50Omt1YmUtYWk6YWlkYXNoYm9hcmQtMTk4MzcwNjExNzg2MDMwNS5vbmFsaXl1bi5jb20ifQ.TwSUPy0cxmAx2DrugLrPx3wBBzhMZwhj7tYe5urajGZnk4nHQewIsCcT97Hh4k0P6olL7jRkIKUoC9a8SBefexdhnwaR2LROA1dfKgHvfdzhsUEKVA92wRFA7ZujMIHrn2hirz4NjsBUCOhqSAcf7rAnjJFJNQtoD6TZ5jhhPiSko_fh22FbVam1_e2G6YWFVmR88AcX8InzQA_R-64rNvrLzTG6iw6ChbQR-AMaofoqzQSNqnwyRKIPfDLRemVCWGM-6W3RzcWxSCeqVyIumjMdMH8Ym6aEXwtEQvnkVKWrJLegJTY21DC0eSTq7fUjnD26G6KhJHyIOzl8D3R5QQ",
 func getUserNameByToken(k8sToken string) (userName string, err error) {
 	// parse and verify signature
-	log.Infof("k8stoken:[%s]", k8sToken)
+	// Security fix: never log the token.
 	kubeclient := clientmgr.GetKubeClient()
 	result, err := kubeclient.AuthenticationV1().TokenReviews().Create(context.TODO(), &authenticationapi.TokenReview{
 		Spec: authenticationapi.TokenReviewSpec{
@@ -367,9 +359,8 @@ func getUserNameByToken(k8sToken string) (userName string, err error) {
 		},
 	}, metav1.CreateOptions{})
 	if err != nil {
-		if k8serrors.IsForbidden(err) {
-			return getUsernameFromError(err), nil
-		}
+		// Security fix: a Forbidden TokenReview must be treated as an
+		// authentication failure; never derive identity from the error text.
 		return "", err
 	}
 
@@ -619,7 +610,9 @@ func (auth *AliCloudAuth) GetUserToken(userInfo *model.UserInfo) (string, error)
 		}
 	}
 	if len(sa.Secrets) < 1 {
-		return "", fmt.Errorf("service account %s secret count is zero", sa)
+		// Kubernetes >= 1.24 no longer auto-creates token secrets for
+		// service accounts; issue a token through the TokenRequest API.
+		return requestServiceAccountToken(kubeclient, sa.Name)
 	}
 
 	secretName := sa.Secrets[0].Name
@@ -631,4 +624,26 @@ func (auth *AliCloudAuth) GetUserToken(userInfo *model.UserInfo) (string, error)
 	}
 	token := string(secret.Data["token"])
 	return token, nil
+}
+
+// requestServiceAccountToken issues a long-lived token for a service account
+// via the TokenRequest API (needed on Kubernetes >= 1.24 where SA token
+// secrets are not created automatically).
+func requestServiceAccountToken(kubeclient clientset.Interface, saName string) (string, error) {
+	// Request a long expiration (1 year); the apiserver may cap or reject it.
+	expirationSeconds := int64(86400 * 365)
+	tokenRequest := &authenticationapi.TokenRequest{
+		Spec: authenticationapi.TokenRequestSpec{
+			ExpirationSeconds: &expirationSeconds,
+		},
+	}
+	result, err := kubeclient.CoreV1().ServiceAccounts(kubeAINamespace).CreateToken(context.TODO(), saName, tokenRequest, metav1.CreateOptions{})
+	if err != nil {
+		klog.Errorf("create token request for sa %s/%s failed: %v", kubeAINamespace, saName, err)
+		return "", fmt.Errorf("create token request for service account %s/%s failed (the apiserver may reject the requested long expiration, err: %v)", kubeAINamespace, saName, err)
+	}
+	if result.Status.Token == "" {
+		return "", fmt.Errorf("empty token returned for service account %s/%s", kubeAINamespace, saName)
+	}
+	return result.Status.Token, nil
 }

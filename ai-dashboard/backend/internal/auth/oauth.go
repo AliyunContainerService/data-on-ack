@@ -80,11 +80,16 @@ func FetchUserInfo(cfg *config.AppConfig, accessToken string) (*RamUserInfo, err
 }
 
 // GetLoginURL builds the RAM SSO authorization URL for the user to visit.
-func GetLoginURL(cfg *config.AppConfig, oauth OAuthInfo, callbackURL string) string {
+// state is the anti-CSRF nonce; it is echoed back by the provider on the
+// callback and must match the value stored in the session.
+func GetLoginURL(cfg *config.AppConfig, oauth OAuthInfo, callbackURL, state string) string {
 	vals := url.Values{}
 	vals.Set("client_id", oauth.AppID)
 	vals.Set("redirect_uri", callbackURL)
 	vals.Set("response_type", "code")
+	if state != "" {
+		vals.Set("state", state)
+	}
 	authURL, _ := url.Parse(cfg.RamSigninURL())
 	authURL.RawQuery = vals.Encode()
 	return authURL.String()

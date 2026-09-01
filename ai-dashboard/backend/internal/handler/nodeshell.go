@@ -3,7 +3,8 @@ package handler
 import (
 	"bytes"
 	"context"
-	"fmt"
+	"crypto/rand"
+	"encoding/hex"
 	"os"
 	"strings"
 	"time"
@@ -26,7 +27,8 @@ const (
 	nodeShellImage     = "registry-cn-beijing-vpc.ack.aliyuncs.com/acs/busybox:stable"
 	nodeShellNamespace = "kube-ai"
 	nodeShellPrefix    = "node-shell-"
-	nodeShellTimeout   = 30 * time.Second
+	nodeShellTimeout   = 30 * time.Second // wait for the ephemeral pod to become Running
+	nodeShellExecLimit = 60 * time.Second // overall per-node exec deadline (includes pod wait)
 )
 
 type NodeShellHandler struct {
@@ -84,7 +86,10 @@ func (h *NodeShellHandler) ExecOnNode(c *gin.Context) {
 		return
 	}
 
-	result := h.execOnNode(req.NodeName, req.Command)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), nodeShellExecLimit)
+	defer cancel()
+
+	result := h.execOnNode(ctx, req.NodeName, req.Command)
 	if result.Error != "" {
 		response.OK(c, result)
 		return
@@ -105,33 +110,65 @@ func (h *NodeShellHandler) BatchExecOnNodes(c *gin.Context) {
 		return
 	}
 
-	// Execute concurrently
-	results := make([]NodeExecResult, len(req.NodeNames))
-	done := make(chan int, len(req.NodeNames))
+	// Deduplicate node names (preserve order) to avoid executing twice on the
+	// same node and racing on the same ephemeral pod name.
+	nodeNames := make([]string, 0, len(req.NodeNames))
+	seen := make(map[string]bool, len(req.NodeNames))
+	for _, n := range req.NodeNames {
+		if n == "" || seen[n] {
+			continue
+		}
+		seen[n] = true
+		nodeNames = append(nodeNames, n)
+	}
+	if len(nodeNames) == 0 {
+		response.Failed(c, response.CodeK8sError, "no valid node names")
+		return
+	}
 
-	for i, node := range req.NodeNames {
+	// Execute concurrently, bounded by the request context deadline.
+	ctx, cancel := context.WithTimeout(c.Request.Context(), nodeShellExecLimit)
+	defer cancel()
+
+	results := make([]NodeExecResult, len(nodeNames))
+	done := make(chan int, len(nodeNames))
+
+	for i, node := range nodeNames {
 		go func(idx int, nodeName string) {
-			results[idx] = h.execOnNode(nodeName, req.Command)
+			results[idx] = h.execOnNode(ctx, nodeName, req.Command)
 			done <- idx
 		}(i, node)
 	}
 
 	// Wait for all
-	for range req.NodeNames {
+	for range nodeNames {
 		<-done
 	}
 
 	response.OK(c, results)
 }
 
-func (h *NodeShellHandler) execOnNode(nodeName, command string) NodeExecResult {
+func (h *NodeShellHandler) execOnNode(ctx context.Context, nodeName, command string) NodeExecResult {
+	return h.execOnNodeCmd(ctx, nodeName, []string{"sh", "-c", command})
+}
+
+// execOnNodeCmd runs a command given as argv (no shell interpretation) on the
+// target node through an ephemeral privileged pod + nsenter.
+func (h *NodeShellHandler) execOnNodeCmd(ctx context.Context, nodeName string, cmdArgs []string) NodeExecResult {
 	result := NodeExecResult{NodeName: nodeName}
 
 	sanitized := strings.Replace(nodeName, ".", "-", -1)
 	if len(sanitized) > 40 {
 		sanitized = sanitized[:40]
 	}
-	podName := nodeShellPrefix + sanitized + fmt.Sprintf("-%d", time.Now().Unix()%10000)
+	// Random suffix avoids pod name collisions when multiple requests land in
+	// the same second (e.g. batch exec on nodes with shared name prefixes).
+	suffix, err := randomSuffix(3)
+	if err != nil {
+		result.Error = "generate pod name suffix: " + err.Error()
+		return result
+	}
+	podName := nodeShellPrefix + sanitized + "-" + suffix
 
 	// Create ephemeral privileged pod on the target node
 	pod := &corev1.Pod{
@@ -162,10 +199,8 @@ func (h *NodeShellHandler) execOnNode(nodeName, command string) NodeExecResult {
 		},
 	}
 
-	ctx := context.Background()
-
 	// Create pod
-	_, err := h.kubeClient.Typed().CoreV1().Pods(nodeShellNamespace).Create(ctx, pod, metav1.CreateOptions{})
+	_, err = h.kubeClient.Typed().CoreV1().Pods(nodeShellNamespace).Create(ctx, pod, metav1.CreateOptions{})
 	if err != nil {
 		result.Error = "create pod: " + err.Error()
 		return result
@@ -177,21 +212,22 @@ func (h *NodeShellHandler) execOnNode(nodeName, command string) NodeExecResult {
 		logrus.Debugf("node-shell pod %s deleted", podName)
 	}()
 
-	// Wait for pod to be running
-	err = wait.PollImmediate(500*time.Millisecond, nodeShellTimeout, func() (bool, error) {
-		p, err := h.kubeClient.Typed().CoreV1().Pods(nodeShellNamespace).Get(ctx, podName, metav1.GetOptions{})
-		if err != nil {
-			return false, err
-		}
-		return p.Status.Phase == corev1.PodRunning, nil
-	})
+	// Wait for pod to be running (bounded by both the wait timeout and ctx)
+	err = wait.PollUntilContextTimeout(ctx, 500*time.Millisecond, nodeShellTimeout, true,
+		func(ctx context.Context) (bool, error) {
+			p, err := h.kubeClient.Typed().CoreV1().Pods(nodeShellNamespace).Get(ctx, podName, metav1.GetOptions{})
+			if err != nil {
+				return false, err
+			}
+			return p.Status.Phase == corev1.PodRunning, nil
+		})
 	if err != nil {
 		result.Error = "wait pod running: " + err.Error()
 		return result
 	}
 
 	// Exec command via nsenter into host namespace
-	nsenterCmd := []string{"nsenter", "--target", "1", "--mount", "--uts", "--ipc", "--net", "--pid", "--", "sh", "-c", command}
+	nsenterCmd := append([]string{"nsenter", "--target", "1", "--mount", "--uts", "--ipc", "--net", "--pid", "--"}, cmdArgs...)
 
 	execReq := h.kubeClient.Typed().CoreV1().RESTClient().Post().
 		Resource("pods").
@@ -227,6 +263,15 @@ func (h *NodeShellHandler) execOnNode(nodeName, command string) NodeExecResult {
 
 func boolPtr(b bool) *bool {
 	return &b
+}
+
+// randomSuffix returns a hex string of n random bytes (2n characters).
+func randomSuffix(n int) (string, error) {
+	b := make([]byte, n)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
 }
 
 // Ensure errors package is used

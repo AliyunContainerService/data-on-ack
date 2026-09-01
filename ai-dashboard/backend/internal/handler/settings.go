@@ -27,10 +27,11 @@ func newSettingsHandler(kubeClient *k8s.Client) *SettingsHandler {
 }
 
 func (h *SettingsHandler) RegisterRoutes(rg *gin.RouterGroup) {
-	rg.GET("/ops/settings", h.GetSettings)
-	rg.POST("/ops/settings", h.SaveSettings)
-	rg.GET("/ops/images", h.ListImages)
-	rg.POST("/ops/images/delete", h.DeleteImage)
+	// All /ops/* endpoints are admin-only platform management operations.
+	rg.GET("/ops/settings", adminOnly, h.GetSettings)
+	rg.POST("/ops/settings", adminOnly, h.SaveSettings)
+	rg.GET("/ops/images", adminOnly, h.ListImages)
+	rg.POST("/ops/images/delete", adminOnly, h.DeleteImage)
 }
 
 type PlatformConfig struct {
@@ -196,9 +197,20 @@ func (h *SettingsHandler) DeleteImage(c *gin.Context) {
 		return
 	}
 
-	// Use node-shell handler to exec crictl rmi on the target node
+	// Defense in depth: image references never contain whitespace or shell
+	// metacharacters; reject anything suspicious even though the command is
+	// executed in argv form below.
+	if strings.ContainsAny(req.Image, " \t\n;&|<>$`\"'") {
+		response.Failed(c, response.CodeK8sError, "invalid image name")
+		return
+	}
+
+	// Use node-shell handler to exec crictl rmi on the target node.
+	// argv form (no shell) prevents command injection via the image name.
+	ctx, cancel := context.WithTimeout(c.Request.Context(), nodeShellExecLimit)
+	defer cancel()
 	shellHandler := newNodeShellHandler(h.kubeClient)
-	result := shellHandler.execOnNode(req.NodeName, "crictl rmi "+req.Image)
+	result := shellHandler.execOnNodeCmd(ctx, req.NodeName, []string{"crictl", "rmi", req.Image})
 	if result.Error != "" {
 		response.Failed(c, response.CodeK8sError, "delete image failed: "+result.Error+" "+result.Stderr)
 		return

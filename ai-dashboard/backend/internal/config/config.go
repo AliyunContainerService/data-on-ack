@@ -19,6 +19,7 @@ type AppConfig struct {
 	// RRSA credential
 	OIDCProviderARN string
 	OIDCTokenFile   string
+	RoleARN         string
 	// OAuth
 	IsIntlAccount  bool
 	IsCreateWebApp bool
@@ -56,7 +57,8 @@ func Parse() {
 		AccessKeySecret:   os.Getenv("AK_ACCESS_KEY_SECRET"),
 		OIDCProviderARN:    os.Getenv("OIDC_PROVIDER_ARN"),
 		OIDCTokenFile:      getEnvDefault("OIDC_TOKEN_FILE", "/var/run/secrets/tokens/oidc-token"),
-		IsIntlAccount:      isIntl,
+		RoleARN:            os.Getenv("OIDC_ROLE_ARN"),
+		IsIntlAccount:      isIntl || os.Getenv("INTL_ACCOUNT") == "true",
 		IsCreateWebApp:     !disableOAuth,
 		AdminUID:           getEnvDefault("DASHBOARD_ADMINUID", adminUID),
 		GrafanaProxyTarget: getEnvDefault("GRAFANA_PROXY_TARGET", "arena-exporter-grafana.kube-ai:80"),

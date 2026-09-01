@@ -62,10 +62,13 @@ func TestGetLoginURL(t *testing.T) {
 		AppSecret:  "test-secret",
 		RedirectURI: "http://localhost/login/aliyun",
 	}
-	url := GetLoginURL(cfg, oauth, "http://localhost/login/aliyun")
+	url := GetLoginURL(cfg, oauth, "http://localhost/login/aliyun", "state-123")
 
 	if url == "" {
 		t.Fatal("GetLoginURL returned empty URL")
+	}
+	if !contains(url, "state=state-123") {
+		t.Errorf("URL missing state: %s", url)
 	}
 	if !contains(url, "client_id=test-app-id") {
 		t.Errorf("URL missing client_id: %s", url)
@@ -84,7 +87,10 @@ func TestGetLoginURL(t *testing.T) {
 func TestGetLoginURL_Intl(t *testing.T) {
 	cfg := &config.AppConfig{IsIntlAccount: true}
 	oauth := OAuthInfo{AppID: "intl-id", AppSecret: "s", RedirectURI: "http://host/login/aliyun"}
-	url := GetLoginURL(cfg, oauth, "http://host/login/aliyun")
+	url := GetLoginURL(cfg, oauth, "http://host/login/aliyun", "")
+	if contains(url, "state=") {
+		t.Errorf("URL should omit state when empty: %s", url)
+	}
 	if !contains(url, "signin.alibabacloud.com") {
 		t.Errorf("intl URL should use alibabacloud domain: %s", url)
 	}

@@ -45,7 +45,9 @@ func (ctrl *MlflowAPIsController) RegisterRoutes(routes *gin.Engine) {
 	routes.GET("/mlflow-session", ctrl.GetSession)
 
 	group := routes.Group("/mlflow")
-	group.Any("/*path", ctrl.ReverseProxyMiddleware)
+	// Inject the logged-in user's credentials toward the MLflow server;
+	// BasicAuthMiddleware was defined but never wired before.
+	group.Any("/*path", ctrl.BasicAuthMiddleware, ctrl.ReverseProxyMiddleware)
 	klog.Info("successfully register mlflow APIs controller")
 }
 

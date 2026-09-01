@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Card, Form, InputNumber, Input, Button, Space, Typography, message, Divider, Switch, Tag } from 'antd'
 import { SaveOutlined, ReloadOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
-import { get, post } from '@/api/client'
+import { get, post, getErrorMessage } from '@/api/client'
 
 const { Title, Text, Paragraph } = Typography
 
@@ -39,7 +39,7 @@ export default function Settings() {
       await post('/ops/settings', values)
       message.success(t('common.success'))
     } catch (err) {
-      if (err instanceof Error) message.error(err.message)
+      message.error(getErrorMessage(err))
     } finally {
       setSaving(false)
     }

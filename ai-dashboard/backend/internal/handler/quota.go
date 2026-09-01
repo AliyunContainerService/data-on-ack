@@ -16,9 +16,10 @@ func newQuotaHandler(qSvc *service.QuotaService) *QuotaHandler {
 }
 
 func (h *QuotaHandler) RegisterRoutes(rg *gin.RouterGroup) {
-	rg.GET("/group/list", h.List)
-	rg.POST("/group/create", h.Create)
-	rg.PUT("/group/update", h.Update)
+	// Quota tree management is a cluster-admin capability.
+	rg.GET("/group/list", adminOnly, h.List)
+	rg.POST("/group/create", adminOnly, h.Create)
+	rg.PUT("/group/update", adminOnly, h.Update)
 }
 
 func (h *QuotaHandler) List(c *gin.Context) {

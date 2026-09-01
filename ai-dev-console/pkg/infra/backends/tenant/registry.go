@@ -30,6 +30,12 @@ import (
 
 var defaultClientRegistry = NewClientRegistry()
 
+// maxCachedClients bounds each per-user client cache. The registry is shared
+// by every console tenant and previously grew without limit; when the bound is
+// reached the cache is dropped and rebuilt lazily (a coarse but simple
+// replacement for a full LRU, cached clients are cheap to regenerate).
+const maxCachedClients = 256
+
 type ClientRegistry struct {
 	lock        sync.Mutex
 	arenas      map[string]*arenaclient.ArenaClient
@@ -47,10 +53,16 @@ func (r *ClientRegistry) AddArenaClient(userName string, arena *arenaclient.Aren
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
+	if len(r.arenas) >= maxCachedClients {
+		r.arenas = make(map[string]*arenaclient.ArenaClient)
+	}
 	r.arenas[userName] = arena
 }
 
 func (r *ClientRegistry) GetArenaClient(userName string) *arenaclient.ArenaClient {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
 	return r.arenas[userName]
 }
 
@@ -58,10 +70,16 @@ func (r *ClientRegistry) AddCtrlClient(userName string, ctrlClient client.Client
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
+	if len(r.ctrlClients) >= maxCachedClients {
+		r.ctrlClients = make(map[string]client.Client)
+	}
 	r.ctrlClients[userName] = ctrlClient
 }
 
 func (r *ClientRegistry) GetCtrlClient(userName string) client.Client {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
 	return r.ctrlClients[userName]
 }
 

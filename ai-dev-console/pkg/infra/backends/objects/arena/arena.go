@@ -66,7 +66,7 @@ func (a *arenaBackend) Name() string {
 	return "arena"
 }
 
-func (a *arenaBackend) getArenaClient() *arenaclient.ArenaClient {
+func (a *arenaBackend) getArenaClient() (*arenaclient.ArenaClient, error) {
 	var arena *arenaclient.ArenaClient
 	var err error
 	if a.userName == "" {
@@ -75,13 +75,21 @@ func (a *arenaBackend) getArenaClient() *arenaclient.ArenaClient {
 		arena, err = clientregistry.GetArenaClient(a.userName)
 		if err != nil {
 			klog.Errorf("get arena client of user %s failed, err:%v", a.userName, err)
+			return nil, err
 		}
 	}
-	return arena
+	if arena == nil {
+		return nil, fmt.Errorf("arena client is not available (user: %q)", a.userName)
+	}
+	return arena, nil
 }
 
 func (a *arenaBackend) ListPods(ns, kind, name, jobID string) ([]*dmo.Pod, error) {
-	job, err := a.getArenaClient().Training().Namespace(ns).Get(name, utils.GetArenaJobTypeFromKind(kind), false)
+	arenaClient, err := a.getArenaClient()
+	if err != nil {
+		return nil, err
+	}
+	job, err := arenaClient.Training().Namespace(ns).Get(name, utils.GetArenaJobTypeFromKind(kind), false)
 	if err != nil {
 		klog.Errorf("get job %v/%v error: %v", ns, name, err)
 		return nil, err
@@ -128,7 +136,11 @@ func (a *arenaBackend) ListPods(ns, kind, name, jobID string) ([]*dmo.Pod, error
 }
 
 func (a *arenaBackend) ReadJob(ns, name, jobID, kind, region string) (*dmo.Job, error) {
-	job, err := a.getArenaClient().Training().Namespace(ns).Get(name, utils.GetArenaJobTypeFromKind(kind), false)
+	arenaClient, err := a.getArenaClient()
+	if err != nil {
+		return nil, err
+	}
+	job, err := arenaClient.Training().Namespace(ns).Get(name, utils.GetArenaJobTypeFromKind(kind), false)
 	if err != nil {
 		klog.Errorf("get job %v/%v error: %v", ns, name, err)
 		return nil, err
@@ -156,11 +168,15 @@ func (a *arenaBackend) ListJobs(query *backends.Query) ([]*dmo.Job, error) {
 	if query.Type != "" {
 		jobType = utils.GetArenaJobTypeFromKind(query.Type)
 	}
+	arenaClient, err := a.getArenaClient()
+	if err != nil {
+		return nil, err
+	}
 	if query.Namespace != "" {
-		trainingJobs, err = a.getArenaClient().Training().Namespace(query.Namespace).List(false, jobType, false)
+		trainingJobs, err = arenaClient.Training().Namespace(query.Namespace).List(false, jobType, false)
 	} else {
 		for _, namespace := range query.AllocatedNamespaces {
-			jobs, err1 := a.getArenaClient().Training().Namespace(namespace).List(false, jobType, false)
+			jobs, err1 := arenaClient.Training().Namespace(namespace).List(false, jobType, false)
 			if err1 == nil {
 				trainingJobs = append(trainingJobs, jobs...)
 			}
@@ -262,7 +278,11 @@ func (a *arenaBackend) StopJob(ns, name, jobID, kind, region string) error {
 }
 
 func (a *arenaBackend) RemoveJobRecord(ns, name, jobID, kind, region string) error {
-	err := a.getArenaClient().Training().Namespace(ns).Delete(utils.GetArenaJobTypeFromKind(kind), name)
+	arenaClient, err := a.getArenaClient()
+	if err != nil {
+		return err
+	}
+	err = arenaClient.Training().Namespace(ns).Delete(utils.GetArenaJobTypeFromKind(kind), name)
 	if err != nil {
 		klog.Errorf("delete job %v/%v error: %v", ns, name, err)
 		return err
@@ -276,14 +296,18 @@ func (a *arenaBackend) ListCrons(query *backends.CronQuery) ([]*dmo.Cron, error)
 	var cronInfos []*types.CronInfo
 	var err error
 
+	arenaClient, err := a.getArenaClient()
+	if err != nil {
+		return nil, err
+	}
 	if query.Namespace != "" {
-		cronInfos, err = a.getArenaClient().Cron().Namespace(query.Namespace).List(false)
+		cronInfos, err = arenaClient.Cron().Namespace(query.Namespace).List(false)
 		if err != nil {
 			return nil, err
 		}
 	} else {
 		for _, namespace := range query.AllocatedNamespaces {
-			infos, err1 := a.getArenaClient().Cron().Namespace(namespace).List(false)
+			infos, err1 := arenaClient.Cron().Namespace(namespace).List(false)
 			if err1 == nil {
 				cronInfos = append(cronInfos, infos...)
 			}
@@ -363,7 +387,11 @@ func (a *arenaBackend) GetCron(ns, name, cronID string) (*dmo.Cron, error) {
 	if ns == "" {
 		ns = "default"
 	}
-	cronInfo, err := a.getArenaClient().Cron().Namespace(ns).Get(name)
+	arenaClient, err := a.getArenaClient()
+	if err != nil {
+		return nil, err
+	}
+	cronInfo, err := arenaClient.Cron().Namespace(ns).Get(name)
 	if err != nil {
 		return nil, err
 	}
@@ -389,7 +417,11 @@ func (a *arenaBackend) GetCron(ns, name, cronID string) (*dmo.Cron, error) {
 }
 
 func (a *arenaBackend) DeleteCron(ns, name, cronID string) error {
-	return a.getArenaClient().Cron().Namespace(ns).Delete(name)
+	arenaClient, err := a.getArenaClient()
+	if err != nil {
+		return err
+	}
+	return arenaClient.Cron().Namespace(ns).Delete(name)
 }
 
 func (a *arenaBackend) WriteCron(cron *appsv1alpha1.Cron) error {
@@ -398,7 +430,11 @@ func (a *arenaBackend) WriteCron(cron *appsv1alpha1.Cron) error {
 
 func (a *arenaBackend) ListCronHistories(ns, name, jobName, jobStatus, cronID string) ([]*dmo.Job, error) {
 	klog.Infof("list cron history, ns:%s name:%s jobName:%s jobStatus:%s", ns, name, jobName, jobStatus)
-	cronInfo, err := a.getArenaClient().Cron().Namespace(ns).Get(name)
+	arenaClient, err := a.getArenaClient()
+	if err != nil {
+		return nil, err
+	}
+	cronInfo, err := arenaClient.Cron().Namespace(ns).Get(name)
 	if err != nil {
 		return nil, err
 	}

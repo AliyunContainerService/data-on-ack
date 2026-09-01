@@ -16,6 +16,17 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
+const (
+	// eventListLimit bounds the cluster-wide warning-event listing. The list is
+	// sorted client-side and truncated to the newest 100 events; the limit only
+	// protects the API server round-trip.
+	// TODO: follow ListOptions.Continue pagination or a time-windowed query
+	// (e.g. via events.k8s.io/v1) for clusters with very long event history.
+	eventListLimit = 500
+	// workloadListLimit bounds each per-CRD cluster-wide listing below.
+	workloadListLimit = 500
+)
+
 // OpsHandler provides operations/monitoring APIs for the admin dashboard.
 type OpsHandler struct {
 	kubeClient *k8s.Client
@@ -26,10 +37,11 @@ func newOpsHandler(kubeClient *k8s.Client) *OpsHandler {
 }
 
 func (h *OpsHandler) RegisterRoutes(rg *gin.RouterGroup) {
-	rg.GET("/ops/nodes", h.ListNodes)
-	rg.GET("/ops/cluster-summary", h.ClusterSummary)
-	rg.GET("/ops/events", h.ListWarningEvents)
-	rg.GET("/ops/workloads", h.ListWorkloads)
+	// Cluster operations/monitoring views are cluster-admin capabilities.
+	rg.GET("/ops/nodes", adminOnly, h.ListNodes)
+	rg.GET("/ops/cluster-summary", adminOnly, h.ClusterSummary)
+	rg.GET("/ops/events", adminOnly, h.ListWarningEvents)
+	rg.GET("/ops/workloads", adminOnly, h.ListWorkloads)
 }
 
 // --- Feature 1: Node Condition Monitoring ---
@@ -217,6 +229,7 @@ type EventInfo struct {
 func (h *OpsHandler) ListWarningEvents(c *gin.Context) {
 	events, err := h.kubeClient.Typed().CoreV1().Events("").List(context.TODO(), metav1.ListOptions{
 		FieldSelector: "type=Warning",
+		Limit:         eventListLimit,
 	})
 	if err != nil {
 		response.Failed(c, response.CodeK8sError, "list events: "+err.Error())
@@ -280,7 +293,7 @@ func (h *OpsHandler) ListWorkloads(c *gin.Context) {
 
 	// Notebooks
 	nbGVR := schema.GroupVersionResource{Group: "kubeflow.org", Version: "v1", Resource: "notebooks"}
-	nbs, err := h.kubeClient.Dynamic().Resource(nbGVR).Namespace("").List(context.TODO(), metav1.ListOptions{})
+	nbs, err := h.kubeClient.Dynamic().Resource(nbGVR).Namespace("").List(context.TODO(), metav1.ListOptions{Limit: workloadListLimit})
 	if err == nil {
 		for _, nb := range nbs.Items {
 			workloads = append(workloads, parseWorkload(nb, "Notebook"))
@@ -289,7 +302,7 @@ func (h *OpsHandler) ListWorkloads(c *gin.Context) {
 
 	// PyTorchJobs
 	ptGVR := schema.GroupVersionResource{Group: "kubeflow.org", Version: "v1", Resource: "pytorchjobs"}
-	pts, err := h.kubeClient.Dynamic().Resource(ptGVR).Namespace("").List(context.TODO(), metav1.ListOptions{})
+	pts, err := h.kubeClient.Dynamic().Resource(ptGVR).Namespace("").List(context.TODO(), metav1.ListOptions{Limit: workloadListLimit})
 	if err == nil {
 		for _, pt := range pts.Items {
 			workloads = append(workloads, parseWorkload(pt, "PyTorchJob"))
@@ -298,7 +311,7 @@ func (h *OpsHandler) ListWorkloads(c *gin.Context) {
 
 	// TFJobs
 	tfGVR := schema.GroupVersionResource{Group: "kubeflow.org", Version: "v1", Resource: "tfjobs"}
-	tfs, err := h.kubeClient.Dynamic().Resource(tfGVR).Namespace("").List(context.TODO(), metav1.ListOptions{})
+	tfs, err := h.kubeClient.Dynamic().Resource(tfGVR).Namespace("").List(context.TODO(), metav1.ListOptions{Limit: workloadListLimit})
 	if err == nil {
 		for _, tf := range tfs.Items {
 			workloads = append(workloads, parseWorkload(tf, "TFJob"))
@@ -307,7 +320,7 @@ func (h *OpsHandler) ListWorkloads(c *gin.Context) {
 
 	// MPIJobs
 	mpiGVR := schema.GroupVersionResource{Group: "kubeflow.org", Version: "v2beta1", Resource: "mpijobs"}
-	mpis, err := h.kubeClient.Dynamic().Resource(mpiGVR).Namespace("").List(context.TODO(), metav1.ListOptions{})
+	mpis, err := h.kubeClient.Dynamic().Resource(mpiGVR).Namespace("").List(context.TODO(), metav1.ListOptions{Limit: workloadListLimit})
 	if err == nil {
 		for _, mpi := range mpis.Items {
 			workloads = append(workloads, parseWorkload(mpi, "MPIJob"))

@@ -38,5 +38,6 @@ func DefaultAPIV1Controllers(logHandler *handlers.LogHandler, jobHandler *handle
 		api.NewEvaluateAPIsController(evaluateHandler),
 		notebookController,
 		api.NewModelsAPIscontroller(modelsHandler),
+		api.NewTensorBoardAPIsController(),
 	}
 }

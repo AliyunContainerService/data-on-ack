@@ -32,11 +32,12 @@ type AppSecret struct {
 
 // Session keys
 const (
-	SessionKeyAccountID = "accountId"
+	SessionKeyAccountID  = "accountId"
 	SessionKeyUserID     = "userId"
 	SessionKeyLoginName  = "loginName"
 	SessionKeyRole       = "role"
 	SessionKeyToken      = "token"
+	SessionKeyOAuthState = "oauthState"
 )
 
 const (

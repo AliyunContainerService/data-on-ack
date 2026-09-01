@@ -39,6 +39,11 @@ func setDefaults_XGBoostJobSpec(spec *XGBoostJobSpec) {
 
 // setDefaults_XGBoostJobPort sets the default ports for xgboost container.
 func setDefaults_XGBoostJobPort(spec *corev1.PodSpec) {
+	// Malformed CRs may carry an empty container list; defaulting must not panic.
+	if len(spec.Containers) == 0 {
+		return
+	}
+
 	index := 0
 	for i, container := range spec.Containers {
 		if container.Name == XGBoostJobDefaultContainerName {

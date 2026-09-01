@@ -100,11 +100,10 @@ func RequestWithHeader(method string, reqUrl string, header map[string]string, p
 		return status, body, err
 	}
 
-	decodeBytes, err := url.QueryUnescape(string(getBody))
-	if err != nil {
-		return status, body, err
-	}
-	return status, string(decodeBytes), nil
+	// Security/bug fix: the OAuth endpoints return JSON bodies, not
+	// URL-encoded data. Unconditionally QueryUnescape-ing corrupts payloads
+	// containing '+' or '%' (e.g. base64 tokens), so return the body as-is.
+	return status, string(getBody), nil
 }
 
 func NewKubeflowProxy() (*httputil.ReverseProxy, error) {

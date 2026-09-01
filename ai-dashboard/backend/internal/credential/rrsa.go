@@ -18,12 +18,15 @@ func NewRRSAProvider(cfg *config.AppConfig) (*RRSAProvider, error) {
 	if cfg.OIDCProviderARN == "" {
 		return nil, fmt.Errorf("rrsa credential mode requires OIDC_PROVIDER_ARN env var")
 	}
+	if cfg.RoleARN == "" {
+		return nil, fmt.Errorf("rrsa credential mode requires OIDC_ROLE_ARN env var (the RAM role ARN to assume)")
+	}
 
 	credConfig := &credentials.Config{}
 	credConfig.SetType("oidc_role_arn")
 	credConfig.SetOIDCProviderArn(cfg.OIDCProviderARN)
 	credConfig.SetOIDCTokenFilePath(cfg.OIDCTokenFile)
-	credConfig.SetRoleArn(cfg.OIDCProviderARN)
+	credConfig.SetRoleArn(cfg.RoleARN)
 
 	cred, err := credentials.NewCredential(credConfig)
 	if err != nil {

@@ -53,8 +53,10 @@ func NewRouter(
 	r.POST("/logout", authManager.HandleLogout)
 
 	// --- Auth-protected API routes ---
+	// Note: /grafana/ used to be excluded from authentication; the Grafana
+	// proxy is now registered inside this group (with adminOnly) instead.
 	api := r.Group("", auth.CheckAuth(
-		"/health", "/login", "/login/aliyun", "/logout", "/grafana/",
+		"/health", "/login", "/login/aliyun", "/logout",
 	))
 
 	// Register all handlers

@@ -48,7 +48,9 @@ func (jc *JobAPIsController) RegisterRoutes(routes *gin.RouterGroup) {
 	jobAPI.GET("/detail", jc.GetJobDetail)
 	jobAPI.GET("/yaml/:namespace/:name", jc.GetJobYamlData)
 	jobAPI.GET("/json/:namespace/:name", jc.GetJobJsonData)
-	jobAPI.POST("/stop", jc.StopJob)
+	// Bug fix: the frontend calls POST /job/stop/{region}/{namespace}/{name};
+	// the parameterless route made the handler read empty c.Param values.
+	jobAPI.POST("/stop/:deployRegion/:namespace/:name", jc.StopJob)
 	jobAPI.POST("/submit", jc.SubmitJob)
 	jobAPI.DELETE("/:namespace/:name", jc.DeleteJob)
 	jobAPI.GET("/statistics", jc.GetJobStatistics)
