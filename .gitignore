@@ -27,7 +27,6 @@ yarn-error.log*
 # Dependencies
 node_modules/
 vendor/
-package-lock.json
 
 # Agent intermediate files / work briefs (contain sensitive cluster info)
 briefs/

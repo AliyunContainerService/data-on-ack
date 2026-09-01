@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Card, Tag, Space, Button, Typography, Input, Collapse, Table, Badge, Popconfirm, message } from 'antd'
 import { ReloadOutlined, SearchOutlined, CloudServerOutlined, DeleteOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
-import { get, post } from '@/api/client'
+import { get, post, getErrorMessage } from '@/api/client'
 
 const { Text } = Typography
 
@@ -49,7 +49,7 @@ export default function Images() {
       message.success('Image deleted')
       fetchData()
     } catch (err) {
-      message.error(err instanceof Error ? err.message : 'Delete failed')
+      message.error(getErrorMessage(err))
     }
   }
 

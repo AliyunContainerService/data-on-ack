@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { Layout, Menu, Dropdown, Button, Space, Avatar, Typography, Breadcrumb, Tooltip } from 'antd';
+import { Layout, Menu, Dropdown, Button, Space, Avatar, Typography, Breadcrumb, Tooltip, Spin } from 'antd';
 import type { MenuProps } from 'antd';
 import {
   DashboardOutlined,
@@ -30,20 +30,34 @@ const MainLayout: React.FC = () => {
   const [collapsed, setCollapsed] = useState(false);
   const { user, fetchUser, logout, locale, setLocale } = useUserStore();
 
-  useEffect(() => {
-    fetchUser();
-  }, [fetchUser]);
+  // Block rendering of protected content until the session has been verified.
+  // Previously a 1.5s timer redirected after the content was already shown; now we
+  // render a loading placeholder first and only navigate to /login if the fetch fails.
+  const [authChecked, setAuthChecked] = useState(() => useUserStore.getState().user !== null);
 
   useEffect(() => {
-    if (!user && !useUserStore.getState().loading) {
-      const timer = setTimeout(() => {
-        if (!useUserStore.getState().user && !useUserStore.getState().loading) {
-          navigate('/login');
-        }
-      }, 1500);
-      return () => clearTimeout(timer);
-    }
-  }, [user, navigate]);
+    if (authChecked) return;
+    let cancelled = false;
+    fetchUser().then(() => {
+      if (cancelled) return;
+      if (useUserStore.getState().user) {
+        setAuthChecked(true);
+      } else {
+        navigate('/login', { replace: true });
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [authChecked, fetchUser, navigate]);
+
+  if (!authChecked || !user) {
+    return (
+      <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Spin size="large" />
+      </div>
+    );
+  }
 
   const menuItems: MenuProps['items'] = [
     { key: '/', icon: <DashboardOutlined />, label: t('menu.dashboard') },
