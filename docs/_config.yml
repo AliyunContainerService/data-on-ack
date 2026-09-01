@@ -1,6 +1,8 @@
 title: Data/AI on ACK
 description: 基于阿里云 ACK 的云原生 AI/ML 平台文档
 remote_theme: just-the-docs/just-the-docs@v0.10.0
+plugins:
+  - jekyll-remote-theme
 
 url: "https://aliyuncontainerservice.github.io"
 baseurl: "/data-on-ack"

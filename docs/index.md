@@ -10,11 +10,21 @@ Data/AI on ACK 是一个基于阿里云容器服务 ACK 的开源云原生 AI/ML
 
 ## 文档导航
 
+### 云原生AI套件
+
 | 文档 | 说明 |
 |------|------|
 | [部署指南](deploy-guide) | 在 ACK 集群上安装 AI 开发平台的完整步骤 |
 | [功能使用指南](user-guide) | 运维控制台和开发控制台的核心功能介绍 |
 | [运维指南](ops-guide) | 日常运维操作：升级、扩缩容、故障排查、备份恢复 |
+
+### Ray
+
+| 文档 | 说明 |
+|------|------|
+| [Ray 用户指南](ray/1-user-guide) | 部署 RayCluster、提交 Ray Job、使用 Ray Data / Ray Serve |
+| [Ray 高级实践](ray/2-advanced) | 性能调优、容错、GPU 共享、RDMA 加速等 |
+| [Ray 端到端示例](ray/3-e2e-examples) | 完整的端到端落地示例 |
 
 ## 平台组件
 

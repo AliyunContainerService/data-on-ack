@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - "docs/**"
+      - "ray/**"
+      - "scripts/**"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 
@@ -29,6 +31,9 @@ jobs:
         uses: actions/configure-pages@v5
         with:
           enablement: true
+
+      - name: Generate ray docs
+        run: bash scripts/generate-ray-docs.sh
 
       - name: Build with Jekyll
         uses: actions/jekyll-build-pages@v1

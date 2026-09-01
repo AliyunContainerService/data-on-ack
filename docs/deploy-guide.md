@@ -1,7 +1,8 @@
 ---
 title: 部署指南
 layout: default
-nav_order: 2
+parent: 云原生AI套件
+nav_order: 1
 ---
 
 # 部署指南：在 ACK 上安装 AI 开发平台
