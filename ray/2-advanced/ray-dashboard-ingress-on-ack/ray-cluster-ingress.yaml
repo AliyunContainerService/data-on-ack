@@ -1,0 +1,53 @@
+apiVersion: ray.io/v1
+kind: RayCluster
+metadata:
+  name: <RAY_CLUSTER_NAME>
+  namespace: <NAMESPACE>
+  annotations:
+    # Ingress class used for the generated Ingress (converted to spec.ingressClassName by the operator)
+    kubernetes.io/ingress.class: alb
+    # Copied verbatim onto the generated Ingress by the operator:
+    # allow regex in the path and strip the URL prefix before forwarding to the dashboard.
+    alb.ingress.kubernetes.io/use-regex: "true"
+    alb.ingress.kubernetes.io/rewrite-target: /${2}
+spec:
+  rayVersion: "2.56.1"
+  headGroupSpec:
+    enableIngress: true
+    ingressOptions:
+      # <NAMESPACE>/<RAY_CLUSTER_NAME> must match metadata above.
+      # Capture group 1 = the slash (or end of path), capture group 2 = the rest of the path.
+      path: /<NAMESPACE>/<RAY_CLUSTER_NAME>(/|$)(.*)
+      pathType: Prefix
+    rayStartParams:
+      dashboard-host: 0.0.0.0
+    serviceType: ClusterIP
+    template:
+      spec:
+        containers:
+        - name: ray-head
+          image: <IMAGE_REGISTRY>/ray:2.56.1-py312
+          imagePullPolicy: IfNotPresent
+          resources:
+            limits:
+              cpu: "1"
+              memory: 4Gi
+            requests:
+              cpu: "1"
+              memory: 4Gi
+  workerGroupSpecs:
+  - groupName: worker-group
+    replicas: 1
+    template:
+      spec:
+        containers:
+        - name: ray-worker
+          image: <IMAGE_REGISTRY>/ray:2.56.1-py312
+          imagePullPolicy: IfNotPresent
+          resources:
+            limits:
+              cpu: "1"
+              memory: 4Gi
+            requests:
+              cpu: "1"
+              memory: 4Gi

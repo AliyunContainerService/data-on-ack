@@ -1,7 +1,8 @@
 ---
 title: 功能使用指南
 layout: default
-nav_order: 3
+parent: 云原生AI套件
+nav_order: 2
 ---
 
 # 功能使用指南

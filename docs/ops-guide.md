@@ -1,7 +1,8 @@
 ---
 title: 运维指南
 layout: default
-nav_order: 4
+parent: 云原生AI套件
+nav_order: 3
 ---
 
 # 运维指南
