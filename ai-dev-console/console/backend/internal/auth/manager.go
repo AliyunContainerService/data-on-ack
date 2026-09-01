@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -219,7 +220,7 @@ func (m *Manager) validateK8sToken(tokenStr string) (string, error) {
 		if errMsg == "" {
 			errMsg = "token not authenticated"
 		}
-		return "", fmt.Errorf(errMsg)
+		return "", errors.New(errMsg)
 	}
 	return result.Status.User.Username, nil
 }

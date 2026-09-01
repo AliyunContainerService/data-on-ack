@@ -365,7 +365,7 @@ func getUserNameByToken(k8sToken string) (userName string, err error) {
 	}
 
 	if result.Status.Error != "" {
-		return "", fmt.Errorf(result.Status.Error)
+		return "", errors.New(result.Status.Error)
 	}
 
 	return result.Status.User.Username, nil

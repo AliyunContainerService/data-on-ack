@@ -149,7 +149,13 @@ func (h *TrainingHandler) Logs(c *gin.Context) {
 		}
 	}
 
-	_ = name // name is used for route consistency; we read logs from the pod directly
+	// The pod parameter must refer to a pod that actually belongs to the
+	// addressed job; otherwise any user with namespace access could read
+	// arbitrary pods' logs through this endpoint.
+	if err := h.svc.EnsurePodBelongsToJob(namespace, name, pod); err != nil {
+		response.FailedWithCode(c, 40300, "access denied: "+err.Error())
+		return
+	}
 	logs, err := h.svc.GetPodLogs(namespace, pod, container, tailLines)
 	if err != nil {
 		response.Failed(c, err.Error())

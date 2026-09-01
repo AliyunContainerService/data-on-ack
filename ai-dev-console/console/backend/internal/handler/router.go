@@ -286,11 +286,9 @@ func proxyAuthCheck(c *gin.Context) {
 	c.Set("userName", name)
 	c.Set("userRole", session.Get(auth.SessionKeyRole))
 
-	// WebSocket upgrade: authenticate but skip namespace check
-	if strings.EqualFold(c.GetHeader("Upgrade"), "websocket") {
-		c.Next()
-		return
-	}
+	// NOTE: WebSocket upgrades go through the same namespace check below.
+	// Skipping it here used to allow any logged-in user to attach to other
+	// users' notebook terminals (e.g. Jupyter) cross-tenant.
 
 	// Admin bypasses namespace check
 	if auth.GetCurrentRole(c) == auth.RoleAdmin {

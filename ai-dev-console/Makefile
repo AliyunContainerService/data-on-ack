@@ -68,14 +68,12 @@ console-build:
 console-push: console-build
 	@docker push ${CONSOLE_IMG} || (echo "Console Docker push failed!" && exit 1)
 
-# Build the LEGACY console image (deprecated; old backend + old frontend dist)
+# The LEGACY console image is no longer buildable: the legacy stack predates
+# the Go 1.25 toolchain required by agentscope-go and is deprecated. Use
+# `console-build` (new stack) instead.
 console-build-legacy:
-	@echo "Building LEGACY console Docker image: ${CONSOLE_LEGACY_IMG}"
-	@$(DOCKERCMD) \
-		-f Dockerfile.console \
-		-t ${CONSOLE_LEGACY_IMG} \
-		--build-arg ARENA_TAR=${ARENA_TAR:-arena-installer-0.9.16-6c2373d-linux-amd64.tar.gz} \
-		. || (echo "Legacy console Docker build failed!" && exit 1)
+	@echo "ERROR: the legacy console stack is deprecated and no longer buildable." && \
+	echo "Use 'make console-build' (new stack) instead." && exit 1
 
 # Build everything (new stack)
 docker-build: console-build

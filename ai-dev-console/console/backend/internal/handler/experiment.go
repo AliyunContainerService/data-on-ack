@@ -56,6 +56,12 @@ func (h *ExperimentHandler) Create(c *gin.Context) {
 	if spec.Namespace == "" {
 		spec.Namespace = "default"
 	}
+	// Same scope check as AddRun: experiments are stored as ConfigMaps via the
+	// admin client, so the namespace must be inside the caller's allowed scope.
+	if !isNamespaceAllowed(c, spec.Namespace) {
+		response.FailedWithCode(c, 40300, "access denied: namespace '"+spec.Namespace+"' is not in your allowed scope")
+		return
+	}
 	userName := auth.GetCurrentUser(c)
 	if err := h.svc.Create(&spec, userName); err != nil {
 		response.Failed(c, err.Error())
