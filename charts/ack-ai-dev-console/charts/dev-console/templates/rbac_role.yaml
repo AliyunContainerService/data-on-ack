@@ -91,6 +91,23 @@ rules:
     - get
     - list
   - apiGroups:
+    - "data.kubeai.alibabacloud.com"
+    resources: # Agentic console session persistence (P2)
+    - agentsessions
+    verbs:
+    - get
+    - list
+    - create
+    - update
+    - delete
+  - apiGroups:
+    - "data.kubeai.alibabacloud.com"
+    resources:
+    - agentsessions/status
+    verbs:
+    - get
+    - update
+  - apiGroups:
     - ""
     - apps
     - extensions

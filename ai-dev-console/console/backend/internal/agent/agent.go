@@ -144,6 +144,14 @@ func (m *Manager) CreateSession(user string, namespaces []string, namespace, nam
 	if namespace == "" || name == "" {
 		return nil, fmt.Errorf("namespace and name are required")
 	}
+	// Session identity (namespace,name) is client-chosen; refuse collisions
+	// with another owner's persisted session so a shared namespace cannot be
+	// used to take over someone else's session identity (review finding E3).
+	if m.store != nil {
+		if old, err := m.store.Get(namespace, name); err == nil && old != nil && old.Spec.OwnerUser != user {
+			return nil, fmt.Errorf("session name %q is already in use", name)
+		}
+	}
 	if typ != AgentCopilot && typ != AgentDiagnose {
 		typ = AgentCopilot
 	}
@@ -269,6 +277,9 @@ func (m *Manager) DeleteSession(user, namespace, name string) error {
 		m.deleteSessionCR(namespace, name)
 		return err
 	}
+	// Cancel any active run first so its completion hook cannot resurrect
+	// the CR (review finding E5).
+	m.runs.cancelForSession(s.ID)
 	m.sessions.Delete(s.ID)
 	m.deleteSessionCR(namespace, name)
 	return nil
@@ -278,9 +289,6 @@ func (m *Manager) DeleteSession(user, namespace, name string) error {
 // session is allowed: the underlying UnifiedAgent conversation context would
 // interleave otherwise (review finding B4).
 func (m *Manager) StartMessage(s *Session, content string, namespaces []string) (*Run, error) {
-	if m.runs.hasActiveForSession(s.ID) {
-		return nil, fmt.Errorf("session already has an active run; stop it or wait for it to finish")
-	}
 	// Restored sessions start with an empty namespace scope; re-derive it
 	// from the caller's live login session on every message.
 	if len(namespaces) > 0 {
@@ -288,7 +296,9 @@ func (m *Manager) StartMessage(s *Session, content string, namespaces []string) 
 		s.env.AllowedNamespaces = namespaces
 		s.mu.Unlock()
 	}
+	s.mu.Lock()
 	s.LastActive = time.Now()
+	s.mu.Unlock()
 	run := newRun(s.ID, s.User, m.audit)
 	run.submitConfirm = s.agent.SubmitUserConfirm
 	run.onDone = func(r *Run) { m.onRunDone(s, r) }

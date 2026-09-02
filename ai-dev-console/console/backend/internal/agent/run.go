@@ -484,8 +484,14 @@ func NewRunRegistry(cfg *Config) *RunRegistry {
 func (rr *RunRegistry) register(run *Run) error {
 	rr.mu.Lock()
 	defer rr.mu.Unlock()
+	// Session exclusivity and per-user cap are checked HERE, under the same
+	// lock that inserts the run, so two concurrent StartMessage calls cannot
+	// both pass a pre-check and run one agent twice (review finding E4).
 	active := 0
 	for _, r := range rr.runs {
+		if r.SessionID == run.SessionID && (r.Status() == RunRunning || r.Status() == RunAwaitingConfirm) {
+			return fmt.Errorf("session already has an active run; stop it or wait for it to finish")
+		}
 		if r.User == run.User && (r.Status() == RunRunning || r.Status() == RunAwaitingConfirm) {
 			active++
 		}
@@ -497,19 +503,24 @@ func (rr *RunRegistry) register(run *Run) error {
 	return nil
 }
 
-// hasActiveForSession reports whether the session already has a running or
-// confirmation-waiting run (one active run per session, review finding B4).
-func (rr *RunRegistry) hasActiveForSession(sessionID string) bool {
+// cancelForSession cancels all active runs of a session (session deletion,
+// review finding E5).
+func (rr *RunRegistry) cancelForSession(sessionID string) {
 	rr.mu.Lock()
-	defer rr.mu.Unlock()
+	var victims []*Run
 	for _, r := range rr.runs {
 		if r.SessionID == sessionID {
-			if st := r.Status(); st == RunRunning || st == RunAwaitingConfirm {
-				return true
-			}
+			victims = append(victims, r)
 		}
 	}
-	return false
+	rr.mu.Unlock()
+	for _, r := range victims {
+		r.mu.Lock()
+		if r.cancel != nil {
+			r.cancel()
+		}
+		r.mu.Unlock()
+	}
 }
 
 func (rr *RunRegistry) get(runID, user string) (*Run, error) {

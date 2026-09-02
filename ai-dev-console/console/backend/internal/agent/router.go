@@ -97,6 +97,12 @@ func RegisterRoutes(r *gin.Engine, m *Manager) {
 			failed(c, "namespace is not in your allowed scope")
 			return
 		}
+		// The session name becomes a CR name; validate it up front so an
+		// invalid name cannot leave the session unpersisted (finding E7).
+		if !isRFC1123Name(req.Name) {
+			failed(c, "invalid session name (lowercase RFC1123, <= 63 chars)")
+			return
+		}
 		s, err := m.CreateSession(id.UserName, id.Namespaces, req.Namespace, req.Name,
 			AgentType(req.AgentType), req.Title, id.Locale)
 		if err != nil {

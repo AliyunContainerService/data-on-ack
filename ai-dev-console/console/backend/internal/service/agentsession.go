@@ -62,27 +62,54 @@ func (s *AgentSessionStore) Save(sess *model.AgentSession) error {
 		sess.TypeMeta = metav1.TypeMeta{APIVersion: "data.kubeai.alibabacloud.com/v1", Kind: "AgentSession"}
 	}
 
+	// The CRD declares a status subresource: spec and status must be written
+	// separately — a plain Update() silently drops status changes on a real
+	// API server (the fake client does not model this, so it is handled
+	// explicitly here).
 	for attempt := 0; attempt < 2; attempt++ {
 		existing, err := s.Get(sess.Namespace, sess.Name)
 		if err != nil {
 			return err
 		}
 		if existing == nil {
-			if err := s.create(sess); err == nil || k8serrors.IsAlreadyExists(err) {
-				return nil
-			} else {
+			created, err := s.create(sess)
+			if err != nil {
+				if k8serrors.IsAlreadyExists(err) {
+					continue // raced with another creator; retry as update
+				}
 				return err
 			}
+			return s.writeStatus(created, sess)
 		}
 		sess.ResourceVersion = existing.ResourceVersion
-		if err := s.update(sess); err == nil {
-			return nil
-		} else if !k8serrors.IsConflict(err) {
+		updated, err := s.update(sess)
+		if err != nil {
+			if k8serrors.IsConflict(err) {
+				continue // retry with the fresh resourceVersion
+			}
 			return err
 		}
-		// Conflict: loop and retry with the fresh resourceVersion.
+		return s.writeStatus(updated, sess)
 	}
 	return fmt.Errorf("save agentsession %s/%s: conflict after retry", sess.Namespace, sess.Name)
+}
+
+// writeStatus persists the status subresource on top of the freshest object
+// state returned by the previous create/update.
+func (s *AgentSessionStore) writeStatus(latest *unstructured.Unstructured, sess *model.AgentSession) error {
+	b, err := json.Marshal(sess.Status)
+	if err != nil {
+		return err
+	}
+	var statusMap map[string]interface{}
+	if err := json.Unmarshal(b, &statusMap); err != nil {
+		return err
+	}
+	if err := unstructured.SetNestedField(latest.Object, statusMap, "status"); err != nil {
+		return err
+	}
+	_, err = s.resource(sess.Namespace).UpdateStatus(context.TODO(), latest, metav1.UpdateOptions{})
+	return err
 }
 
 // Get returns the session CR, or (nil, nil) when it does not exist.
@@ -125,22 +152,20 @@ func (s *AgentSessionStore) List() ([]model.AgentSession, error) {
 	return list.Items, nil
 }
 
-func (s *AgentSessionStore) create(sess *model.AgentSession) error {
+func (s *AgentSessionStore) create(sess *model.AgentSession) (*unstructured.Unstructured, error) {
 	u, err := toUnstructured(sess)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	_, err = s.resource(sess.Namespace).Create(context.TODO(), u, metav1.CreateOptions{})
-	return err
+	return s.resource(sess.Namespace).Create(context.TODO(), u, metav1.CreateOptions{})
 }
 
-func (s *AgentSessionStore) update(sess *model.AgentSession) error {
+func (s *AgentSessionStore) update(sess *model.AgentSession) (*unstructured.Unstructured, error) {
 	u, err := toUnstructured(sess)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	_, err = s.resource(sess.Namespace).Update(context.TODO(), u, metav1.UpdateOptions{})
-	return err
+	return s.resource(sess.Namespace).Update(context.TODO(), u, metav1.UpdateOptions{})
 }
 
 func toUnstructured(sess *model.AgentSession) (*unstructured.Unstructured, error) {

@@ -226,10 +226,15 @@ func TestAgentSessionSaveRetriesOnConflict(t *testing.T) {
 		t.Fatalf("initial Save: %v", err)
 	}
 
-	updates := 0
+	specUpdates := 0
+	statusUpdates := 0
 	dyn.PrependReactor("update", "agentsessions", func(action k8stesting.Action) (bool, runtime.Object, error) {
-		updates++
-		if updates == 1 {
+		if action.GetSubresource() == "status" {
+			statusUpdates++
+			return false, nil, nil
+		}
+		specUpdates++
+		if specUpdates == 1 {
 			return true, nil, apierrors.NewConflict(
 				schema.GroupResource{Group: model.AgentSessionGVR().Group, Resource: model.AgentSessionGVR().Resource},
 				"s1", fmt.Errorf("simulated conflict"))
@@ -242,8 +247,11 @@ func TestAgentSessionSaveRetriesOnConflict(t *testing.T) {
 	if err := store.Save(sess); err != nil {
 		t.Fatalf("Save should retry past a conflict, got: %v", err)
 	}
-	if updates != 2 {
-		t.Fatalf("update attempts = %d, want 2 (one conflict + one retry)", updates)
+	if specUpdates != 2 {
+		t.Fatalf("spec update attempts = %d, want 2 (one conflict + one retry)", specUpdates)
+	}
+	if statusUpdates != 1 {
+		t.Fatalf("status updates = %d, want exactly 1 (status subresource)", statusUpdates)
 	}
 	got, err := store.Get(testSessionNS, "s1")
 	if err != nil {

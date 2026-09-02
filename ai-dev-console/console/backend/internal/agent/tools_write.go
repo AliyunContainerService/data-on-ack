@@ -45,6 +45,13 @@ func isWriteTool(name string) bool {
 	return false
 }
 
+func nonNegInt(input map[string]any, key string) int {
+	if v := intArg(input, key, 0); v > 0 {
+		return v
+	}
+	return 0
+}
+
 func strMapArg(input map[string]any, key string) map[string]string {
 	raw, ok := input[key].(map[string]any)
 	if !ok {
@@ -85,13 +92,17 @@ func NewWriteToolkit(env *toolEnv) []tool.Tool {
 				if !isRFC1123Name(name) {
 					return nil, fmt.Errorf("invalid notebook name %q (must be lowercase RFC1123)", name)
 				}
+				gpu := intArg(input, "gpu", 0)
+				if gpu < 0 {
+					gpu = 0
+				}
 				spec := &model.NotebookSpec{
 					Name:      name,
 					Namespace: ns,
 					Image:     strArg(input, "image"),
 					CPU:       strArg(input, "cpu"),
 					Memory:    strArg(input, "memory"),
-					GPU:       intArg(input, "gpu", 0),
+					GPU:       gpu,
 					GPUType:   strArg(input, "gpuType"),
 					Storage:   strArg(input, "storage"),
 					Env:       strMapArg(input, "env"),
@@ -184,7 +195,7 @@ func NewWriteToolkit(env *toolEnv) []tool.Tool {
 					WorkerCount:  int32(intArg(input, "workerCount", 1)),
 					WorkerCPU:    strArg(input, "workerCpu"),
 					WorkerMemory: strArg(input, "workerMemory"),
-					WorkerGPU:    intArg(input, "workerGpu", 0),
+					WorkerGPU:    nonNegInt(input, "workerGpu"),
 					PSCount:      int32(intArg(input, "psCount", 0)),
 					PSCPU:        strArg(input, "psCpu"),
 					PSMemory:     strArg(input, "psMemory"),
@@ -197,6 +208,14 @@ func NewWriteToolkit(env *toolEnv) []tool.Tool {
 				}
 				if spec.WorkerCount < 1 {
 					spec.WorkerCount = 1
+				}
+				// Sanity caps so a model hallucination cannot request an
+				// absurd cluster (P3 finding).
+				if spec.WorkerCount > 512 {
+					spec.WorkerCount = 512
+				}
+				if spec.PSCount > 64 {
+					spec.PSCount = 64
 				}
 				if err := env.Training.Create(spec, env.UserName); err != nil {
 					return nil, err
