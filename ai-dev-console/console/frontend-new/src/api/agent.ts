@@ -81,7 +81,12 @@ export interface AgentEvent {
 export interface StreamRunEventsOptions {
   /** Called with the retry attempt (1-based) when reconnecting after a dropped stream. */
   onReconnecting?: (attempt: number) => void;
-  /** Max reconnect attempts after an unexpected disconnect (default 3). */
+  /**
+   * Max reconnect attempts after an unexpected disconnect (default 3).
+   * The budget is replenished: every successfully received event resets the
+   * used attempts back to zero, so long sessions (waiting for confirmations,
+   * long tool executions) survive repeated network blips.
+   */
   maxRetries?: number;
 }
 
@@ -101,8 +106,10 @@ function sleep(ms: number): Promise<void> {
  * Stream run events via fetch + ReadableStream (EventSource is not used: we
  * need cookie auth fine control and reconnect with a dynamic `after` cursor).
  * Frames look like `data: {"seq":1,"type":"text","data":{...}}\n\n`.
- * On an unexpected disconnect the stream is resumed from the last received
- * seq, up to `maxRetries` times.
+ * On an unexpected disconnect — or when a seq gap is detected in the received
+ * frames — the stream is resumed from the last received seq (`?after=<lastSeq>`),
+ * up to `maxRetries` times. The retry budget resets to zero after every
+ * successfully received event.
  */
 export function streamRunEvents(
   runID: string,
@@ -116,6 +123,12 @@ export function streamRunEvents(
   let aborted = false;
   let terminated = false;
   let lastSeq = after;
+  // Reconnect budget: incremented on each retry, reset to zero whenever an
+  // event is successfully consumed (see handleFrame).
+  let retries = 0;
+  // Set when a seq gap is detected: the current stream stops being consumed
+  // and is resumed from `lastSeq` via the regular reconnect path.
+  let gapDetected = false;
 
   const onExternalAbort = () => {
     aborted = true;
@@ -133,8 +146,19 @@ export function streamRunEvents(
       if (!payload) continue;
       try {
         const ev = JSON.parse(payload) as AgentEvent;
-        if (typeof ev.seq === 'number') lastSeq = Math.max(lastSeq, ev.seq);
+        if (typeof ev.seq === 'number') {
+          if (ev.seq > lastSeq + 1) {
+            // Missing frame(s): stop consuming this stream; the reconnect
+            // below resumes from the last contiguous seq (counts as one retry).
+            gapDetected = true;
+            return;
+          }
+          lastSeq = Math.max(lastSeq, ev.seq);
+        }
         onEvent(ev);
+        // Event consumed successfully: replenish the reconnect budget so long
+        // sessions are not permanently cut off by later network blips.
+        retries = 0;
         if (ev.type === 'done') terminated = true;
       } catch {
         // Ignore malformed frames; the server only emits valid JSON.
@@ -143,7 +167,6 @@ export function streamRunEvents(
   };
 
   const run = async () => {
-    let retries = 0;
     while (!aborted && !terminated) {
       let retryable = true;
       try {
@@ -170,11 +193,18 @@ export function streamRunEvents(
             const frame = buf.slice(0, sep);
             buf = buf.slice(sep + 2);
             handleFrame(frame);
-            if (terminated) break;
+            if (terminated || gapDetected) break;
           }
-          if (terminated) break;
+          if (terminated || gapDetected) break;
         }
         if (terminated || aborted) return;
+        if (gapDetected) {
+          // Seq gap in the current stream: drop it and resume from the last
+          // contiguous seq via the reconnect path (counts as one retry).
+          gapDetected = false;
+          reader.cancel().catch(() => {});
+          throw new Error(`events stream seq gap detected after ${lastSeq}`);
+        }
         // The server closed the stream without a terminal event: reconnect.
         retryable = true;
         throw new Error('events stream ended unexpectedly');

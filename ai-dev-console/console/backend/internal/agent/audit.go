@@ -19,6 +19,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"strings"
 	"sync"
 	"time"
 
@@ -67,20 +68,42 @@ func (a *auditLogger) record(user, runID, action string, detail map[string]any) 
 	}).Info("agent audit")
 }
 
-// sanitizeArgs removes values of keys that commonly carry credentials before
-// anything is persisted.
+// sensitiveKeys are redacted anywhere in the argument tree (recursive,
+// review finding B7: a nested {"config":{"token":...}} must not survive).
+var sensitiveKeys = map[string]bool{
+	"password": true, "token": true, "apikey": true, "api_key": true,
+	"secret": true, "accesskey": true, "access_key": true, "credential": true,
+}
+
+// sanitizeArgs removes values of sensitive keys at ANY depth before anything
+// is persisted.
 func sanitizeArgs(raw string) any {
-	var v map[string]any
+	var v any
 	if err := json.Unmarshal([]byte(raw), &v); err != nil {
 		return "[unparsable]"
 	}
-	for k := range v {
-		switch k {
-		case "password", "token", "apiKey", "api_key", "secret", "accessKey", "access_key":
-			v[k] = "[redacted]"
+	return sanitizeValue(v)
+}
+
+func sanitizeValue(v any) any {
+	switch t := v.(type) {
+	case map[string]any:
+		for k, val := range t {
+			if sensitiveKeys[strings.ToLower(k)] {
+				t[k] = "[redacted]"
+				continue
+			}
+			t[k] = sanitizeValue(val)
 		}
+		return t
+	case []any:
+		for i := range t {
+			t[i] = sanitizeValue(t[i])
+		}
+		return t
+	default:
+		return v
 	}
-	return v
 }
 
 func (a *auditLogger) logToolCall(user, runID, toolCallID, tool, argsJSON string) {

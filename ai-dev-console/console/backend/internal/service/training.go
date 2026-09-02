@@ -264,26 +264,24 @@ func getPodStatusReason(pod corev1.Pod) (string, string) {
 
 // GetPodLogs returns the log output of a specific pod/container.
 // EnsurePodBelongsToJob verifies that podName is a pod of the given training
-// job. Ownership is established through the conventions used by the training
-// operators: the "job-name" label (kubeflow), the RayCluster naming scheme for
-// RayJobs, or the "<jobname>-" pod name prefix as a fallback. It prevents
-// reading arbitrary pods' logs within a namespace the user can access.
+// job. Ownership is established ONLY through operator-set labels (kubeflow
+// "job-name", RayCluster naming for RayJobs). A pod-name prefix fallback is
+// deliberately absent: any user-created pod named "X-..." would otherwise be
+// readable via job_name="X" (review finding B1).
 func (s *TrainingService) EnsurePodBelongsToJob(namespace, jobName, podName string) error {
 	pod, err := s.adminClient.Typed().CoreV1().Pods(namespace).Get(context.TODO(), podName, metav1.GetOptions{})
 	if err != nil {
 		return fmt.Errorf("pod %s/%s not found", namespace, podName)
 	}
 	labels := pod.GetLabels()
-	if labels != nil {
-		if labels["job-name"] == jobName {
-			return nil
-		}
-		// RayJob creates a RayCluster named <rayjob-name>-raycluster-<hash>.
-		if cluster, ok := labels["ray.io/cluster"]; ok && strings.HasPrefix(cluster, jobName+"-raycluster") {
-			return nil
-		}
+	if labels == nil {
+		return fmt.Errorf("pod %q does not belong to job %q", podName, jobName)
 	}
-	if strings.HasPrefix(podName, jobName+"-") {
+	if labels["job-name"] == jobName {
+		return nil
+	}
+	// RayJob creates a RayCluster named <rayjob-name>-raycluster-<hash>.
+	if cluster, ok := labels["ray.io/cluster"]; ok && strings.HasPrefix(cluster, jobName+"-raycluster") {
 		return nil
 	}
 	return fmt.Errorf("pod %q does not belong to job %q", podName, jobName)

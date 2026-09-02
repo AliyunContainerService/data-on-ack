@@ -32,6 +32,7 @@ const Training: React.FC = () => {
   const { t } = useTranslation();
   const assistantAvailable = useAssistantStore((st) => st.available);
   const requestDiagnose = useAssistantStore((st) => st.requestDiagnose);
+  const diagnoseInFlight = useAssistantStore((st) => st.diagnoseInFlight);
   const [jobs, setJobs] = useState<TrainingJobInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
@@ -406,7 +407,7 @@ const Training: React.FC = () => {
           <Button size="small" icon={<FileTextOutlined />} onClick={() => handleViewLogs(record)}>{t('training.logs')}</Button>
           <Button size="small" icon={<CopyOutlined />} onClick={() => handleRerun(record)}>{t('training.rerun')}</Button>
           {assistantAvailable && (
-            <Button size="small" icon={<MedicineBoxOutlined />} onClick={() => requestDiagnose({ namespace: record.namespace, name: record.name, kind: record.kind })}>{t('training.diagnose')}</Button>
+            <Button size="small" icon={<MedicineBoxOutlined />} disabled={diagnoseInFlight} loading={diagnoseInFlight} onClick={() => requestDiagnose({ namespace: record.namespace, name: record.name, kind: record.kind })}>{t('training.diagnose')}</Button>
           )}
           <Popconfirm title={t('common.delete.confirm')} onConfirm={() => deleteTrainingJob(record.namespace, record.name, record.kind).then(() => { message.success(t('common.success')); fetchData(); }).catch((err) => message.error(err instanceof Error ? err.message : String(err)))}>
             <Button size="small" danger icon={<DeleteOutlined />} />
@@ -549,7 +550,7 @@ const Training: React.FC = () => {
             <Button size="small" icon={<FileTextOutlined />} onClick={() => { if (detailJob) handleViewLogs(detailJob); }}>Logs</Button>
             <Button size="small" icon={<CopyOutlined />} onClick={() => { if (detailJob) handleRerun(detailJob); }}>Re-run</Button>
             {assistantAvailable && (
-              <Button size="small" icon={<MedicineBoxOutlined />} onClick={() => { if (detailJob) requestDiagnose({ namespace: detailJob.namespace, name: detailJob.name, kind: detailJob.kind }); }}>
+              <Button size="small" icon={<MedicineBoxOutlined />} disabled={diagnoseInFlight} loading={diagnoseInFlight} onClick={() => { if (detailJob) requestDiagnose({ namespace: detailJob.namespace, name: detailJob.name, kind: detailJob.kind }); }}>
                 {t('training.diagnose')}
               </Button>
             )}

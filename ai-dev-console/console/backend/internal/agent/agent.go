@@ -24,6 +24,7 @@ import (
 	"github.com/AliyunContainerService/data-on-ack/ai-dev-console/console/backend/internal/service"
 	asagent "github.com/alanfokco/agentscope-go/v2/pkg/agentscope/agent"
 	asmodel "github.com/alanfokco/agentscope-go/v2/pkg/agentscope/model"
+	"github.com/alanfokco/agentscope-go/v2/pkg/agentscope/permission"
 	"github.com/sirupsen/logrus"
 )
 
@@ -89,7 +90,7 @@ func NewManager(cfg *Config, opts ManagerOptions) (*Manager, error) {
 	if err != nil {
 		return nil, fmt.Errorf("build agent chat model: %w", err)
 	}
-	return &Manager{
+	mgr := &Manager{
 		cfg:       cfg,
 		model:     model,
 		runs:      NewRunRegistry(cfg),
@@ -99,7 +100,24 @@ func NewManager(cfg *Config, opts ManagerOptions) (*Manager, error) {
 		Serving:   opts.Serving,
 		Metrics:   opts.Metrics,
 		Quota:     opts.Quota,
-	}, nil
+	}
+	go mgr.sessionJanitor()
+	return mgr, nil
+}
+
+// sessionJanitor evicts sessions idle beyond SessionTTL so conversation
+// memory does not grow unbounded (review finding B5).
+func (m *Manager) sessionJanitor() {
+	for range time.Tick(10 * time.Minute) {
+		m.sessions.Range(func(k, v any) bool {
+			s := v.(*Session)
+			if time.Since(s.LastActive) > m.cfg.SessionTTL {
+				m.sessions.Delete(k)
+				logrus.Infof("agent session expired: %s user=%s", s.ID, s.User)
+			}
+			return true
+		})
+	}
 }
 
 // Status is served at /api/v1/agent/status for the frontend to decide
@@ -144,12 +162,18 @@ func (m *Manager) CreateSession(user string, namespaces []string, namespace, nam
 		Quota:             m.Quota,
 	}
 
+	// Permission engine in bypass mode: read-only tools flow through, while
+	// explicit deny/ask rules are still honored. IMPORTANT: without a
+	// permission context the framework never creates the confirmation channel
+	// and the whole HITL path is dead (review finding B2). Write tools added
+	// in P2 register AskRules here.
 	asAgent := asagent.NewUnifiedAgent(
 		"console-"+string(typ),
 		systemPrompt(typ, user, namespaces, locale),
 		m.model,
 		asagent.WithToolkit(NewReadOnlyToolkit(env)),
 		asagent.WithReactConfig(asagent.ReactConfig{MaxIters: m.cfg.MaxRoundsPerRun}),
+		asagent.WithPermissionContext(permission.NewContext(permission.ModeBypass)),
 	)
 
 	s := &Session{
@@ -225,8 +249,13 @@ func (m *Manager) DeleteSession(user, namespace, name string) error {
 	return nil
 }
 
-// StartMessage launches a run for one user message.
+// StartMessage launches a run for one user message. Only ONE active run per
+// session is allowed: the underlying UnifiedAgent conversation context would
+// interleave otherwise (review finding B4).
 func (m *Manager) StartMessage(s *Session, content string) (*Run, error) {
+	if m.runs.hasActiveForSession(s.ID) {
+		return nil, fmt.Errorf("session already has an active run; stop it or wait for it to finish")
+	}
 	s.LastActive = time.Now()
 	run := newRun(s.ID, s.User, m.audit)
 	run.submitConfirm = s.agent.SubmitUserConfirm

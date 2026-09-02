@@ -85,9 +85,12 @@ func (s *QuotaService) listTrees() ([]model.ElasticQuotaTree, error) {
 
 // namespaceUsage sums pod requests (cpu/memory/GPU) in one namespace.
 func (s *QuotaService) namespaceUsage(namespace string) (map[string]string, error) {
+	// Include Pending pods: "why am I pending / is my quota enough" questions
+	// must account for already-requested-but-not-running resources (review
+	// finding B9). Succeeded/Failed pods are excluded via the phase filter
+	// below; the list is capped to keep this read cheap.
 	pods, err := s.adminClient.Typed().CoreV1().Pods(namespace).List(context.TODO(), metav1.ListOptions{
-		FieldSelector: "status.phase=Running",
-		Limit:         1000,
+		Limit: 1000,
 	})
 	if err != nil {
 		return nil, err
@@ -98,6 +101,9 @@ func (s *QuotaService) namespaceUsage(namespace string) (map[string]string, erro
 	gpu := int64(0)
 	for i := range pods.Items {
 		pod := &pods.Items[i]
+		if pod.Status.Phase != corev1.PodRunning && pod.Status.Phase != corev1.PodPending {
+			continue
+		}
 		for j := range pod.Spec.Containers {
 			req := pod.Spec.Containers[j].Resources.Requests
 			if v, ok := req[corev1.ResourceCPU]; ok {

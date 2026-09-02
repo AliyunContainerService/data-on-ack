@@ -119,12 +119,16 @@ func (r *Run) emit(typ EventType, data any) {
 	r.seq++
 	ev := Event{Seq: r.seq, Type: typ, Data: data}
 	r.events = append(r.events, ev)
-	for _, ch := range r.subscribers {
+	for id, ch := range r.subscribers {
 		select {
 		case ch <- ev:
 		default:
-			// Slow subscriber: events stay in r.events and are replayed on
-			// reconnect via ?after=<seq>, so dropping here is safe.
+			// Slow subscriber: close its stream instead of silently dropping
+			// events (review findings B8/F1). The SSE handler treats the
+			// closed channel as end-of-stream; the client reconnects with
+			// ?after=<lastSeq> and replays from r.events.
+			delete(r.subscribers, id)
+			close(ch)
 		}
 	}
 	r.mu.Unlock()
@@ -283,7 +287,9 @@ func (r *Run) execute(ag *agent.UnifiedAgent, input string, limits *Config) {
 	r.mu.Unlock()
 	if st == RunRunning || st == RunAwaitingConfirm {
 		if ctx.Err() == context.Canceled {
-			r.finish(RunCanceled, "canceled")
+			// No error event for user-initiated cancels; done.status=canceled
+			// drives a neutral UI state (review finding F3).
+			r.finish(RunCanceled, "")
 		} else if ctx.Err() == context.DeadlineExceeded {
 			r.finish(RunFailed, "run timeout")
 		} else {
@@ -384,8 +390,15 @@ func (r *Run) ResolveConfirmation(cfmID string, approved bool) error {
 		// client-supplied arguments. submitConfirm is bound to the session
 		// agent (agent.SubmitUserConfirm) when the run starts.
 		if r.submitConfirm != nil {
-			res := event.NewUserConfirmResultEvent(replyID, results)
-			r.submitConfirm(&res)
+			// If the run already terminated (e.g. run timeout racing the
+			// confirmation watchdog), nobody consumes the confirmation
+			// channel anymore; submitting would block the caller forever.
+			if st := r.Status(); st == RunRunning || st == RunAwaitingConfirm {
+				go func() {
+					res := event.NewUserConfirmResultEvent(replyID, results)
+					r.submitConfirm(&res)
+				}()
+			}
 		}
 	}
 	return nil
@@ -458,6 +471,21 @@ func (rr *RunRegistry) register(run *Run) error {
 	return nil
 }
 
+// hasActiveForSession reports whether the session already has a running or
+// confirmation-waiting run (one active run per session, review finding B4).
+func (rr *RunRegistry) hasActiveForSession(sessionID string) bool {
+	rr.mu.Lock()
+	defer rr.mu.Unlock()
+	for _, r := range rr.runs {
+		if r.SessionID == sessionID {
+			if st := r.Status(); st == RunRunning || st == RunAwaitingConfirm {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (rr *RunRegistry) get(runID, user string) (*Run, error) {
 	rr.mu.Lock()
 	defer rr.mu.Unlock()
@@ -485,13 +513,14 @@ func (rr *RunRegistry) janitor() {
 
 func newRun(sessionID, user string, audit *auditLogger) *Run {
 	return &Run{
-		ID:        "run-" + randHex(8),
-		SessionID: sessionID,
-		User:      user,
-		CreatedAt: time.Now(),
-		status:    RunRunning,
-		tickets:   map[string]*ticket{},
-		audit:     audit,
+		ID:          "run-" + randHex(8),
+		SessionID:   sessionID,
+		User:        user,
+		CreatedAt:   time.Now(),
+		status:      RunRunning,
+		subscribers: map[int64]chan Event{},
+		tickets:     map[string]*ticket{},
+		audit:       audit,
 	}
 }
 

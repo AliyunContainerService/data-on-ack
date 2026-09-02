@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/AliyunContainerService/data-on-ack/ai-dev-console/console/backend/internal/auth"
 	"github.com/gin-contrib/sessions"
@@ -191,6 +192,12 @@ func RegisterRoutes(r *gin.Engine, m *Manager) {
 			return true
 		}
 
+		// Heartbeat keeps proxies happy while the agent thinks/executes or a
+		// confirmation is pending (nginx default proxy-read-timeout is 60s;
+		// review finding F2).
+		ping := time.NewTicker(15 * time.Second)
+		defer ping.Stop()
+
 		for _, ev := range backlog {
 			if !writeEvent(ev) {
 				return // client left; the RUN continues server-side
@@ -203,7 +210,20 @@ func RegisterRoutes(r *gin.Engine, m *Manager) {
 			select {
 			case <-c.Request.Context().Done():
 				return // client left; the RUN continues server-side
-			case ev := <-ch:
+			case <-ping.C:
+				if _, err := c.Writer.Write([]byte(": ping\n\n")); err != nil {
+					return
+				}
+				if flusher != nil {
+					flusher.Flush()
+				}
+			case ev, ok := <-ch:
+				if !ok {
+					// The run closed this slow subscription (see emit);
+					// ending the stream makes the client reconnect with
+					// ?after=<lastSeq> and replay what it missed.
+					return
+				}
 				if !writeEvent(ev) {
 					return
 				}

@@ -106,7 +106,13 @@ const AssistantDrawer: React.FC = () => {
         delete next[key];
         return next;
       });
-      streamHandlesRef.current.delete(key);
+      // Only remove our own handle, never a newer run's: the diagnose
+      // in-flight guard (store) and the isRunning check in handleSend prevent
+      // concurrent runs on the same session, but keep the delete guarded so
+      // finish() can't drop a second request's handle even if one appears.
+      if (streamHandlesRef.current.get(key) === handle) {
+        streamHandlesRef.current.delete(key);
+      }
     };
 
     handle.done.then(finish).catch((err) => {
@@ -383,6 +389,8 @@ const AssistantDrawer: React.FC = () => {
             />
           )}
 
+          {/* Canceled runs are neutral, never a red error: the backend sends
+              only done (data.status="canceled") and no error event anymore. */}
           {!msg.streaming && msg.doneStatus === 'canceled' && !msg.error && (
             <Text type="secondary" style={{ fontSize: 12 }}>{t('assistant.runCanceled')}</Text>
           )}

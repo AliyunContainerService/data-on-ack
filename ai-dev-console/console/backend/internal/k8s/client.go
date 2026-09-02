@@ -313,3 +313,8 @@ func buildRestConfigFromToken(host, token string) (*rest.Config, error) {
 		TLSClientConfig: rest.TLSClientConfig{Insecure: true},
 	}, nil
 }
+
+// NewClientForTesting builds a Client around pre-built (e.g. fake) clients.
+func NewClientForTesting(typed kubernetes.Interface, dyn dynamic.Interface) *Client {
+	return &Client{typed: typed, dynamic: dyn}
+}

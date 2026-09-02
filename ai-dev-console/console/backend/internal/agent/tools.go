@@ -149,7 +149,12 @@ func NewReadOnlyToolkit(env *toolEnv) *tool.Toolkit {
 				if err := env.Training.EnsurePodBelongsToJob(ns, jobName, pod); err != nil {
 					return nil, err
 				}
+				// tail <= 0 would omit TailLines entirely and stream the whole
+				// pod log (memory amplification, review finding B6).
 				tail := intArg(input, "tail", 200)
+				if tail <= 0 {
+					tail = 200
+				}
 				if tail > 2000 {
 					tail = 2000
 				}

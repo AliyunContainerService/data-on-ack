@@ -78,7 +78,10 @@ ai-dev-console 新后端 (Gin)
 - 截断从第一轮开始：框架默认单条工具结果上限 50000 token，日志类工具必须自身先截断（长度+字符集+token 预算）。
 
 ### 3.3 HITL 确认（修复"框架无绑定原语"缺口）
-框架 `BehaviorAsk` 只把拒绝文本回给模型（模型可换参重发），**不构成安全边界**。v2 自研确认门（工具中间件实现）：
+框架 `BehaviorAsk` 只把拒绝文本回给模型（模型可换参重发），**不构成安全边界**。实现要点（P1 代码评审 B2 后确认）：
+- 代理必须以 `WithPermissionContext(permission.NewContext(permission.ModeBypass))` 装配——否则框架不创建确认通道，整条 HITL 链路休眠；bypass 模式下显式 deny/ask 规则仍然生效，P2 为写工具注册 AskRules；
+- 框架逐工具调用发送 `RequireUserConfirmEvent`（每事件恰一个 tool call）。
+v2 确认门设计：
 1. write/destructive 工具调用 → 生成**确认单**：冻结参数快照 + 哈希，持久化于 Run；
 2. 执行阶段**只执行已确认的快照**（确认 A 执行 B 不可能）；
 3. 确认单单次消费、带 TTL、属主绑定（确认 ID 重放/他人批准均失败）；

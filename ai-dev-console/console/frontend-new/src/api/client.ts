@@ -18,6 +18,14 @@ http.interceptors.response.use(
     if (error.response?.status === 401) {
       window.location.href = '/login';
     }
+    // Business failures arrive as HTTP 4xx with an envelope `{code, message}`
+    // (e.g. "too many active runs", "session already has an active run").
+    // Reject with the envelope message — mirroring the success-path envelope
+    // handling below — instead of axios' opaque "Request failed with status code 4xx".
+    const envelope = error.response?.data as ApiResponse | undefined;
+    if (envelope && typeof envelope.message === 'string' && envelope.message) {
+      return Promise.reject(new Error(envelope.message));
+    }
     return Promise.reject(error);
   }
 );

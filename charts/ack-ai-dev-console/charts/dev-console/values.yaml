@@ -54,6 +54,12 @@ console:
     enabled: true
     annotations:
       kubernetes.io/ingress.class: nginx
+      # Agent SSE streams (/api/v1/agent/runs/*/events) must survive long
+      # tool executions and HITL confirmation waits (nginx default read
+      # timeout is 60s); buffering would batch SSE frames.
+      nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+      nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+      nginx.ingress.kubernetes.io/proxy-buffering: "off"
     hosts:
     - host: ai-dev-console.local
       paths:
