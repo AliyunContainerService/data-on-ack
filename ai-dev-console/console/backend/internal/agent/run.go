@@ -102,6 +102,11 @@ type Run struct {
 	submitConfirm func(*event.UserConfirmResultEvent)
 	audit         *auditLogger
 
+	lastInput string
+	answerMu  sync.Mutex
+	answerBuf strings.Builder
+	onDone    func(*Run)
+
 	// Budget counters (design §5.2).
 	rounds    int
 	toolCalls int
@@ -158,6 +163,7 @@ func (r *Run) unsubscribe(id int64) {
 
 // execute drives the agent loop. It must run in its own goroutine.
 func (r *Run) execute(ag *agent.UnifiedAgent, input string, limits *Config) {
+	r.lastInput = input
 	ctx, cancel := context.WithTimeout(context.Background(), limits.RunTimeout)
 	r.mu.Lock()
 	r.cancel = cancel
@@ -184,6 +190,7 @@ func (r *Run) execute(ag *agent.UnifiedAgent, input string, limits *Config) {
 			r.emit(EventThinking, map[string]any{"text": e.Delta})
 
 		case event.TextBlockDeltaEvent:
+			r.appendAnswer(e.Delta)
 			r.emit(EventText, map[string]any{"text": e.Delta})
 
 		case event.ToolCallStartEvent:
@@ -439,6 +446,25 @@ func (r *Run) finish(status RunStatus, errMsg string) {
 	}
 	r.audit.logRunEnd(r.User, r.ID, stats)
 	r.emit(EventDone, stats)
+	if r.onDone != nil {
+		go r.onDone(r)
+	}
+}
+
+// appendAnswer keeps a bounded copy of the assistant's final text for the
+// compacted session summary (never stored verbatim beyond the cap).
+func (r *Run) appendAnswer(delta string) {
+	r.answerMu.Lock()
+	if r.answerBuf.Len() < 16*1024 {
+		r.answerBuf.WriteString(delta)
+	}
+	r.answerMu.Unlock()
+}
+
+func (r *Run) answerText() string {
+	r.answerMu.Lock()
+	defer r.answerMu.Unlock()
+	return r.answerBuf.String()
 }
 
 // --- RunRegistry ---

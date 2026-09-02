@@ -1,0 +1,65 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: agentsessions.data.kubeai.alibabacloud.com
+spec:
+  group: data.kubeai.alibabacloud.com
+  names:
+    kind: AgentSession
+    listKind: AgentSessionList
+    plural: agentsessions
+    singular: agentsession
+    shortNames:
+    - agsess
+  scope: Namespaced
+  versions:
+  - name: v1
+    served: true
+    storage: true
+    subresources:
+      status: {}
+    schema:
+      openAPIV3Schema:
+        description: AgentSession is the Schema for the agentsessions API. It
+          persists only session metadata and a compacted context summary; raw
+          message streams never enter etcd.
+        type: object
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: AgentSessionSpec defines the desired state of AgentSession.
+            type: object
+            properties:
+              ownerUser:
+                description: Platform user this session belongs to. Written by
+                  the server from the login identity; clients cannot forge it.
+                type: string
+              agentType:
+                description: Agent flavor bound to the session (copilot|diagnose).
+                type: string
+              title:
+                type: string
+              locale:
+                type: string
+          status:
+            description: AgentSessionStatus defines the observed state of AgentSession.
+            type: object
+            properties:
+              contextSummary:
+                description: Compacted conversation context. Bounded to keep
+                  etcd pressure low; the store truncates writes to 8192 bytes.
+                type: string
+                maxLength: 16384
+              lastActive:
+                type: string
+                format: date-time
+              runsTotal:
+                type: integer

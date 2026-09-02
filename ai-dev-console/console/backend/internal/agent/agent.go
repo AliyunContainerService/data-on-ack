@@ -49,6 +49,8 @@ type Session struct {
 	CreatedAt  time.Time
 	LastActive time.Time
 
+	mu sync.Mutex
+
 	agent *asagent.UnifiedAgent
 	env   *toolEnv
 }
@@ -61,6 +63,7 @@ type Manager struct {
 	sessions sync.Map // sessionID -> *Session
 	runs     *RunRegistry
 	audit    *auditLogger
+	store    *service.AgentSessionStore
 
 	Notebooks *service.NotebookService
 	Training  *service.TrainingService
@@ -76,6 +79,9 @@ type ManagerOptions struct {
 	Serving   *service.ServingService
 	Metrics   *service.MetricsService
 	Quota     *service.QuotaService
+
+	// Store persists AgentSession CRs (nil disables persistence, e.g. tests).
+	Store *service.AgentSessionStore
 }
 
 // NewManager builds the agent runtime. Returns an error when the model
@@ -100,6 +106,7 @@ func NewManager(cfg *Config, opts ManagerOptions) (*Manager, error) {
 		Serving:   opts.Serving,
 		Metrics:   opts.Metrics,
 		Quota:     opts.Quota,
+		store:     opts.Store,
 	}
 	go mgr.sessionJanitor()
 	return mgr, nil
@@ -162,18 +169,32 @@ func (m *Manager) CreateSession(user string, namespaces []string, namespace, nam
 		Quota:             m.Quota,
 	}
 
+	// Toolkit: read-only tools + P2 write tools (own group).
+	tk := NewReadOnlyToolkit(env)
+	tk.AddGroup("write", NewWriteToolkit(env)...)
+
 	// Permission engine in bypass mode: read-only tools flow through, while
 	// explicit deny/ask rules are still honored. IMPORTANT: without a
 	// permission context the framework never creates the confirmation channel
-	// and the whole HITL path is dead (review finding B2). Write tools added
-	// in P2 register AskRules here.
+	// and the whole HITL path is dead (review finding B2).
+	// Every write tool gets an Ask rule => RequireUserConfirmEvent before
+	// execution; the confirmation-ticket machinery then binds the snapshot.
+	pctx := permission.NewContext(permission.ModeBypass)
+	for _, name := range WriteToolNames {
+		pctx.AskRules[name] = append(pctx.AskRules[name], permission.Rule{
+			ToolName: name,
+			Behavior: permission.BehaviorAsk,
+			Source:   "console-agent-policy",
+		})
+	}
+
 	asAgent := asagent.NewUnifiedAgent(
 		"console-"+string(typ),
 		systemPrompt(typ, user, namespaces, locale),
 		m.model,
-		asagent.WithToolkit(NewReadOnlyToolkit(env)),
+		asagent.WithToolkit(tk),
 		asagent.WithReactConfig(asagent.ReactConfig{MaxIters: m.cfg.MaxRoundsPerRun}),
-		asagent.WithPermissionContext(permission.NewContext(permission.ModeBypass)),
+		asagent.WithPermissionContext(pctx),
 	)
 
 	s := &Session{
@@ -190,6 +211,7 @@ func (m *Manager) CreateSession(user string, namespaces []string, namespace, nam
 		env:        env,
 	}
 	m.sessions.Store(s.ID, s)
+	m.persistSession(s)
 	logrus.Infof("agent session created: %s user=%s type=%s ns-scope=%v", s.ID, user, typ, namespaces)
 	return s, nil
 }
@@ -243,22 +265,33 @@ func (m *Manager) ListSessions(user string) []map[string]any {
 func (m *Manager) DeleteSession(user, namespace, name string) error {
 	s, err := m.FindSession(user, namespace, name)
 	if err != nil {
+		// Also delete a persisted CR whose in-memory session is gone.
+		m.deleteSessionCR(namespace, name)
 		return err
 	}
 	m.sessions.Delete(s.ID)
+	m.deleteSessionCR(namespace, name)
 	return nil
 }
 
 // StartMessage launches a run for one user message. Only ONE active run per
 // session is allowed: the underlying UnifiedAgent conversation context would
 // interleave otherwise (review finding B4).
-func (m *Manager) StartMessage(s *Session, content string) (*Run, error) {
+func (m *Manager) StartMessage(s *Session, content string, namespaces []string) (*Run, error) {
 	if m.runs.hasActiveForSession(s.ID) {
 		return nil, fmt.Errorf("session already has an active run; stop it or wait for it to finish")
+	}
+	// Restored sessions start with an empty namespace scope; re-derive it
+	// from the caller's live login session on every message.
+	if len(namespaces) > 0 {
+		s.mu.Lock()
+		s.env.AllowedNamespaces = namespaces
+		s.mu.Unlock()
 	}
 	s.LastActive = time.Now()
 	run := newRun(s.ID, s.User, m.audit)
 	run.submitConfirm = s.agent.SubmitUserConfirm
+	run.onDone = func(r *Run) { m.onRunDone(s, r) }
 	if err := m.runs.register(run); err != nil {
 		return nil, err
 	}
@@ -288,7 +321,12 @@ STRICT SAFETY RULES:
 
 STYLE:
 - Answer in %s. Be concise; cite the concrete evidence (job name, pod, event, log line) for every claim.
-- Prefer calling tools to verify state instead of speculating.`, user, strings.Join(namespaces, ", "), lang)
+- Prefer calling tools to verify state instead of speculating.
+
+WRITE OPERATIONS (create_notebook, stop_notebook, start_notebook, submit_training_job, stop_training_job):
+- These are presented to the user for explicit approval before execution. Before calling one, explain exactly what will be created/changed and why.
+- If the user denies an operation, do NOT retry with tweaked parameters unless the user asks; ask what to change instead.
+- Only ever use namespaces listed above and names you were given or clearly derived from the user's request.`, user, strings.Join(namespaces, ", "), lang)
 
 	switch typ {
 	case AgentDiagnose:
@@ -298,7 +336,8 @@ ROLE: You are a training-job diagnosis specialist. Method:
 1. Locate the job (list_training_jobs / get_training_job) and check its status and conditions.
 2. Inspect pods (list_job_pods), events (get_job_events) and the tail of logs (get_job_logs).
 3. Classify the root cause (e.g. OOMKilled, image pull failure, crash-loop in user code, data path error, scheduling/quota pending, NCCL/network failure).
-4. Explain the evidence chain and give concrete, actionable fixes (resource requests, image, command, data mount...).`
+4. Explain the evidence chain and give concrete, actionable fixes (resource requests, image, command, data mount...).
+5. REMEDIATION: when the fix is expressible as a config change, propose a corrected job and offer to RESUBMIT it via submit_training_job with a new name (e.g. <old-name>-fix1), summarizing the exact parameter diff (old -> new) in your message so the approval screen is meaningful. Never resubmit without the user's approval; one resubmission per diagnosis unless the user asks for more.`
 	default:
 		return base + `
 

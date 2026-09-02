@@ -159,7 +159,7 @@ v2 确认门设计：
 | 阶段 | 内容 | 退出标准 |
 |---|---|---|
 | **P1**（~2-3 周） | 只读工具面（任务/Notebook/指标/日志/事件）+ **审计 + 预算上限** + Run/确认基础设施 + SSE Assistant 抽屉 + C2 故障问答 + C3（含 quota 数据源补齐）+ 内存会话 | 失败任务诊断带引用；每用户每日花费硬上限生效；审计可查；模型不可用时入口隐藏 |
-| **P2** | 写入工具（Notebook 创建/停止/启动、训练提交/停止）+ HITL 确认单 + AgentSession CRD（含重启恢复）+ W1 重提闭环 | 全部写入经确认；确认单快照绑定过对抗测试；destructive 双重确认 |
+| **P2（已实现）** | 写入工具（Notebook 创建/停止/启动、训练提交/停止，`tools_write.go`）+ AskRules 全写入工具走确认（`permission_test.go` 覆盖）+ AgentSession CRD 持久层（store/CRD yaml/重启恢复 `persist.go`，摘要 8KB 上限且 rune 边界安全）+ W1 重提闭环（diagnose 提示词内置修正-重提流程，经 submit_training_job 确认） | 全部写入经确认；确认单快照绑定过对抗测试；destructive 双重确认 |
 | **P3** | BYOK + 管理端（审计/成本看板）+ W5-lite（持久化调度）+ 模型档案 | 用户可自带 key；管理员可见全平台成本 |
 | **P4**（各自独立，不捆绑） | 只读 MCP Server（默认关闭+白名单）｜沙箱（六项强制全部落地才可发布） | 各自独立发布 |
 | **P5** | W2 顾问、W3 评估、M3 插件 | 需求驱动 |

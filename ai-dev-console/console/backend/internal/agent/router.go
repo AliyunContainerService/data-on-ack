@@ -131,7 +131,7 @@ func RegisterRoutes(r *gin.Engine, m *Manager) {
 			failed(c, "content is required")
 			return
 		}
-		run, err := m.StartMessage(s, req.Content)
+		run, err := m.StartMessage(s, req.Content, id.Namespaces)
 		if err != nil {
 			failed(c, err.Error())
 			return
