@@ -1,0 +1,35 @@
+# Shared storage (NAS) for RL data: model checkpoints + task datasets.
+#
+# Prereq (cloud side, see the doc Step 1):
+#   aliyun nas CreateFileSystem ... && aliyun nas CreateMountTarget ...
+# Substitute the mount-target domain before applying:
+#   sed -i "s/<NAS_MOUNT_DOMAIN>/<your-mount-target>/" nas-pv-pvc.yaml
+#   kubectl apply -f nas-pv-pvc.yaml
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: rl-data-pv
+spec:
+  capacity:
+    storage: 2Ti
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: rl-nas
+  nfs:
+    server: <NAS_MOUNT_DOMAIN>          # e.g. 1234abcd-xxxx.cn-hangzhou.nas.aliyuncs.com
+    path: /
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: rl-data
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: rl-nas     # must match the PV to bind statically
+  volumeName: rl-data-pv
+  resources:
+    requests:
+      storage: 2Ti
