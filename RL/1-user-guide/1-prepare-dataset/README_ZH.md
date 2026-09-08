@@ -50,6 +50,12 @@ ls data/swe-bench-verified | head
 每个任务目录包含 `task.toml`（指令/测试/镜像引用）、`instruction.md`、`tests/`，以及可选的
 `environment/Dockerfile`。
 
+> **自带数据集也可接入**：步骤 3～6 对任何符合 harbor 任务格式的目录都成立——你可以用
+> `harbor datasets init` 从模板新建任务目录，或直接把自备的目录（每个任务一个子目录，内含
+> `task.toml` + `instruction.md` + `tests/`，可选 `environment/Dockerfile` 或在 `task.toml` 里指定
+> `docker_image`）放到同一个数据集根下，跳过 `harbor datasets download`。后续步骤把
+> `--tasks-dir` / gen-prompts.sh 指向你的数据集根即可。
+
 ## 步骤 3 —— 构建并推送沙箱镜像
 
 harbor 会构建每个任务的镜像并推送到你的 ACR 仓库（本地 Docker 负责构建）：

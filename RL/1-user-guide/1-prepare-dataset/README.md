@@ -51,6 +51,12 @@ ls data/swe-bench-verified | head
 Each task directory holds `task.toml` (instruction/tests/image reference), `instruction.md`,
 `tests/`, and optionally `environment/Dockerfile`.
 
+> **Bringing your own dataset?** Steps 3–6 work on any harbor-format task directory. Scaffold a new
+> one with `harbor datasets init`, or drop self-prepared directories (one subdirectory per task with
+> `task.toml` + `instruction.md` + `tests/`, plus `environment/Dockerfile` or a `docker_image` in
+> `task.toml`) under a single dataset root — skip the `harbor datasets download` and point
+> `--tasks-dir` / `gen-prompts.sh` at your dataset root in the later steps.
+
 ## Step 3 — Build and push the sandbox images
 
 harbor builds each task's image and pushes it under your ACR repo (local Docker does the build):
