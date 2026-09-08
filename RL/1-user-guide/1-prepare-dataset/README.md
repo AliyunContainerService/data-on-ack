@@ -117,17 +117,19 @@ kubectl delete pod tb-pull-test
 > `insufficient_scope: authorization failed` here means the secret lacks scope for the repo
 > (wrong credential / wrong instance) — fix Step 4 before continuing.
 
-## Step 6 — Write the prompt manifest
+## Step 6 — Generate the prompt manifest
 
-Create `prompts.jsonl`, one line per task (full example ships with
-[2-run-an-rl-task](../2-run-an-rl-task/prompts.jsonl)):
+Generate `prompts.jsonl` automatically from the dataset directory with the script shipped in
+[2-run-an-rl-task](../2-run-an-rl-task/gen-prompts.sh) (only directories containing `task.toml`
+are picked up; `metadata.instance_id` is set to each task directory name automatically):
 
 ```bash
-cat > prompts.jsonl <<'EOF'
-{"prompt": "Fix the bug described in the task instruction in the mounted repository. Read the instruction, locate the root cause, and edit the source so the failing tests pass.", "task_name": "astropy__astropy-14309", "metadata": {"instance_id": "astropy__astropy-14309"}}
-{"prompt": "Fix the bug described in the task instruction in the mounted repository. Read the instruction, locate the root cause, and edit the source so the failing tests pass.", "task_name": "astropy__astropy-12907", "metadata": {"instance_id": "astropy__astropy-12907"}}
-EOF
+bash ../2-run-an-rl-task/gen-prompts.sh ./data/swe-bench-verified -o prompts.jsonl -n 3
 ```
+
+Options: `-n <max>` (`0` = all tasks), `-o <file>`, `--prompt "<instruction>"` (default is the SWE
+fix instruction). A hand-written sample is in
+[2-run-an-rl-task/prompts.jsonl](../2-run-an-rl-task/prompts.jsonl).
 
 `metadata.instance_id` **must** equal the task directory name — it fills the task-path template
 (`/var/model-dataset/swe-bench-verified/{instance_id}`) at rollout time.

@@ -116,17 +116,17 @@ kubectl delete pod tb-pull-test
 > 此处报 `insufficient_scope: authorization failed` 说明 secret 对该仓库没有权限
 > （凭证错/实例错）——先修步骤 4 再继续。
 
-## 步骤 6 —— 编写 prompt 清单
+## 步骤 6 —— 生成 prompt 清单
 
-创建 `prompts.jsonl`，每个任务一行（完整示例随
-[2-run-an-rl-task](../2-run-an-rl-task/prompts.jsonl) 附带）：
+用随 [2-run-an-rl-task](../2-run-an-rl-task/gen-prompts.sh) 附带的生成脚本从数据集目录自动生成
+`prompts.jsonl`（只认含 `task.toml` 的目录；`metadata.instance_id` 自动取任务目录名）：
 
 ```bash
-cat > prompts.jsonl <<'EOF'
-{"prompt": "Fix the bug described in the task instruction in the mounted repository. Read the instruction, locate the root cause, and edit the source so the failing tests pass.", "task_name": "astropy__astropy-14309", "metadata": {"instance_id": "astropy__astropy-14309"}}
-{"prompt": "Fix the bug described in the task instruction in the mounted repository. Read the instruction, locate the root cause, and edit the source so the failing tests pass.", "task_name": "astropy__astropy-12907", "metadata": {"instance_id": "astropy__astropy-12907"}}
-EOF
+bash ../2-run-an-rl-task/gen-prompts.sh ./data/swe-bench-verified -o prompts.jsonl -n 3
 ```
+
+选项：`-n <数量>`（`0` = 全部任务）、`-o <文件>`、`--prompt "<指令>"`（默认为 SWE 修复指令）。
+手工样例见 [2-run-an-rl-task/prompts.jsonl](../2-run-an-rl-task/prompts.jsonl)。
 
 `metadata.instance_id` **必须**与任务目录名一致——rollout 时它填充任务路径模板
 （`/var/model-dataset/swe-bench-verified/{instance_id}`）。
