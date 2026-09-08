@@ -230,3 +230,42 @@ REMOTE_AGENT_TASK_PATH_TEMPLATE=$PWD/data/swe-bench-verified/'{instance_id}' \
 
 > `agentic` 是生产全家桶（standalone proxy、disagg、ACK/harbor 集成）；并列的 `remote_agent`
 > 配方是框架无关、面向上游的解耦版本。
+
+### 在 Kubernetes 上运行 verl
+
+集群内运行时 recipe 自带 K8s manifests（`agentic/k8s/`）与专用 K8s 配置
+（`agentic/config/agentic_trainer_k8s.yaml`）。流程（摘自 recipe 的 ACK runbook）：
+
+```bash
+# B.4 把独立 LLM proxy 部署为 Deployment+Service —— 沙箱 Pod 需要经稳定的 Service 名
+#     访问它；要在 RayCluster 之前部署
+kubectl apply -f recipe/agentic/k8s/llm-proxy-server.yaml
+
+# B.5 创建 RayCluster（head + training/rollout worker 组；verl 镜像）
+kubectl apply -f recipe/agentic/k8s/ray-cluster-<env>.yaml
+POD=$(kubectl get pod -l app=verl-disagg-mooncake,role=head \
+  -o jsonpath='{.items[0].metadata.name}')
+
+# B.6 在 head pod 内以 k8s 配置启动训练
+#     （remote_agent.environment_kwargs 已指向 ACKEnvironment + buildkit；
+#      remote_agent.proxy_server_url: http://llm-proxy-server）
+kubectl exec $POD -c ray-head -- bash -c '
+  MODEL_PATH=/var/model/Qwen2.5-7B-Instruct \
+  nohup python3 -m recipe.agentic.agentic_main \
+    --config-name agentic_trainer_k8s \
+    actor_rollout_ref.model.path=$MODEL_PATH \
+    algorithm.adv_estimator=grpo \
+    trainer.n_gpus_per_node=8 trainer.nnodes=1 \
+    > /tmp/train.log 2>&1 &'
+kubectl exec $POD -c ray-head -- tail -f /tmp/train.log
+```
+
+ACK runbook 里几条关键点：
+- **K8s 默认走独立 proxy**：k8s 配置里 `proxy_server_url: http://llm-proxy-server`；沙箱 Pod 经
+  Service 名访问 proxy，`LLM_PROXY_IP` 不再需要填 pod IP。
+- **环境**：`remote_agent.environment_kwargs` 预接了 `harbor.environments.ack:ACKEnvironment`
+  （namespace / `image_pull_secret` / 集群内 BuildKit：`buildkit_address: buildkit-service:1234`）。
+- **节点调优**：GPU 污点容忍、大 `memory`/`shm`（NCCL 与模型加载）、
+  `RAY_memory_usage_threshold=0.99`、有 RDMA 时申请 RDMA 资源——照抄 recipe 的 RayCluster yaml。
+- 数据集/模型 PVC 挂进 RayCluster（如 `/var/model`、`/var/model-dataset`），与 slime 路径的
+  步骤 4–5 相同。

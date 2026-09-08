@@ -237,3 +237,45 @@ mode). Full reference: the recipe's `agentic/README.md`.
 
 > `agentic` is the production bundle (standalone proxy, disagg, ACK/harbor integration); the
 > sibling `remote_agent` recipe is the framework-agnostic upstream-facing version.
+
+### Running verl on Kubernetes
+
+For on-cluster runs the recipe ships K8s manifests (`agentic/k8s/`) and a dedicated K8s config
+(`agentic/config/agentic_trainer_k8s.yaml`). The flow (from the recipe's ACK runbook):
+
+```bash
+# B.4 Deploy the standalone LLM proxy as its own Deployment+Service — the sandbox
+#     pods must reach it by the stable Service name; deploy BEFORE the RayCluster
+kubectl apply -f recipe/agentic/k8s/llm-proxy-server.yaml
+
+# B.5 Create the RayCluster (head + training/rollout worker groups; verl image)
+kubectl apply -f recipe/agentic/k8s/ray-cluster-<env>.yaml
+POD=$(kubectl get pod -l app=verl-disagg-mooncake,role=head \
+  -o jsonpath='{.items[0].metadata.name}')
+
+# B.6 Launch training in the head pod, with the k8s config
+#     (remote_agent.environment_kwargs points at ACKEnvironment + buildkit;
+#      remote_agent.proxy_server_url: http://llm-proxy-server)
+kubectl exec $POD -c ray-head -- bash -c '
+  MODEL_PATH=/var/model/Qwen2.5-7B-Instruct \
+  nohup python3 -m recipe.agentic.agentic_main \
+    --config-name agentic_trainer_k8s \
+    actor_rollout_ref.model.path=$MODEL_PATH \
+    algorithm.adv_estimator=grpo \
+    trainer.n_gpus_per_node=8 trainer.nnodes=1 \
+    > /tmp/train.log 2>&1 &'
+kubectl exec $POD -c ray-head -- tail -f /tmp/train.log
+```
+
+Notes from the ACK runbook that matter here:
+- **Standalone proxy is the K8s default**: `proxy_server_url: http://llm-proxy-server` in the k8s
+  config; sandbox pods reach it via the Service name, so `LLM_PROXY_IP` no longer has to be a
+  pod IP.
+- **Environment**: `remote_agent.environment_kwargs` is pre-wired to
+  `harbor.environments.ack:ACKEnvironment` (namespace / `image_pull_secret` / in-cluster BuildKit
+  via `buildkit_address: buildkit-service:1234`).
+- **Node tuning**: GPU taints tolerations, large `memory`/`shm` (NCCL + model loading),
+  `RAY_memory_usage_threshold=0.99`, RDMA resource requests where available — copy them from the
+  recipe's RayCluster yaml.
+- Dataset/model PVCs mount into the RayCluster (e.g. `/var/model`, `/var/model-dataset`), same as
+  the slime path in Steps 4–5.
