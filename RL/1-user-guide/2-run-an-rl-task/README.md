@@ -21,7 +21,7 @@ prompts.jsonl ──► slime GRPO (train_remote_agent.py, in the Ray head pod)
 - An ACK cluster with a GPU nodepool, `kubectl` configured.
 - [1-prepare-dataset](../1-prepare-dataset/README.md) completed (ACR namespace + pull secret + task images + prompts).
 - Docker on your local machine (to build the workspace image).
-- Aliyun CLI (`aliyun`) configured (for NAS creation below).
+- Aliyun CLI (`aliyun`) configured (NAS creation and the KubeRay component install below).
 
 ## Step 1 — Create shared storage (NAS) [cloud]
 
@@ -47,14 +47,29 @@ sed "s|<NAS_MOUNT_DOMAIN>|<mount-target-domain>|" nas-pv-pvc.yaml | kubectl appl
 kubectl get pvc rl-data        # expect: Bound
 ```
 
-## Step 2 — Install the KubeRay operator
+> **Why NAS?** The Ray head pod's container disk is ephemeral — a pod restart or reschedule would
+> lose the multi-GB model checkpoint and task dataset (Step 5) and force re-preparing them. A NAS
+> volume keeps that data across restarts, and its **ReadWriteMany** access mode lets worker pods
+> (`DEPLOY=disagg` / multi-node training) read the same checkpoint and dataset. Any existing RWX
+> PVC (NAS/CPFS) can substitute. For a quick single-node smoke run you may skip NAS and use the
+> pod's local disk — at the cost of re-downloading/converting after each restart.
+
+## Step 2 — Install the KubeRay operator (ACK component) [cloud]
+
+KubeRay is available as a managed ACK component, installed with the aliyun CLI:
 
 ```bash
-helm repo add kuberay https://ray-project.github.io/kuberay/
-helm repo update
-helm install kuberay-operator kuberay/kuberay-operator \
-  -n kuberay-system --create-namespace
-kubectl -n kuberay-system get deploy    # expect: kuberay-operator ... Available
+# 2.1 Find the version available for your cluster
+CLUSTER_ID=<cluster-id>
+VERSION=$(aliyun cs DescribeClusterAddonsVersion --ClusterId $CLUSTER_ID \
+  | jq -r '."kuberay-operator".next_version')     # e.g. v1.7.0-release.3
+
+# 2.2 Install (takes a few minutes)
+aliyun cs InstallClusterAddons --ClusterId $CLUSTER_ID \
+  --body "{\"name\": \"kuberay-operator\", \"version\": \"$VERSION\"}"
+
+# 2.3 Verify — the operator deployment is Running
+kubectl get deploy -A | grep -i kuberay
 ```
 
 ## Step 3 — Build and push the slime workspace image

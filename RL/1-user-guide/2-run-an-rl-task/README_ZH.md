@@ -21,7 +21,7 @@ prompts.jsonl ──► slime GRPO（train_remote_agent.py，运行在 Ray head 
 - 带 GPU 节点池的 ACK 集群，`kubectl` 已配置。
 - 已完成 [1-prepare-dataset](../1-prepare-dataset/README_ZH.md)（ACR 命名空间 + pull secret + 任务镜像 + prompts）。
 - 本地机器装有 Docker（用于构建 workspace 镜像）。
-- 已配置阿里云 CLI（`aliyun`，用于下文的 NAS 创建）。
+- 已配置阿里云 CLI（`aliyun`，用于下文的 NAS 创建与 KubeRay 组件安装）。
 
 ## 步骤 1 —— 创建共享存储（NAS）【云上操作】
 
@@ -47,14 +47,28 @@ sed "s|<NAS_MOUNT_DOMAIN>|<挂载点域名>|" nas-pv-pvc.yaml | kubectl apply -f
 kubectl get pvc rl-data        # 期望：Bound
 ```
 
-## 步骤 2 —— 安装 KubeRay operator
+> **为什么需要 NAS？** Ray head pod 的容器盘是临时的——pod 重启或重新调度就会丢失数 GB 的模型
+> checkpoint 与任务数据集（步骤 5），只能重新准备。NAS 卷让这些数据跨重启保留；且其
+> **ReadWriteMany** 访问模式让 worker pod（`DEPLOY=disagg` / 多机训练）能读同一份 checkpoint
+> 与数据集。任何已有的 RWX PVC（NAS/CPFS）都可以替代。若只是单机快速冒烟，也可以不用 NAS、
+> 直接用 pod 本地盘——代价是每次重启后要重新下载/转换。
+
+## 步骤 2 —— 安装 KubeRay operator（ACK 组件）【云上操作】
+
+KubeRay 以 ACK 托管组件形式提供，用 aliyun CLI 安装：
 
 ```bash
-helm repo add kuberay https://ray-project.github.io/kuberay/
-helm repo update
-helm install kuberay-operator kuberay/kuberay-operator \
-  -n kuberay-system --create-namespace
-kubectl -n kuberay-system get deploy    # 期望：kuberay-operator ... Available
+# 2.1 查询你的集群可用的组件版本
+CLUSTER_ID=<cluster-id>
+VERSION=$(aliyun cs DescribeClusterAddonsVersion --ClusterId $CLUSTER_ID \
+  | jq -r '."kuberay-operator".next_version')     # 例如 v1.7.0-release.3
+
+# 2.2 安装（需要几分钟）
+aliyun cs InstallClusterAddons --ClusterId $CLUSTER_ID \
+  --body "{\"name\": \"kuberay-operator\", \"version\": \"$VERSION\"}"
+
+# 2.3 验证 —— operator Deployment 处于 Running
+kubectl get deploy -A | grep -i kuberay
 ```
 
 ## 步骤 3 —— 构建并推送 slime workspace 镜像
