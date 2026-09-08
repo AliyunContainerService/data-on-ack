@@ -1,0 +1,49 @@
+# RayCluster for slime remote-agent RL (KubeRay).
+# Adapted from alibaba/slime examples/remote_agent/raycluster-example.yaml.
+#
+# Before applying, substitute:
+#   sed -e "s|<IMAGE>|<acr-registry>/slime-workspace:<tag>|" \
+#       -e "s|<PULL_SECRET>|<acr-pull-secret>|" raycluster.yaml | kubectl apply -f -
+#
+# Storage: the single PVC `rl-data` (see nas-pv-pvc.yaml) is mounted at both
+# /var/model        (HF ckpt + Megatron torch_dist ckpt)
+# /var/model-dataset (task dataset, e.g. swe-bench-verified)
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: rayclustertest
+  namespace: default
+---
+apiVersion: ray.io/v1
+kind: RayCluster
+metadata:
+  name: raycluster-slime
+  namespace: default
+spec:
+  headGroupSpec:
+    rayStartParams:
+      dashboard-host: 0.0.0.0
+    serviceType: ClusterIP
+    template:
+      spec:
+        serviceAccountName: rayclustertest
+        containers:
+        - name: ray-head
+          image: <IMAGE>                      # workspace image (doc Step 3)
+          imagePullPolicy: IfNotPresent
+          command: [service, ssh, start]      # keep alive; KubeRay starts Ray
+          resources:
+            limits:   {cpu: "50", memory: 800Gi, nvidia.com/gpu: "8"}
+            requests: {cpu: "50", memory: 800Gi, nvidia.com/gpu: "8"}
+          securityContext: {runAsUser: 0}
+          volumeMounts:
+          - {name: model,         mountPath: /var/model}
+          - {name: model-dataset, mountPath: /var/model-dataset}
+        imagePullSecrets:
+        - {name: <PULL_SECRET>}
+        # uncomment if your GPU pool is tainted, e.g.:
+        # tolerations:
+        # - {key: nvidia.com/gpu, operator: Exists, effect: NoSchedule}
+        volumes:
+        - {name: model,         persistentVolumeClaim: {claimName: rl-data}}
+        - {name: model-dataset, persistentVolumeClaim: {claimName: rl-data}}
