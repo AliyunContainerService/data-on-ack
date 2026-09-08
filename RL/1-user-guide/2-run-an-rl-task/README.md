@@ -121,16 +121,24 @@ kubectl exec -n default $POD -- bash -c \
 kubectl exec -n default $POD -- ls /var/model-dataset/swe-bench-verified | head
 ```
 
-## Step 6 — Write the prompt manifest
+## Step 6 — Generate the prompt manifest
 
-Copy [prompts.jsonl](prompts.jsonl) (3 sample tasks) to the head pod:
+Use the bundled generator to build `prompts.jsonl` from the dataset directory (one line per task;
+`metadata.instance_id` is set to each task directory name automatically — it must match, since it
+fills the task-path template `/var/model-dataset/swe-bench-verified/{instance_id}`):
 
 ```bash
+# run inside the head pod (recommended — writes straight to slime's expected path)
+POD=$POD bash gen-prompts.sh /var/model-dataset/swe-bench-verified -i
+
+# or generate locally and copy in
+bash gen-prompts.sh ./data/swe-bench-verified -o prompts.jsonl -n 3
 kubectl cp prompts.jsonl default/$POD:/root/slime/examples/remote_agent/prompts.jsonl
 ```
 
-Each line maps one task: `metadata.instance_id` must equal the task directory name (it fills the
-task-path template `/var/model-dataset/swe-bench-verified/{instance_id}`).
+Options: `-n <max>` (task count, `0` = all, default 3), `-o <file>`, `--prompt "<instruction>"`
+(custom instruction text; default is the SWE fix instruction). A hand-written sample is in
+[prompts.jsonl](prompts.jsonl) for reference.
 
 ## Step 7 — Launch RL training
 

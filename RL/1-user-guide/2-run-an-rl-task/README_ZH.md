@@ -119,16 +119,23 @@ kubectl exec -n default $POD -- bash -c \
 kubectl exec -n default $POD -- ls /var/model-dataset/swe-bench-verified | head
 ```
 
-## 步骤 6 —— 编写 prompt 清单
+## 步骤 6 —— 生成 prompt 清单
 
-把 [prompts.jsonl](prompts.jsonl)（3 个示例任务）拷进 head pod：
+用自带的生成脚本从数据集目录构建 `prompts.jsonl`（每个任务一行；`metadata.instance_id`
+自动取任务目录名——必须与目录名一致，因为它填充任务路径模板
+`/var/model-dataset/swe-bench-verified/{instance_id}`）：
 
 ```bash
+# 直接在 head pod 内生成（推荐——直接写到 slime 的约定路径）
+POD=$POD bash gen-prompts.sh /var/model-dataset/swe-bench-verified -i
+
+# 或本地生成后拷入
+bash gen-prompts.sh ./data/swe-bench-verified -o prompts.jsonl -n 3
 kubectl cp prompts.jsonl default/$POD:/root/slime/examples/remote_agent/prompts.jsonl
 ```
 
-每行映射一个任务：`metadata.instance_id` 必须与任务目录名一致（它填充任务路径模板
-`/var/model-dataset/swe-bench-verified/{instance_id}`）。
+选项：`-n <数量>`（任务数，`0` = 全部，默认 3）、`-o <文件>`、`--prompt "<指令>"`
+（自定义指令文本；默认为 SWE 修复指令）。手工样例见 [prompts.jsonl](prompts.jsonl)。
 
 ## 步骤 7 —— 启动 RL 训练
 
