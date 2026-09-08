@@ -64,6 +64,20 @@ harbor admin upload-images \
   -n 4                       # 并行构建数
 ```
 
+关键参数（ACK 场景最要紧的几个）：
+
+| 参数 | 作用 | 在 ACK 上为什么重要 |
+|---|---|---|
+| `--registry <url>` | 当 task.toml 里没有 `docker_image` 时，用该仓库前缀合成镜像引用 | 指向你的 ACR 仓库；合成 tag 默认为 `YYYYMMDD` |
+| `--remote-buildkit tcp://<host>:1234` | 经远程 BuildKit 端点构建（buildx remote driver，回退 `buildctl --addr`） | 在集群内构建——本地无需 Docker daemon，基础镜像拉取也不经过你的笔记本 |
+| `--sanitize-image-names` | 改写仓库非法的任务名（`django__django-14349` → `django-django-14349`） | ACR 仓库路径不接受 `__`；不开这个推送会直接被 registry 拒绝 |
+| `--update-config` / `--override-config` | 把 `docker_image`、`built_content_hash`、`image_sha256` 回写进 task.toml（override = 覆盖已有值） | RL 运行时从 task.toml 读镜像——不回写的话任务仍指向旧/缺失镜像 |
+| `--skip-unchanged` | 记录的内容哈希与远端 digest 一致时跳过构建+推送 | 流水线可重跑：中断续传只重建有变化的任务 |
+| `--diff-only` | 只对比本地哈希 vs 远端仓库，不构建；有漂移退出码 1 | CI 式漂移检查：确认推送的镜像与任务源一致 |
+| `-n <N>` | 并行构建/推送数 | ACR + 远程 BuildKit 能吃下并发；4 是个好起点 |
+| `--tag <tag>` / `--tag-latest` | 覆盖/替换 tag；同时打 `latest` | 为数据集版本钉一个稳定 tag，而不是依赖默认日期 |
+| `--filter <子串>` | 按名字筛任务子集 | 只重建某个失败任务，不动其余 |
+
 验证一个镜像：
 
 ```bash

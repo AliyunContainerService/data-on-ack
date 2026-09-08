@@ -65,6 +65,20 @@ harbor admin upload-images \
   -n 4                       # parallel builders
 ```
 
+Key options (the ones that matter on ACK):
+
+| Option | What it does | Why on ACK |
+|---|---|---|
+| `--registry <url>` | Registry prefix used when a task's `task.toml` has no `docker_image` | Point it at your ACR repo; the synthesized tag defaults to `YYYYMMDD` |
+| `--remote-buildkit tcp://<host>:1234` | Build via a remote BuildKit endpoint (buildx remote driver, falls back to `buildctl --addr`) | Build inside the cluster — no local Docker daemon needed, and base-image pulls don't traverse your laptop |
+| `--sanitize-image-names` | Rewrites registry-illegal task names (`django__django-14349` → `django-django-14349`) | ACR rejects `__` in repository paths; without this the push fails at the registry |
+| `--update-config` / `--override-config` | Writes `docker_image`, `built_content_hash`, `image_sha256` back into each `task.toml` (override = replace existing values) | The RL run reads the image from `task.toml` — without this the task keeps pointing at the old/missing image |
+| `--skip-unchanged` | Skips build+push when the recorded content hash and remote digest already match | Re-runnable pipeline: a resumed/interrupted bulk upload only rebuilds what changed |
+| `--diff-only` | Compares local hashes vs the remote registry only; no builds; exit 1 on drift | CI-style drift check that the pushed images match the task sources |
+| `-n <N>` | Parallel builds/pushes | ACR + remote BuildKit handle several at once; 4 is a good start |
+| `--tag <tag>` / `--tag-latest` | Overrides/replaces the tag; also tag `latest` | Pin a stable tag per dataset release rather than relying on the date default |
+| `--filter <substr>` | Subset of tasks by name | Rebuild a single failing task without touching the rest |
+
 Verify one image:
 
 ```bash
