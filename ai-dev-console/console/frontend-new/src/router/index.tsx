@@ -1,32 +1,43 @@
+import { lazy, Suspense } from 'react';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
+import { Spin } from 'antd';
 import MainLayout from '../layouts/MainLayout';
-import Dashboard from '../pages/Dashboard';
-import Notebooks from '../pages/Notebooks';
-import Training from '../pages/Training';
-import FineTune from '../pages/FineTune';
-import Serving from '../pages/Serving';
-import Models from '../pages/Models';
-import Datasets from '../pages/Datasets';
-import Experiments from '../pages/Experiments';
-import Login from '../pages/Login';
+
+const Login = lazy(() => import('../pages/Login'));
+const Dashboard = lazy(() => import('../pages/Dashboard'));
+const Notebooks = lazy(() => import('../pages/Notebooks'));
+const Training = lazy(() => import('../pages/Training'));
+const FineTune = lazy(() => import('../pages/FineTune'));
+const Serving = lazy(() => import('../pages/Serving'));
+const Models = lazy(() => import('../pages/Models'));
+const Datasets = lazy(() => import('../pages/Datasets'));
+const Experiments = lazy(() => import('../pages/Experiments'));
+
+const PageLoading = (
+  <div style={{ height: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <Spin size="large" />
+  </div>
+);
+
+const withSuspense = (element: React.ReactNode) => <Suspense fallback={PageLoading}>{element}</Suspense>;
 
 export const router = createBrowserRouter([
   {
     path: '/login',
-    element: <Login />,
+    element: withSuspense(<Login />),
   },
   {
     path: '/',
     element: <MainLayout />,
     children: [
-      { index: true, element: <Dashboard /> },
-      { path: 'notebooks', element: <Notebooks /> },
-      { path: 'training', element: <Training /> },
-      { path: 'finetune', element: <FineTune /> },
-      { path: 'experiments', element: <Experiments /> },
-      { path: 'serving', element: <Serving /> },
-      { path: 'models', element: <Models /> },
-      { path: 'datasets', element: <Datasets /> },
+      { index: true, element: withSuspense(<Dashboard />) },
+      { path: 'notebooks', element: withSuspense(<Notebooks />) },
+      { path: 'training', element: withSuspense(<Training />) },
+      { path: 'finetune', element: withSuspense(<FineTune />) },
+      { path: 'experiments', element: withSuspense(<Experiments />) },
+      { path: 'serving', element: withSuspense(<Serving />) },
+      { path: 'models', element: withSuspense(<Models />) },
+      { path: 'datasets', element: withSuspense(<Datasets />) },
     ],
   },
   { path: '*', element: <Navigate to="/" replace /> },

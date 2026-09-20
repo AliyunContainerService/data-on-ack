@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/AliyunContainerService/data-on-ack/ai-dev-console/console/backend/internal/k8s"
 	"github.com/AliyunContainerService/data-on-ack/ai-dev-console/console/backend/internal/model"
@@ -44,7 +45,7 @@ func (s *DatasetService) List(namespaces []string) ([]model.DatasetInfo, error) 
 				FluidCached:  isFluidCached(pvc),
 			}
 			if !pvc.CreationTimestamp.IsZero() {
-				info.Age = formatDuration(pvc.CreationTimestamp.Time.Sub(pvc.CreationTimestamp.Time))
+				info.Age = formatDuration(time.Since(pvc.CreationTimestamp.Time))
 			}
 			results = append(results, info)
 		}

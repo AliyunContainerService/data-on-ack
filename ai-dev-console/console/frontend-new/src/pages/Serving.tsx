@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Card, Table, Button, Tag, Space, Modal, Form, Input, InputNumber,
   Select, message, Popconfirm, Typography, Row, Col, Badge, Alert,
@@ -48,6 +49,9 @@ const Serving: React.FC = () => {
   const [chatLoading, setChatLoading] = useState(false);
   const [temperature, setTemperature] = useState(0.7);
   const [maxTokens, setMaxTokens] = useState(1024);
+  const location = useLocation();
+  const navigate = useNavigate();
+  const chatScrollRef = React.useRef<HTMLDivElement>(null);
 
   const fetchData = () => {
     setLoading(true);
@@ -58,6 +62,29 @@ const Serving: React.FC = () => {
   };
 
   useEffect(() => { fetchData(); }, []);
+
+  // Keep the newest chat message visible during playground testing.
+  useEffect(() => {
+    chatScrollRef.current?.scrollTo({ top: chatScrollRef.current.scrollHeight });
+  }, [chatMessages, chatLoading]);
+
+  // Pre-fill the create form when navigated from the Model Hub ("Deploy" action).
+  useEffect(() => {
+    const state = location.state as { deployModel?: { name: string; path: string; framework?: string } } | null;
+    const model = state?.deployModel;
+    if (!model) return;
+    setCreateOpen(true);
+    form.setFieldsValue({
+      name: `${model.name}-serving`,
+      modelPath: model.path,
+      modelName: model.name,
+      image: INFERENCE_ENGINES[0].defaultImage,
+      port: INFERENCE_ENGINES[0].defaultPort,
+      framework: INFERENCE_ENGINES[0].id,
+    });
+    // Clear the state so a refresh does not re-trigger the modal.
+    navigate(location.pathname, { replace: true, state: null });
+  }, [location.state, location.pathname, form, navigate]);
 
   const handleTest = (record: ServingInfo) => {
     setTestService(record);
@@ -151,6 +178,10 @@ const Serving: React.FC = () => {
   const handleCreate = async () => {
     try {
       const values = await form.validateFields();
+      const env: Record<string, string> = {};
+      if (values.modelName) env.MODEL_NAME = values.modelName;
+      if (values.modelPath) env.MODEL_PATH = values.modelPath;
+
       const spec: ServingSpec = {
         name: values.name,
         namespace: values.namespace || 'default-group',
@@ -163,7 +194,7 @@ const Serving: React.FC = () => {
         port: values.port || 8000,
         framework: values.framework || selectedEngine,
         modelPath: values.modelPath,
-        env: values.modelName ? { MODEL_NAME: values.modelName } : undefined,
+        env: Object.keys(env).length > 0 ? env : undefined,
       };
       await createServing(spec);
       message.success(t('common.success'));
@@ -254,8 +285,20 @@ const Serving: React.FC = () => {
       </div>
 
       <Card bordered={false} style={{ borderRadius: 14 }}>
-        <Table columns={columns} dataSource={services} rowKey={(r) => `${r.namespace}/${r.name}`} loading={loading} pagination={false} size="middle" />
-      </Card>
+        <Table
+          columns={columns}
+          dataSource={services}
+          rowKey={(r) => `${r.namespace}/${r.name}`}
+          loading={loading}
+          pagination={{
+            pageSize: 10,
+            showSizeChanger: true,
+            pageSizeOptions: [10, 20, 50],
+            showTotal: (total) => `${total} items`,
+          }}
+          size="middle"
+        />
+     </Card>
 
       {/* Serving Logs Drawer */}
       <Drawer
@@ -326,7 +369,7 @@ const Serving: React.FC = () => {
           </div>
 
           {/* Chat messages */}
-          <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>
+          <div ref={chatScrollRef} style={{ flex: 1, overflow: 'auto', padding: 16 }}>
             {chatMessages.length === 0 && (
               <div style={{ textAlign: 'center', padding: 40, color: '#999' }}>
                 <ApiOutlined style={{ fontSize: 32, marginBottom: 8 }} />
@@ -398,6 +441,7 @@ const Serving: React.FC = () => {
       <Modal
         title={<Space><RocketOutlined />{t('serving.create')}</Space>}
         open={createOpen}
+        forceRender
         onOk={handleCreate}
         onCancel={() => { setCreateOpen(false); form.resetFields(); }}
         okText={t('common.confirm')}
@@ -444,7 +488,15 @@ const Serving: React.FC = () => {
                 onClick={() => handleEngineChange(engine.id)}
               >
                 <Text strong style={{ fontSize: 12 }}>{engine.name}</Text>
-                <div><Text type="secondary" style={{ fontSize: 10 }}>{engine.description.slice(0, 35)}...</Text></div>
+                <div>
+                  <Text
+                    type="secondary"
+                    style={{ fontSize: 10, display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                    title={engine.description}
+                  >
+                    {engine.description}
+                  </Text>
+                </div>
               </Card>
             ))}
           </div>

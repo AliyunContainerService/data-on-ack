@@ -44,6 +44,7 @@ const Notebooks: React.FC = () => {
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [viewMode, setViewMode] = useState<string>('list');
   const [createStep, setCreateStep] = useState(0);
+  const [creating, setCreating] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<NotebookTemplate | null>(null);
   const [selectedPreset, setSelectedPreset] = useState<string>('gpu-1');
   const [form] = Form.useForm();
@@ -52,6 +53,7 @@ const Notebooks: React.FC = () => {
   const [sshDrawerOpen, setSSHDrawerOpen] = useState(false);
   const [sshInfo, setSSHInfo] = useState<NotebookSSHInfo | null>(null);
   const [sshNotebook, setSSHNotebook] = useState<NotebookInfo | null>(null);
+  const [sshError, setSSHError] = useState<string | null>(null);
   const [resizeModalOpen, setResizeModalOpen] = useState(false);
   const [resizeTarget, setResizeTarget] = useState<NotebookInfo | null>(null);
   const [resizeForm] = Form.useForm();
@@ -92,6 +94,7 @@ const Notebooks: React.FC = () => {
   const handleCreate = async () => {
     try {
       const values = await form.validateFields();
+      setCreating(true);
       const spec: NotebookSpec = {
         name: values.name,
         namespace: values.namespace || 'default',
@@ -99,6 +102,7 @@ const Notebooks: React.FC = () => {
         cpu: values.cpu || '4',
         memory: values.memory || '16Gi',
         gpu: values.gpu ?? 0,
+        gpuType: selectedTemplate?.gpuType,
         storage: values.storage || '50Gi',
         env: selectedTemplate?.env,
       };
@@ -109,6 +113,8 @@ const Notebooks: React.FC = () => {
       fetchData();
     } catch (err) {
       if (err instanceof Error) message.error(err.message);
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -146,11 +152,13 @@ const Notebooks: React.FC = () => {
   const handleSSH = async (record: NotebookInfo) => {
     setSSHNotebook(record);
     setSSHDrawerOpen(true);
+    setSSHError(null);
     try {
       const info = await getNotebookSSHInfo(record.namespace, record.name);
       setSSHInfo(info);
-    } catch {
+    } catch (err) {
       setSSHInfo(null);
+      setSSHError(err instanceof Error ? err.message : 'Failed to fetch pod info');
     }
   };
 
@@ -364,7 +372,12 @@ const Notebooks: React.FC = () => {
             dataSource={notebooks}
             rowKey={(r) => `${r.namespace}/${r.name}`}
             loading={loading}
-            pagination={false}
+            pagination={{
+              pageSize: 10,
+              showSizeChanger: true,
+              pageSizeOptions: [10, 20, 50],
+              showTotal: (total) => `${total} items`,
+            }}
             size="middle"
           />
         </Card>
@@ -384,7 +397,7 @@ const Notebooks: React.FC = () => {
           ) : (
             <Space>
               <Button onClick={() => setCreateStep(0)}>Back</Button>
-              <Button type="primary" onClick={handleCreate}>Create Notebook</Button>
+              <Button type="primary" loading={creating} disabled={creating} onClick={handleCreate}>Create Notebook</Button>
             </Space>
           )
         }
@@ -532,7 +545,14 @@ const Notebooks: React.FC = () => {
         onClose={() => { setSSHDrawerOpen(false); setSSHInfo(null); }}
         width={520}
       >
-        {sshInfo ? (
+        {sshError ? (
+          <div style={{ textAlign: 'center', padding: 40 }}>
+            <Text type="danger" style={{ display: 'block', marginBottom: 8 }}>
+              Failed to load terminal access info
+            </Text>
+            <Text type="secondary" style={{ fontSize: 12 }}>{sshError}</Text>
+          </div>
+        ) : sshInfo ? (
           <div>
             <div style={{ marginBottom: 20 }}>
               <Text strong style={{ display: 'block', marginBottom: 8 }}>Pod Info</Text>

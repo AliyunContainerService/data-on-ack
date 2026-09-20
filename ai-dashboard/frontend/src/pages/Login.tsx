@@ -1,14 +1,16 @@
 import { useEffect } from 'react'
-import { Button, Typography } from 'antd'
-import { CloudServerOutlined, SafetyCertificateOutlined, DashboardOutlined, ClusterOutlined } from '@ant-design/icons'
+import { Button, Typography, Tooltip } from 'antd'
+import { CloudServerOutlined, SafetyCertificateOutlined, DashboardOutlined, ClusterOutlined, TranslationOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useUserStore } from '@/store/user'
+import { changeLanguage } from '@/i18n'
 
 const { Title, Text } = Typography
 
 export default function Login() {
   const { t } = useTranslation()
+  const { i18n } = useTranslation()
   const navigate = useNavigate()
   const { fetchUserInfo } = useUserStore()
 
@@ -17,21 +19,24 @@ export default function Login() {
   }, [])
 
   const handleLogin = () => { window.location.href = '/login/aliyun' }
+  const toggleLocale = () => changeLanguage(i18n.language === 'zh' ? 'en' : 'zh')
 
   return (
     <div style={{
       minHeight: '100vh',
       display: 'flex',
+      flexWrap: 'wrap',
       background: '#fbfbfd',
     }}>
       {/* Left panel - branding */}
       <div style={{
-        flex: 1,
+        flex: '1 1 420px',
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'center',
         alignItems: 'center',
         padding: '60px 40px',
+        minWidth: 320,
         background: 'linear-gradient(160deg, #0a0a0f 0%, #1a1a2e 50%, #16213e 100%)',
         position: 'relative',
         overflow: 'hidden',
@@ -65,9 +70,9 @@ export default function Login() {
           {/* Feature highlights */}
           <div style={{ marginTop: 48, textAlign: 'left', display: 'flex', flexDirection: 'column', gap: 16 }}>
             {[
-              { icon: <ClusterOutlined />, text: 'GPU Cluster Management & Monitoring' },
-              { icon: <DashboardOutlined />, text: 'Resource Quota & Cost Analytics' },
-              { icon: <SafetyCertificateOutlined />, text: 'Multi-tenant RBAC & Security' },
+              { icon: <ClusterOutlined />, text: t('login.feature1') },
+              { icon: <DashboardOutlined />, text: t('login.feature2') },
+              { icon: <SafetyCertificateOutlined />, text: t('login.feature3') },
             ].map((item, idx) => (
               <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <div style={{
@@ -87,7 +92,7 @@ export default function Login() {
         {/* Footer */}
         <div style={{ position: 'absolute', bottom: 32, left: 0, right: 0, textAlign: 'center' }}>
           <Text style={{ color: 'rgba(255,255,255,0.3)', fontSize: 12 }}>
-            Powered by Alibaba Cloud ACK
+            {t('login.footer')}
           </Text>
         </div>
       </div>
@@ -95,6 +100,8 @@ export default function Login() {
       {/* Right panel - login form */}
       <div style={{
         width: 480,
+        maxWidth: '100%',
+        flexShrink: 0,
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'center',
@@ -106,7 +113,7 @@ export default function Login() {
             {t('login.title')}
           </Title>
           <Text type="secondary" style={{ fontSize: 14, display: 'block', marginBottom: 40 }}>
-            Sign in to access the operations console
+            {t('login.subtitleForm')}
           </Text>
 
           <Button
@@ -129,8 +136,14 @@ export default function Login() {
 
           <div style={{ marginTop: 24, padding: '16px 20px', background: '#f5f5f7', borderRadius: 12 }}>
             <Text type="secondary" style={{ fontSize: 12, lineHeight: 1.6 }}>
-              You will be redirected to Alibaba Cloud RAM SSO for authentication. Only authorized accounts can access this console.
+              {t('login.ssoNote')}
             </Text>
+          </div>
+
+          <div style={{ marginTop: 24, textAlign: 'center' }}>
+            <Tooltip title={i18n.language === 'zh' ? 'English' : '中文'}>
+              <Button type="text" icon={<TranslationOutlined />} onClick={toggleLocale} />
+            </Tooltip>
           </div>
         </div>
       </div>

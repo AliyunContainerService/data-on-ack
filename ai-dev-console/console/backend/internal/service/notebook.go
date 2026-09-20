@@ -3,10 +3,12 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/AliyunContainerService/data-on-ack/ai-dev-console/console/backend/internal/k8s"
 	"github.com/AliyunContainerService/data-on-ack/ai-dev-console/console/backend/internal/model"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/dynamic"
@@ -68,9 +70,66 @@ func (s *NotebookService) Create(spec *model.NotebookSpec, userName string) erro
 		return err
 	}
 
+	// Provision the workspace PVC referenced by the notebook pod spec,
+	// otherwise the pod stays Pending forever on a missing volume.
+	pvcCreated := false
+	if strings.TrimSpace(spec.Storage) != "" {
+		pvcCreated, err = ensureWorkspacePVC(spec, client)
+		if err != nil {
+			return fmt.Errorf("create workspace PVC: %w", err)
+		}
+	}
+
 	nb := buildNotebookCRD(spec)
-	_, err = client.Resource(gvr).Namespace(spec.Namespace).Create(context.TODO(), nb, metav1.CreateOptions{})
-	return err
+	if _, err = client.Resource(gvr).Namespace(spec.Namespace).Create(context.TODO(), nb, metav1.CreateOptions{}); err != nil {
+		// Roll back a PVC we just created so a failed Notebook create can be retried cleanly.
+		if pvcCreated {
+			_ = client.Resource(k8s.PVCGVR()).Namespace(spec.Namespace).Delete(
+				context.TODO(), spec.Name+"-workspace", metav1.DeleteOptions{})
+		}
+		return err
+	}
+	return nil
+}
+
+// ensureWorkspacePVC returns whether a new PVC was created; an existing PVC is reused.
+func ensureWorkspacePVC(spec *model.NotebookSpec, client dynamic.Interface) (bool, error) {
+	pvcName := spec.Name + "-workspace"
+	if _, err := client.Resource(k8s.PVCGVR()).Namespace(spec.Namespace).Get(
+		context.TODO(), pvcName, metav1.GetOptions{}); err == nil {
+		return false, nil
+	}
+
+	pvc := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "PersistentVolumeClaim",
+			"metadata": map[string]interface{}{
+				"name":      spec.Name + "-workspace",
+				"namespace": spec.Namespace,
+				"labels": map[string]interface{}{
+					"app.kubernetes.io/managed-by": "ai-dev-console",
+				},
+			},
+			"spec": map[string]interface{}{
+				"accessModes": []interface{}{"ReadWriteOnce"},
+				"resources": map[string]interface{}{
+					"requests": map[string]interface{}{
+						"storage": spec.Storage,
+					},
+				},
+			},
+		},
+	}
+	_, err := client.Resource(k8s.PVCGVR()).Namespace(spec.Namespace).Create(context.TODO(), pvc, metav1.CreateOptions{})
+	if err != nil {
+		// Another request may have won a create race; reuse that PVC.
+		if apierrors.IsAlreadyExists(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }
 
 // Delete deletes a Notebook CRD.

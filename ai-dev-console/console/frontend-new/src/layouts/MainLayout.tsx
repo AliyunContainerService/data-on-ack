@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { Layout, Menu, Dropdown, Button, Space, Avatar, Typography, Breadcrumb, Tooltip, Spin } from 'antd';
+import { Layout, Menu, Dropdown, Button, Space, Avatar, Typography, Breadcrumb, Tooltip, Spin, Grid } from 'antd';
 import type { MenuProps } from 'antd';
 import {
   DashboardOutlined,
@@ -15,7 +15,6 @@ import {
   MenuUnfoldOutlined,
   TranslationOutlined,
   LogoutOutlined,
-  SettingOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useUserStore } from '../store/user';
@@ -29,6 +28,13 @@ const MainLayout: React.FC = () => {
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
   const { user, fetchUser, logout, locale, setLocale } = useUserStore();
+  const screens = Grid.useBreakpoint();
+
+  // Auto-collapse the sidebar on narrow screens for a usable mobile layout.
+  useEffect(() => {
+    if (screens.lg === false) setCollapsed(true);
+    if (screens.lg === true) setCollapsed(false);
+  }, [screens.lg]);
 
   // Block rendering of protected content until the session has been verified.
   // Previously a 1.5s timer redirected after the content was already shown; now we
@@ -84,8 +90,6 @@ const MainLayout: React.FC = () => {
   };
 
   const userMenuItems: MenuProps['items'] = [
-    { key: 'settings', icon: <SettingOutlined />, label: t('user.settings') },
-    { type: 'divider' },
     { key: 'logout', icon: <LogoutOutlined />, label: t('user.logout'), danger: true, onClick: handleLogout },
   ];
 

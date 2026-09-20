@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Layout, Menu, Dropdown, Avatar, Button, Breadcrumb, Space, Typography } from 'antd'
+import { useEffect, useState } from 'react'
+import { Layout, Menu, Dropdown, Avatar, Button, Breadcrumb, Space, Typography, Grid } from 'antd'
 import {
   DashboardOutlined,
   ClusterOutlined,
@@ -32,6 +32,13 @@ export default function MainLayout() {
   const location = useLocation()
   const { user, logout } = useUserStore()
   const [collapsed, setCollapsed] = useState(false)
+  const screens = Grid.useBreakpoint()
+
+  // Auto-collapse the sidebar on narrow screens for a usable mobile layout.
+  useEffect(() => {
+    if (screens.lg === false) setCollapsed(true)
+    if (screens.lg === true) setCollapsed(false)
+  }, [screens.lg])
 
   const menuItems: MenuProps['items'] = [
     { key: '/dashboard', icon: <DashboardOutlined />, label: t('menu.dashboard') },
