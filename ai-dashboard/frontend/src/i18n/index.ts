@@ -135,6 +135,8 @@ const resources = {
         sourceType: '数据源类型',
         accelerate: '加速',
         runtime: '运行时',
+        capacity: '容量',
+        accessMode: '访问模式',
         deleted: '数据集已删除',
       },
       node: {
@@ -175,6 +177,12 @@ const resources = {
         title: 'AI 套件运维控制台',
         subtitle: '阿里云 ACK 上的 AI 基础设施运维管理平台',
         button: '使用阿里云 RAM 账号登录',
+        subtitleForm: '登录以访问运维控制台',
+        ssoNote: '登录将跳转到阿里云 RAM SSO 完成认证。仅授权账号可访问本控制台。',
+        feature1: 'GPU 集群管理与监控',
+        feature2: '资源配额与成本分析',
+        feature3: '多租户 RBAC 与安全',
+        footer: '基于阿里云 ACK 构建',
       },
       header: {
         logout: '退出登录',
@@ -328,6 +336,8 @@ const resources = {
         sourceType: 'Source Type',
         accelerate: 'Accelerate',
         runtime: 'Runtime',
+        capacity: 'Capacity',
+        accessMode: 'Access Mode',
         deleted: 'Dataset deleted',
       },
       node: {
@@ -368,6 +378,12 @@ const resources = {
         title: 'AI Suite Operations Console',
         subtitle: 'AI Infrastructure Operations on Alibaba Cloud ACK',
         button: 'Login with Alibaba Cloud RAM',
+        subtitleForm: 'Sign in to access the operations console',
+        ssoNote: 'You will be redirected to Alibaba Cloud RAM SSO for authentication. Only authorized accounts can access this console.',
+        feature1: 'GPU Cluster Management & Monitoring',
+        feature2: 'Resource Quota & Cost Analytics',
+        feature3: 'Multi-tenant RBAC & Security',
+        footer: 'Powered by Alibaba Cloud ACK',
       },
       header: {
         logout: 'Logout',

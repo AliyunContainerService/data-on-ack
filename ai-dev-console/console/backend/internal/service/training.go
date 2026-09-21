@@ -361,6 +361,7 @@ func buildTrainingJobCRD(spec *model.TrainingJobSpec) *unstructured.Unstructured
 
 	// Build env vars
 	var envVars []interface{}
+	envVars = append(envVars, buildRDMAEnvVars(spec)...)
 	for k, v := range spec.Env {
 		envVars = append(envVars, map[string]interface{}{
 			"name":  k,
@@ -535,7 +536,39 @@ func buildTrainingJobCRD(spec *model.TrainingJobSpec) *unstructured.Unstructured
 			},
 		},
 	}
+
+	// Attach ElasticQuota scheduling fields via the Kubeflow runPolicy schema
+	// so API validation accepts them.
+	jobSpec := job.Object["spec"].(map[string]interface{})
+	if spec.Queue != "" || spec.Priority != "" {
+		schedulingPolicy := map[string]interface{}{}
+		if spec.Queue != "" {
+			schedulingPolicy["queue"] = spec.Queue
+		}
+		if spec.Priority != "" {
+			schedulingPolicy["priorityClass"] = spec.Priority
+		}
+		jobSpec["runPolicy"] = map[string]interface{}{
+			"schedulingPolicy": schedulingPolicy,
+		}
+	}
 	return job
+}
+
+// buildRDMAEnvVars returns NCCL tuning variables for RDMA/InfiniBand clusters.
+func buildRDMAEnvVars(spec *model.TrainingJobSpec) []interface{} {
+	if !spec.EnableRDMA {
+		return nil
+	}
+	return []interface{}{
+		map[string]interface{}{"name": "NCCL_DEBUG", "value": "INFO"},
+		map[string]interface{}{"name": "NCCL_IB_DISABLE", "value": "0"},
+		map[string]interface{}{"name": "NCCL_IB_GID_INDEX", "value": "3"},
+		map[string]interface{}{"name": "NCCL_IB_SL", "value": "5"},
+		map[string]interface{}{"name": "NCCL_IB_TC", "value": "136"},
+		map[string]interface{}{"name": "NCCL_IB_HCA", "value": "mlx5"},
+		map[string]interface{}{"name": "NCCL_SOCKET_IFNAME", "value": "eth0"},
+	}
 }
 
 func parseTrainingJob(obj unstructured.Unstructured) model.TrainingJobInfo {
@@ -760,6 +793,7 @@ func getRayJobGPU(obj unstructured.Unstructured) int {
 func buildRayJobCRD(spec *model.TrainingJobSpec) *unstructured.Unstructured {
 	// Build env vars
 	var envVars []interface{}
+	envVars = append(envVars, buildRDMAEnvVars(spec)...)
 	for k, v := range spec.Env {
 		envVars = append(envVars, map[string]interface{}{
 			"name":  k,

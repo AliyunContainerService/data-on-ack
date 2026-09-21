@@ -8,6 +8,7 @@ import {
   DatabaseOutlined, SettingOutlined, SendOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import { createTrainingJob, TrainingJobSpec } from '../api/training';
 import { get } from '../api/client';
 
@@ -61,6 +62,7 @@ interface DatasetInfo {
 
 const FineTune: React.FC = () => {
   const { i18n } = useTranslation();
+  const navigate = useNavigate();
   const isZh = i18n.language === 'zh';
   const [step, setStep] = useState(0);
   const [selectedModel, setSelectedModel] = useState<string>('');
@@ -377,7 +379,7 @@ const FineTune: React.FC = () => {
               {isZh ? '任务已提交到集群，您可以在训练页面查看进度和日志。' : 'The job has been submitted. Check progress and logs on the Training page.'}
             </Paragraph>
             <Space>
-              <Button type="primary" onClick={() => window.location.href = '/training'}>{isZh ? '查看训练任务' : 'View Training Jobs'}</Button>
+              <Button type="primary" onClick={() => navigate('/training')}>{isZh ? '查看训练任务' : 'View Training Jobs'}</Button>
               <Button onClick={() => { setStep(0); setSelectedModel(''); setSelectedDataset(''); form.resetFields(); }}>{isZh ? '创建新任务' : 'Create Another'}</Button>
             </Space>
           </div>

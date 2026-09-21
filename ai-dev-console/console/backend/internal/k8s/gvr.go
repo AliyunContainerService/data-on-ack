@@ -48,3 +48,12 @@ func PodGVR() schema.GroupVersionResource {
 		Resource: "pods",
 	}
 }
+
+// PVCGVR returns the GVR for PersistentVolumeClaims.
+func PVCGVR() schema.GroupVersionResource {
+	return schema.GroupVersionResource{
+		Group:    "",
+		Version:  "v1",
+		Resource: "persistentvolumeclaims",
+	}
+}

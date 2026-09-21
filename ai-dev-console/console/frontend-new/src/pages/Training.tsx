@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   Card, Table, Button, Tag, Space, Modal, Form, Input, InputNumber,
-  Select, message, Popconfirm, Typography, Row, Col, Badge, Segmented,
+  Select, AutoComplete, message, Popconfirm, Typography, Row, Col, Badge, Segmented,
   Switch, Divider, Collapse, Drawer, Spin, Tabs, Tooltip, Alert,
 } from 'antd';
 import {
@@ -104,17 +104,17 @@ const Training: React.FC = () => {
     }
   };
 
-  const fetchLogs = async (namespace: string, jobName: string, podName: string) => {
+  const fetchLogs = React.useCallback(async (namespace: string, jobName: string, podName: string) => {
     setLogLoading(true);
     try {
-      const logs = await getTrainingJobLogs(namespace, jobName, podName, 1000);
+      const logs = await getTrainingJobLogs(namespace, jobName, podName, logTailLines);
       setLogContent(logs || '(no logs available)');
     } catch (err) {
       setLogContent(err instanceof Error ? `Error: ${err.message}` : 'Failed to fetch logs');
     } finally {
       setLogLoading(false);
     }
-  };
+  }, [logTailLines]);
 
   const handlePodChange = (podName: string) => {
     setSelectedPod(podName);
@@ -136,8 +136,7 @@ const Training: React.FC = () => {
         autoRefreshRef.current = null;
       }
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoRefresh, logJob, selectedPod]);
+  }, [autoRefresh, logJob, selectedPod, fetchLogs]);
 
   const fetchMetrics = async (job: TrainingJobInfo, metric: string) => {
     setMetricsLoading(true);
@@ -426,7 +425,19 @@ const Training: React.FC = () => {
       </div>
 
       <Card bordered={false} style={{ borderRadius: 14 }}>
-        <Table columns={columns} dataSource={jobs} rowKey={(r) => `${r.namespace}/${r.name}`} loading={loading} pagination={false} size="middle" />
+        <Table
+          columns={columns}
+          dataSource={jobs}
+          rowKey={(r) => `${r.namespace}/${r.name}`}
+          loading={loading}
+          pagination={{
+            pageSize: 10,
+            showSizeChanger: true,
+            pageSizeOptions: [10, 20, 50],
+            showTotal: (total) => `${total} items`,
+          }}
+          size="middle"
+        />
       </Card>
 
       {/* Log Viewer Drawer */}
@@ -830,9 +841,7 @@ const Training: React.FC = () => {
           <div style={{ background: '#f9f9fb', borderRadius: 12, padding: '16px 20px', marginBottom: 16 }}>
             <Text strong style={{ fontSize: 13, display: 'block', marginBottom: 12 }}>{t('training.form.imageCommand')}</Text>
             <Form.Item name="image" label={t('training.form.image')} rules={[{ required: true }]}>
-              <Select
-                showSearch
-                allowClear
+              <AutoComplete
                 placeholder={t('training.form.image.placeholder')}
                 style={{ width: '100%' }}
                 options={[
@@ -845,15 +854,6 @@ const Training: React.FC = () => {
                   { label: 'TensorFlow 2.15 GPU', value: 'tensorflow/tensorflow:2.15.0-gpu' },
                   { label: 'HuggingFace TRL (LLM fine-tuning)', value: 'huggingface/trl-latest-gpu:latest' },
                 ]}
-                dropdownRender={(menu) => (
-                  <div>
-                    {menu}
-                    <Divider style={{ margin: '4px 0' }} />
-                    <div style={{ padding: '4px 8px', fontSize: 11, color: '#999' }}>
-                      Or type a custom image URL
-                    </div>
-                  </div>
-                )}
                 filterOption={(input, option) => (option?.label as string || '').toLowerCase().includes(input.toLowerCase()) || (option?.value as string || '').includes(input)}
               />
             </Form.Item>
@@ -1048,8 +1048,12 @@ const Training: React.FC = () => {
                     </Form.Item>
                   </Col>
                   <Col span={12}>
-                    <Form.Item name="priority" label={t('training.form.priority')} initialValue="medium">
-                      <Select options={[
+                    <Form.Item
+                      name="priority"
+                      label={t('training.form.priority')}
+                      tooltip="Maps to a Kubernetes PriorityClass with the same name; provision it in the cluster first."
+                    >
+                      <Select allowClear placeholder="(cluster default)" options={[
                         { label: 'High', value: 'high' },
                         { label: 'Medium', value: 'medium' },
                         { label: 'Low', value: 'low' },

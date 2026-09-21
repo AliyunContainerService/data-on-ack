@@ -104,15 +104,15 @@ const Dashboard: React.FC = () => {
                   <div style={{ display: 'flex', gap: 24 }}>
                     <Statistic
                       value={card.data?.total ?? 0}
-                      suffix={<Text type="secondary" style={{ fontSize: 12 }}>total</Text>}
+                      suffix={<Text type="secondary" style={{ fontSize: 12 }}>{t('dashboard.total')}</Text>}
                       valueStyle={{ fontSize: 28, fontWeight: 600 }}
                     />
                   </div>
                   <div style={{ marginTop: 8, display: 'flex', gap: 16 }}>
-                    <Text style={{ color: '#52c41a', fontSize: 12 }}>{card.data?.running ?? 0} running</Text>
-                    <Text style={{ color: '#faad14', fontSize: 12 }}>{card.data?.pending ?? 0} pending</Text>
+                    <Text style={{ color: '#52c41a', fontSize: 12 }}>{card.data?.running ?? 0} {t('dashboard.running')}</Text>
+                    <Text style={{ color: '#faad14', fontSize: 12 }}>{card.data?.pending ?? 0} {t('dashboard.pending')}</Text>
                     {(card.data?.failed ?? 0) > 0 && (
-                      <Text style={{ color: '#ff4d4f', fontSize: 12 }}>{card.data?.failed} failed</Text>
+                      <Text style={{ color: '#ff4d4f', fontSize: 12 }}>{card.data?.failed} {t('dashboard.failed')}</Text>
                     )}
                   </div>
                 </div>
@@ -161,16 +161,31 @@ const Dashboard: React.FC = () => {
       <Row gutter={[20, 20]}>
         <Col xs={24} md={12}>
           <Card bordered={false} style={{ borderRadius: 12, height: '100%' }}>
-            <Title level={5}>{t('dashboard.gpu.title')}</Title>
+            <Title level={5}>{t('dashboard.status.title')}</Title>
             <Paragraph type="secondary" style={{ marginBottom: 16 }}>
-              GPU resource utilization across the cluster
+              {t('dashboard.status.desc')}
             </Paragraph>
             <Row gutter={16}>
-              <Col span={12}>
-                <Statistic title={t('dashboard.gpu.used')} value={0} suffix="GPUs" valueStyle={{ color: '#1677ff' }} />
+              <Col span={8}>
+                <Statistic
+                  title={t('dashboard.running')}
+                  value={(overview?.notebooks?.running ?? 0) + (overview?.trainingJobs?.running ?? 0) + (overview?.servingJobs?.running ?? 0)}
+                  valueStyle={{ color: '#52c41a' }}
+                />
               </Col>
-              <Col span={12}>
-                <Statistic title={t('dashboard.gpu.total')} value={0} suffix="GPUs" />
+              <Col span={8}>
+                <Statistic
+                  title={t('dashboard.pending')}
+                  value={(overview?.notebooks?.pending ?? 0) + (overview?.trainingJobs?.pending ?? 0) + (overview?.servingJobs?.pending ?? 0)}
+                  valueStyle={{ color: '#faad14' }}
+                />
+              </Col>
+              <Col span={8}>
+                <Statistic
+                  title={t('dashboard.failed')}
+                  value={(overview?.notebooks?.failed ?? 0) + (overview?.trainingJobs?.failed ?? 0) + (overview?.servingJobs?.failed ?? 0)}
+                  valueStyle={{ color: '#ff4d4f' }}
+                />
               </Col>
             </Row>
           </Card>

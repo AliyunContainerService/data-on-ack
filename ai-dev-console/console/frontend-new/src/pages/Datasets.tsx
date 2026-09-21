@@ -181,7 +181,19 @@ const Datasets: React.FC = () => {
             </Button>
           </Empty>
         ) : (
-          <Table columns={columns} dataSource={datasets} rowKey={(r) => `${r.namespace}/${r.name}`} loading={loading} pagination={false} size="middle" />
+          <Table
+            columns={columns}
+            dataSource={datasets}
+            rowKey={(r) => `${r.namespace}/${r.name}`}
+            loading={loading}
+            pagination={{
+              pageSize: 10,
+              showSizeChanger: true,
+              pageSizeOptions: [10, 20, 50],
+              showTotal: (total) => `${total} items`,
+            }}
+            size="middle"
+          />
         )}
       </Card>
 

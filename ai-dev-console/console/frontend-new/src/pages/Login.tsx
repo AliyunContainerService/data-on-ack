@@ -1,13 +1,16 @@
 import React, { useState } from 'react';
-import { Button, Typography, Space, Input, Divider, message } from 'antd';
-import { CloudOutlined, CodeOutlined, ThunderboltOutlined, RocketOutlined, ExperimentOutlined, KeyOutlined } from '@ant-design/icons';
+import { Button, Typography, Space, Input, Divider, message, Tooltip } from 'antd';
+import { CloudOutlined, CodeOutlined, ThunderboltOutlined, RocketOutlined, ExperimentOutlined, KeyOutlined, TranslationOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { post } from '../api/client';
+import { useUserStore } from '../store/user';
 
 const { Title, Text, Paragraph } = Typography;
 
 const Login: React.FC = () => {
   const { t } = useTranslation();
+  const locale = useUserStore((s) => s.locale);
+  const setLocale = useUserStore((s) => s.setLocale);
   const [tokenMode, setTokenMode] = useState(false);
   const [token, setToken] = useState('');
   const [tokenLoading, setTokenLoading] = useState(false);
@@ -15,6 +18,8 @@ const Login: React.FC = () => {
   const handleLogin = () => {
     window.location.href = '/api/v1/login/aliyun';
   };
+
+  const toggleLocale = () => setLocale(locale === 'zh' ? 'en' : 'zh');
 
   const handleTokenLogin = async () => {
     if (!token.trim()) {
@@ -40,15 +45,17 @@ const Login: React.FC = () => {
   ];
 
   return (
-    <div style={{ height: '100vh', display: 'flex' }}>
+    <div style={{ minHeight: '100vh', display: 'flex', flexWrap: 'wrap' }}>
       {/* Left panel - branding */}
       <div style={{
-        flex: 1,
+        flex: '1 1 420px',
         background: 'linear-gradient(160deg, #0f172a 0%, #1e293b 50%, #1e1b4b 100%)',
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'center',
-        padding: '60px 80px',
+        padding: '60px 48px',
+        minWidth: 320,
+        boxSizing: 'border-box',
         position: 'relative',
         overflow: 'hidden',
       }}>
@@ -81,7 +88,7 @@ const Login: React.FC = () => {
           </Title>
 
           <Paragraph style={{ color: 'rgba(255,255,255,0.6)', fontSize: 16, marginBottom: 48, maxWidth: 450 }}>
-            Kubernetes-native AI platform with GPU scheduling, elastic quotas, and seamless integration with the cloud-native ecosystem.
+            {t('login.description')}
           </Paragraph>
 
           <Space direction="vertical" size={16}>
@@ -105,6 +112,8 @@ const Login: React.FC = () => {
       {/* Right panel - login form */}
       <div style={{
         width: 480,
+        maxWidth: '100%',
+        flexShrink: 0,
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'center',
@@ -116,9 +125,9 @@ const Login: React.FC = () => {
           <Title level={2} style={{ marginBottom: 8 }}>
             {t('login.title')}
           </Title>
-          <Text type="secondary" style={{ display: 'block', marginBottom: 40 }}>
-            Sign in to access your AI development workspace
-          </Text>
+              <Text type="secondary" style={{ display: 'block', marginBottom: 40 }}>
+                {t('login.subtitleForm')}
+              </Text>
 
           {!tokenMode ? (
             <>
@@ -152,20 +161,20 @@ const Login: React.FC = () => {
                   borderColor: '#e8e8ed',
                 }}
               >
-                Sign in with Token
+                {t('login.token.button')}
               </Button>
             </>
           ) : (
             <>
               <div style={{ marginBottom: 16 }}>
                 <Text strong style={{ display: 'block', marginBottom: 8, fontSize: 13 }}>
-                  Bearer Token / ServiceAccount Token
+                  {t('login.token.label')}
                 </Text>
                 <Input.TextArea
                   rows={5}
                   value={token}
                   onChange={(e) => setToken(e.target.value)}
-                  placeholder="Paste your Kubernetes Bearer Token here..."
+                  placeholder={t('login.token.placeholder')}
                   style={{ fontFamily: 'SF Mono, Monaco, Menlo, monospace', fontSize: 12, borderRadius: 8 }}
                 />
               </div>
@@ -179,7 +188,7 @@ const Login: React.FC = () => {
                   block
                   style={{ height: 48, borderRadius: 10 }}
                 >
-                  Authenticate
+                  {t('login.token.submit')}
                 </Button>
                 <Button
                   size="small"
@@ -187,12 +196,12 @@ const Login: React.FC = () => {
                   onClick={() => { setTokenMode(false); setToken(''); }}
                   style={{ padding: 0 }}
                 >
-                  Back to other login methods
+                  {t('login.token.back')}
                 </Button>
               </Space>
               <div style={{ marginTop: 16, padding: '12px 16px', background: '#f5f5f7', borderRadius: 8 }}>
                 <Text type="secondary" style={{ fontSize: 11, lineHeight: 1.5 }}>
-                  You can obtain a token from your cluster admin or by running:<br />
+                  {t('login.token.hint')}<br />
                   <code style={{ fontSize: 10 }}>kubectl get secret &lt;sa-name&gt;-token -o jsonpath=&#123;.data.token&#125; | base64 -d</code>
                 </Text>
               </div>
@@ -201,9 +210,17 @@ const Login: React.FC = () => {
 
           <div style={{ marginTop: 32, textAlign: 'center' }}>
             <Text type="secondary" style={{ fontSize: 12 }}>
-              Powered by Alibaba Cloud ACK
+              {t('login.footer')}
             </Text>
           </div>
+          <Tooltip title={locale === 'zh' ? 'English' : '中文'}>
+            <Button
+              type="text"
+              icon={<TranslationOutlined />}
+              onClick={toggleLocale}
+              style={{ marginTop: 24 }}
+            />
+          </Tooltip>
         </div>
       </div>
     </div>
