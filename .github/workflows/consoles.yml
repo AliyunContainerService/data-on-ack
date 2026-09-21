@@ -70,6 +70,13 @@ jobs:
           node-version: 20
       - name: npm ci
         run: npm ci --legacy-peer-deps || npm install --legacy-peer-deps
+      - name: verify install
+        # Guard against npm crashing with "Exit handler never called" but
+        # exiting 0, which previously left node_modules without dev binaries.
+        run: |
+          test -x node_modules/.bin/eslint
+          test -x node_modules/.bin/cross-env
+          test -x node_modules/.bin/umi
       - name: build
         run: npm run build
 
