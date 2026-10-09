@@ -3,6 +3,7 @@ import { Card, Tag, Space, Button, Typography, Input, Collapse, Table, Badge, Po
 import { ReloadOutlined, SearchOutlined, CloudServerOutlined, DeleteOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { get, post, getErrorMessage } from '@/api/client'
+import PageHeader from '@/components/PageHeader'
 
 const { Text } = Typography
 
@@ -98,20 +99,23 @@ export default function Images() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-        <Typography.Title level={5} style={{ margin: 0 }}>{t('menu.images')}</Typography.Title>
-        <Space>
-          <Input
-            prefix={<SearchOutlined />}
-            placeholder="Filter images..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            allowClear
-            style={{ width: 260 }}
-          />
-          <Button icon={<ReloadOutlined />} onClick={fetchData} loading={loading}>{t('common.refresh')}</Button>
-        </Space>
-      </div>
+      <PageHeader
+        title={t('menu.images')}
+        description={t('image.headerDesc')}
+        extra={
+          <>
+            <Input
+              prefix={<SearchOutlined />}
+              placeholder={t('image.filterPlaceholder')}
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              allowClear
+              style={{ width: 260 }}
+            />
+            <Button icon={<ReloadOutlined />} onClick={fetchData} loading={loading}>{t('common.refresh')}</Button>
+          </>
+        }
+      />
 
       <Collapse
         defaultActiveKey={data.map(n => n.node)}

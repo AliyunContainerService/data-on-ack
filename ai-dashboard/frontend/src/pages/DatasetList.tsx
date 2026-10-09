@@ -4,6 +4,7 @@ import { DeleteOutlined, ReloadOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { fetchDatasets, deleteDataset } from '@/api/dataset'
 import { getErrorMessage } from '@/api/client'
+import PageHeader from '@/components/PageHeader'
 
 export default function DatasetList() {
   const { t } = useTranslation()
@@ -58,18 +59,23 @@ export default function DatasetList() {
   ]
 
   return (
-    <Card size="small" title={t('dataset.title')} extra={
-      <Button icon={<ReloadOutlined />} onClick={load} loading={loading}>{t('common.refresh')}</Button>
-    }>
-      <Table
-        dataSource={datasets}
-        columns={columns}
-        rowKey={(r: any) => `${r.namespace}/${r.name}`}
-        loading={loading}
-        size="small"
-        pagination={{ pageSize: 20, showSizeChanger: true }}
-        locale={{ emptyText: <Empty description={t('common.noData')} /> }}
+    <div>
+      <PageHeader
+        title={t('dataset.title')}
+        description={t('dataset.headerDesc')}
+        extra={<Button icon={<ReloadOutlined />} onClick={load} loading={loading}>{t('common.refresh')}</Button>}
       />
-    </Card>
+      <Card bordered={false} style={{ borderRadius: 16 }} styles={{ body: { paddingTop: 8 } }}>
+        <Table
+          dataSource={datasets}
+          columns={columns}
+          rowKey={(r: any) => `${r.namespace}/${r.name}`}
+          loading={loading}
+          size="middle"
+          pagination={{ pageSize: 20, showSizeChanger: true }}
+          locale={{ emptyText: <Empty description={t('common.noData')} /> }}
+        />
+      </Card>
+    </div>
   )
 }

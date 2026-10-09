@@ -1,13 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Card, Button, Tag, Space, Typography, Table, Empty, Modal, Form, Input, Select,
+  Card, Button, Tag, Space, Typography, Table, Modal, Form, Input, Select,
   message, Popconfirm, Badge,
 } from 'antd';
 import { PlusOutlined, DatabaseOutlined, ReloadOutlined, DeleteOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
+import PageHeader from '../components/PageHeader';
+import EmptyState from '../components/EmptyState';
 import { get, post, del } from '../api/client';
 
-const { Title, Text } = Typography;
+const { Text } = Typography;
 
 interface DatasetInfo {
   name: string;
@@ -149,37 +151,31 @@ const Datasets: React.FC = () => {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
-        <div>
-          <Title level={4} style={{ marginBottom: 4 }}>{t('datasets.title')}</Title>
-          <Text type="secondary">{t('datasets.desc')}</Text>
-        </div>
-        <Space>
-          <Button icon={<ReloadOutlined />} onClick={fetchData} />
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalOpen(true)}>
-            {t('datasets.create')}
-          </Button>
-        </Space>
-      </div>
-
-      <Card bordered={false} style={{ borderRadius: 12 }}>
-        {datasets.length === 0 && !loading ? (
-          <Empty
-            image={<DatabaseOutlined style={{ fontSize: 48, color: '#d1d5db' }} />}
-            imageStyle={{ height: 64 }}
-            description={
-              <Space direction="vertical" size={4}>
-                <Text type="secondary">No datasets found</Text>
-                <Text type="secondary" style={{ fontSize: 12 }}>
-                  PVCs in your namespaces will appear here. Create a PVC to mount data in training or notebooks.
-                </Text>
-              </Space>
-            }
-          >
+      <PageHeader
+        title={t('datasets.title')}
+        description={t('datasets.desc')}
+        extra={
+          <>
+            <Button icon={<ReloadOutlined />} onClick={fetchData} />
             <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalOpen(true)}>
-              Create PVC
+              {t('datasets.create')}
             </Button>
-          </Empty>
+          </>
+        }
+      />
+
+      <Card bordered={false} style={{ borderRadius: 16 }}>
+        {datasets.length === 0 && !loading ? (
+          <EmptyState
+            icon={<DatabaseOutlined />}
+            title={t('datasets.empty.title')}
+            description={t('datasets.empty.desc')}
+            action={
+              <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalOpen(true)}>
+                {t('datasets.create')}
+              </Button>
+            }
+          />
         ) : (
           <Table
             columns={columns}

@@ -4,6 +4,7 @@ import { PlusOutlined, EditOutlined, DeleteOutlined, ReloadOutlined, ApartmentOu
 import { useTranslation } from 'react-i18next'
 import { fetchQuotaTrees, updateQuotaTree, type QuotaTree, type QuotaNode } from '@/api/quota'
 import { get, getErrorMessage } from '@/api/client'
+import PageHeader from '@/components/PageHeader'
 import type { DataNode } from 'antd/es/tree'
 
 const { Text, Title } = Typography
@@ -265,6 +266,17 @@ export default function QuotaTreePage() {
 
   return (
     <div>
+      <PageHeader
+        title={t('quota.title')}
+        description={t('quota.headerDesc')}
+        extra={
+          <Segmented
+            options={[t('quota.formatted'), t('quota.rawYaml')]}
+            value={viewMode}
+            onChange={(v) => setViewMode(v as string)}
+          />
+        }
+      />
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <Space>
           <Select
@@ -281,15 +293,10 @@ export default function QuotaTreePage() {
           />
           <Button icon={<ReloadOutlined />} onClick={loadTrees} loading={loading}>{t('common.refresh')}</Button>
         </Space>
-        <Segmented
-          options={[t('quota.formatted'), t('quota.rawYaml')]}
-          value={viewMode}
-          onChange={(v) => setViewMode(v as string)}
-        />
       </div>
 
       {viewMode === t('quota.rawYaml') ? (
-        <Card bordered={false} style={{ borderRadius: 10 }}>
+        <Card bordered={false} style={{ borderRadius: 16 }}>
           {renderRawView()}
         </Card>
       ) : (
@@ -297,7 +304,7 @@ export default function QuotaTreePage() {
           <Col span={10}>
             <Card
               bordered={false}
-              style={{ borderRadius: 10, minHeight: 400 }}
+              style={{ borderRadius: 16, minHeight: 400 }}
               title={
                 <Space>
                   <ApartmentOutlined />
@@ -332,7 +339,7 @@ export default function QuotaTreePage() {
             </Card>
           </Col>
           <Col span={14}>
-            <Card bordered={false} style={{ borderRadius: 10, minHeight: 400 }} title={t('quota.nodeDetail')}>
+            <Card bordered={false} style={{ borderRadius: 16, minHeight: 400 }} title={t('quota.nodeDetail')}>
               {renderNodeDetail()}
             </Card>
           </Col>

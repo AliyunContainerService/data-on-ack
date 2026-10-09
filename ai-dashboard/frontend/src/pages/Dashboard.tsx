@@ -1,10 +1,21 @@
 import { useState, useEffect } from 'react'
-import { Tabs, Card, Row, Col, Progress, Typography, Tag, Table, Spin, Space, Badge } from 'antd'
-import { CloudServerOutlined, HddOutlined, ThunderboltOutlined, WarningOutlined } from '@ant-design/icons'
+import { Tabs, Card, Row, Col, Typography, Table, Badge } from 'antd'
+import {
+  CloudServerOutlined,
+  HddOutlined,
+  ThunderboltOutlined,
+  WarningOutlined,
+  FundViewOutlined,
+  InboxOutlined,
+} from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { get } from '@/api/client'
+import PageHeader from '@/components/PageHeader'
+import StatRing from '@/components/StatRing'
+import CountUp from '@/components/CountUp'
+import EmptyState from '@/components/EmptyState'
 
-const { Text, Title } = Typography
+const { Text } = Typography
 
 interface ClusterSummary {
   cpu: { capacity: number; allocated: number }
@@ -24,11 +35,14 @@ interface EventInfo {
   lastTimestamp: string
 }
 
+const pct = (used: number, total: number) => (total > 0 ? Math.round((used / total) * 100) : 0)
+
 export default function Dashboard() {
   const { t } = useTranslation()
   const [summary, setSummary] = useState<ClusterSummary | null>(null)
   const [events, setEvents] = useState<EventInfo[]>([])
   const [loadingSummary, setLoadingSummary] = useState(true)
+  const [loadingEvents, setLoadingEvents] = useState(true)
 
   useEffect(() => {
     get<ClusterSummary>('/ops/cluster-summary')
@@ -39,57 +53,169 @@ export default function Dashboard() {
     get<EventInfo[]>('/ops/events')
       .then((data: any) => setEvents((data || []).slice(0, 20)))
       .catch(() => {})
+      .finally(() => setLoadingEvents(false))
   }, [])
 
-  const iframeStyle = { width: '100%', height: 'calc(100vh - 280px)', border: 'none', borderRadius: 8 }
+  const iframeStyle = { width: '100%', height: 'calc(100vh - 300px)', border: 'none', borderRadius: 12 }
   const buildUrl = (dashboardId: string) => `/grafana/d/${dashboardId}?orgId=1&refresh=10s&kiosk`
 
-  const pct = (used: number, total: number) => total > 0 ? Math.round((used / total) * 100) : 0
-
-  const resources = summary ? [
-    { label: t('dashboard.cpuUsage'), icon: <HddOutlined />, used: summary.cpu?.allocated ?? 0, total: summary.cpu?.capacity ?? 0, color: '#1677ff', unit: 'cores' },
-    { label: t('dashboard.memUsage'), icon: <CloudServerOutlined />, used: summary.memory?.allocated ?? 0, total: summary.memory?.capacity ?? 0, color: '#722ed1', unit: 'GiB' },
-    { label: t('dashboard.gpuUsage'), icon: <ThunderboltOutlined />, used: summary.gpu?.allocated ?? 0, total: summary.gpu?.capacity ?? 0, color: '#fa541c', unit: '' },
-  ] : []
+  const resources = summary
+    ? [
+        {
+          label: t('dashboard.cpuUsage'),
+          icon: <HddOutlined />,
+          used: summary.cpu?.allocated ?? 0,
+          total: summary.cpu?.capacity ?? 0,
+          color: '#0071e3',
+          unit: t('dashboard.unitCores'),
+        },
+        {
+          label: t('dashboard.memUsage'),
+          icon: <CloudServerOutlined />,
+          used: summary.memory?.allocated ?? 0,
+          total: summary.memory?.capacity ?? 0,
+          color: '#5856d6',
+          unit: 'GiB',
+        },
+        {
+          label: t('dashboard.gpuUsage'),
+          icon: <ThunderboltOutlined />,
+          used: summary.gpu?.allocated ?? 0,
+          total: summary.gpu?.capacity ?? 0,
+          color: '#e8590c',
+          unit: t('dashboard.unitCards'),
+        },
+      ]
+    : []
 
   const eventColumns = [
-    { title: t('event.time'), dataIndex: 'lastTimestamp', key: 'time', width: 160, render: (ts: string) => ts ? new Date(ts).toLocaleString() : '-' },
-    { title: t('event.reason'), dataIndex: 'reason', key: 'reason', width: 140, render: (r: string) => <Tag color="warning">{r || '-'}</Tag> },
+    {
+      title: t('event.time'),
+      dataIndex: 'lastTimestamp',
+      key: 'time',
+      width: 170,
+      render: (ts: string) => (
+        <Text type="secondary" className="tnum" style={{ fontSize: 12 }}>
+          {ts ? new Date(ts).toLocaleString() : '-'}
+        </Text>
+      ),
+    },
+    {
+      title: t('event.reason'),
+      dataIndex: 'reason',
+      key: 'reason',
+      width: 150,
+      render: (r: string) => <span className="status-pill warn">{r || '-'}</span>,
+    },
     { title: t('event.message'), dataIndex: 'message', key: 'message', ellipsis: true },
-    { title: 'Object', key: 'object', width: 160, render: (_: unknown, r: EventInfo) => <Text type="secondary" style={{ fontSize: 11 }}>{r?.kind || ''}/{r?.name || ''}</Text> },
+    {
+      title: t('event.object'),
+      key: 'object',
+      width: 180,
+      render: (_: unknown, r: EventInfo) => (
+        <Text type="secondary" style={{ fontSize: 11, fontFamily: 'SF Mono, Menlo, monospace' }}>
+          {r?.kind || ''}/{r?.name || ''}
+        </Text>
+      ),
+    },
   ]
+
+  const nodeVitals = summary
+    ? [
+        { label: t('dashboard.nodesTotal'), value: summary.nodes.total, cls: 'info' },
+        { label: t('dashboard.nodesReady'), value: summary.nodes.ready, cls: 'ok' },
+        { label: t('dashboard.nodesNotReady'), value: summary.nodes.notReady, cls: summary.nodes.notReady > 0 ? 'err' : 'idle' },
+        { label: t('dashboard.gpuNodes'), value: summary.nodes.gpu, cls: 'info' },
+      ]
+    : []
 
   const overviewTab = (
     <div>
-      {/* Resource Summary */}
+      {/* Cluster vitals */}
       {loadingSummary ? (
-        <div style={{ textAlign: 'center', padding: 32 }}><Spin /></div>
+        <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+          {[0, 1, 2].map((i) => (
+            <Col xs={24} md={8} key={i}>
+              <div className="skeleton-block" style={{ height: 168, borderRadius: 16 }} />
+            </Col>
+          ))}
+        </Row>
       ) : (
         <>
-          {/* Node summary badges */}
-          <Space style={{ marginBottom: 16 }}>
-            <Tag color="blue">{summary?.nodes.total} {t('dashboard.nodes')}</Tag>
-            <Tag color="green">{summary?.nodes.ready} Ready</Tag>
-            {(summary?.nodes.notReady || 0) > 0 && <Tag color="red">{summary?.nodes.notReady} NotReady</Tag>}
-            <Tag color="volcano">{summary?.nodes.gpu} GPU Nodes</Tag>
-          </Space>
+          <div
+            className="anim-fade-up"
+            style={{
+              display: 'flex',
+              gap: 10,
+              flexWrap: 'wrap',
+              marginBottom: 16,
+              padding: '14px 18px',
+              background: 'var(--bg-surface)',
+              border: '1px solid var(--border-2)',
+              borderRadius: 14,
+              boxShadow: 'var(--shadow-xs)',
+            }}
+          >
+            {nodeVitals.map((v) => (
+              <span key={v.label} className={`status-pill ${v.cls}`}>
+                <span className="dot" />
+                {v.label}
+                <strong className="tnum" style={{ marginLeft: 2 }}>
+                  <CountUp value={v.value} />
+                </strong>
+              </span>
+            ))}
+          </div>
 
-          <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
-            {resources.map((r) => (
-              <Col xs={24} md={8} key={r.label}>
-                <Card size="small" bordered={false} style={{ borderRadius: 8, background: '#fafafa' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-                    <div style={{ color: r.color, fontSize: 18 }}>{r.icon}</div>
-                    <Text strong style={{ fontSize: 13 }}>{r.label}</Text>
-                  </div>
-                  <Progress
-                    percent={pct(r.used, r.total)}
-                    strokeColor={r.color}
-                    size="small"
-                  />
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
-                    <Text type="secondary" style={{ fontSize: 11 }}>{t('dashboard.allocated')}: {r.used} {r.unit}</Text>
-                    <Text type="secondary" style={{ fontSize: 11 }}>{t('dashboard.total')}: {r.total} {r.unit}</Text>
+          <Row gutter={[16, 16]} style={{ marginBottom: 16 }} className="stagger">
+            {resources.map((r, i) => (
+              <Col xs={24} md={8} key={r.label} style={{ ['--i' as string]: i }}>
+                <Card bordered={false} className="hover-lift" style={{ borderRadius: 16 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap' }}>
+                    <StatRing percent={pct(r.used, r.total)} color={r.color} size={108}>
+                      <span className="tnum" style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-1)', lineHeight: 1 }}>
+                        {pct(r.used, r.total)}
+                        <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-3)' }}>%</span>
+                      </span>
+                    </StatRing>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                        <span
+                          style={{
+                            width: 28,
+                            height: 28,
+                            borderRadius: 8,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: r.color,
+                            background: `${r.color}14`,
+                            fontSize: 14,
+                          }}
+                        >
+                          {r.icon}
+                        </span>
+                        <Text strong style={{ fontSize: 13 }}>
+                          {r.label}
+                        </Text>
+                      </div>
+                      <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.9 }}>
+                        <div>
+                          {t('dashboard.allocated')}
+                          <strong className="tnum" style={{ color: 'var(--text-1)', marginLeft: 6 }}>
+                            <CountUp value={r.used} />
+                          </strong>
+                          <span style={{ color: 'var(--text-3)', marginLeft: 4 }}>{r.unit}</span>
+                        </div>
+                        <div>
+                          {t('dashboard.total')}
+                          <span className="tnum" style={{ color: 'var(--text-1)', marginLeft: 6 }}>
+                            <CountUp value={r.total} />
+                          </span>
+                          <span style={{ color: 'var(--text-3)', marginLeft: 4 }}>{r.unit}</span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </Card>
               </Col>
@@ -99,36 +225,65 @@ export default function Dashboard() {
       )}
 
       {/* Grafana Cluster Dashboard */}
-      <Card size="small" bordered={false} style={{ borderRadius: 8 }}>
-        <iframe src={buildUrl('kube-ai-cluster-details')} style={iframeStyle} />
+      <Card
+        bordered={false}
+        style={{ borderRadius: 16, overflow: 'hidden' }}
+        styles={{ body: { padding: 12 } }}
+        title={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <FundViewOutlined style={{ color: 'var(--accent)' }} />
+            <span style={{ fontWeight: 600 }}>{t('dashboard.clusterMonitor')}</span>
+            <span className="status-pill ok live">
+              <span className="dot" />
+              Live
+            </span>
+          </div>
+        }
+      >
+        <iframe src={buildUrl('kube-ai-cluster-details')} style={iframeStyle} title="cluster-monitoring" />
       </Card>
     </div>
   )
 
   const eventsTab = (
-    <Card bordered={false} style={{ borderRadius: 10 }}>
-      <div style={{ marginBottom: 12 }}>
-        <Space>
-          <WarningOutlined style={{ color: '#faad14' }} />
-          <Title level={5} style={{ margin: 0 }}>{t('event.warnings')}</Title>
-          <Badge count={events.length} style={{ background: '#faad14' }} />
-        </Space>
+    <Card bordered={false} style={{ borderRadius: 16 }}>
+      <div style={{ marginBottom: 14, display: 'flex', alignItems: 'center', gap: 10 }}>
+        <WarningOutlined style={{ color: 'var(--warn)' }} />
+        <span style={{ fontWeight: 600, fontSize: 15 }}>{t('event.warnings')}</span>
+        <Badge count={events.length} style={{ background: 'var(--warn)' }} />
       </div>
       <Table
         columns={eventColumns}
         dataSource={events}
         rowKey={(r, i) => `${r.namespace}/${r.name}/${i}`}
         pagination={{ pageSize: 15 }}
-        size="small"
+        size="middle"
+        loading={loadingEvents}
+        locale={{
+          emptyText: <EmptyState icon={<InboxOutlined />} title={t('dashboard.noEvents')} description={t('dashboard.noEventsDesc')} />,
+        }}
       />
     </Card>
   )
 
   const tabs = [
-    { key: 'overview', label: t('dashboard.cluster'), children: overviewTab },
-    { key: 'nodes', label: t('dashboard.nodes'), children: <Card bordered={false} style={{ borderRadius: 8 }}><iframe src={buildUrl('kube-ai-node-details')} style={iframeStyle} /></Card> },
-    { key: 'events', label: <Space><WarningOutlined />{t('dashboard.events')}</Space>, children: eventsTab },
+    { key: 'overview', label: t('dashboard.tabOverview'), children: overviewTab },
+    {
+      key: 'nodes',
+      label: t('dashboard.nodes'),
+      children: (
+        <Card bordered={false} style={{ borderRadius: 16, overflow: 'hidden' }} styles={{ body: { padding: 12 } }}>
+          <iframe src={buildUrl('kube-ai-node-details')} style={iframeStyle} title="node-monitoring" />
+        </Card>
+      ),
+    },
+    { key: 'events', label: t('dashboard.events'), children: eventsTab },
   ]
 
-  return <Tabs defaultActiveKey="overview" items={tabs} />
+  return (
+    <div>
+      <PageHeader title={t('dashboard.cluster')} description={t('dashboard.heroDesc')} />
+      <Tabs defaultActiveKey="overview" items={tabs} />
+    </div>
+  )
 }

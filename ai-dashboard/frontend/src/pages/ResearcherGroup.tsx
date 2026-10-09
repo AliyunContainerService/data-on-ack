@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { fetchUserGroups, createUserGroup, deleteUserGroup, type UserGroup } from '@/api/userGroup'
 import { fetchQuotaTrees } from '@/api/quota'
 import { get, getErrorMessage } from '@/api/client'
+import PageHeader from '@/components/PageHeader'
 
 export default function ResearcherGroup() {
   const { t } = useTranslation()
@@ -109,25 +110,30 @@ export default function ResearcherGroup() {
   ]
 
   return (
-    <Card
-      size="small"
-      title={<Space><TeamOutlined />{t('group.title')}</Space>}
-      extra={
-        <Space>
-          <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>{t('group.create')}</Button>
-          <Button icon={<ReloadOutlined />} onClick={load} loading={loading} />
-        </Space>
-      }
-      style={{ borderRadius: 14, border: 'none', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}
-    >
-      <Table
-        dataSource={groups}
-        columns={columns}
-        rowKey={(r) => r.metadata.name}
-        loading={loading}
-        size="small"
-        pagination={{ pageSize: 20, showSizeChanger: true }}
+    <div>
+      <PageHeader
+        title={t('group.title')}
+        description={t('group.headerDesc')}
+        extra={
+          <>
+            <Button icon={<ReloadOutlined />} onClick={load} loading={loading} />
+            <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>{t('group.create')}</Button>
+          </>
+        }
       />
+      <Card
+        bordered={false}
+        style={{ borderRadius: 16 }}
+        styles={{ body: { paddingTop: 8 } }}
+      >
+        <Table
+          dataSource={groups}
+          columns={columns}
+          rowKey={(r) => r.metadata.name}
+          loading={loading}
+          size="middle"
+          pagination={{ pageSize: 20, showSizeChanger: true }}
+        />
       <Modal
         title={editGroup ? t('group.edit') : t('group.create')}
         open={modalOpen}
@@ -153,5 +159,6 @@ export default function ResearcherGroup() {
         </Form>
       </Modal>
     </Card>
+    </div>
   )
 }

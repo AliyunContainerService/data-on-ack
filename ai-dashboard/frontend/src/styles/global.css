@@ -1,20 +1,20 @@
 /* ============================================================
-   AI Dev Console - Design System
-   "Launchpad": energetic, focused developer workbench
+   AI Dashboard - Design System
+   "Observatory": calm, precise, Apple-grade enterprise console
    ============================================================ */
 
 :root {
-  /* Accent: indigo -> violet */
-  --accent: #6366f1;
-  --accent-hover: #6f73f3;
-  --accent-2: #a855f7;
-  --accent-soft: rgba(99, 102, 241, 0.09);
-  --accent-softer: rgba(99, 102, 241, 0.05);
-  --accent-gradient: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
-  --accent-gradient-soft: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(168, 85, 247, 0.1) 100%);
+  /* Accent */
+  --accent: #0071e3;
+  --accent-hover: #0077ed;
+  --accent-2: #5856d6;
+  --accent-soft: rgba(0, 113, 227, 0.08);
+  --accent-softer: rgba(0, 113, 227, 0.05);
+  --accent-gradient: linear-gradient(135deg, #0071e3 0%, #5856d6 100%);
+  --accent-gradient-soft: linear-gradient(135deg, rgba(0, 113, 227, 0.1) 0%, rgba(88, 86, 214, 0.1) 100%);
 
   /* Surfaces */
-  --bg-canvas: #f6f7fb;
+  --bg-canvas: #f5f5f7;
   --bg-surface: #ffffff;
   --bg-sunken: #fafafc;
   --bg-sidebar: #fbfbfd;
@@ -35,14 +35,14 @@
   --warn-soft: rgba(255, 159, 10, 0.12);
   --err: #d70015;
   --err-soft: rgba(255, 59, 48, 0.1);
-  --info-soft: rgba(99, 102, 241, 0.1);
+  --info-soft: rgba(0, 113, 227, 0.1);
 
   /* Elevation */
   --shadow-xs: 0 1px 2px rgba(29, 29, 31, 0.04);
   --shadow-sm: 0 1px 2px rgba(29, 29, 31, 0.04), 0 2px 6px rgba(29, 29, 31, 0.05);
   --shadow-md: 0 4px 14px -2px rgba(29, 29, 31, 0.08), 0 2px 4px -2px rgba(29, 29, 31, 0.04);
   --shadow-lg: 0 18px 40px -14px rgba(29, 29, 31, 0.16), 0 4px 10px -4px rgba(29, 29, 31, 0.06);
-  --shadow-accent: 0 8px 22px -6px rgba(99, 102, 241, 0.4);
+  --shadow-accent: 0 8px 22px -6px rgba(0, 113, 227, 0.38);
 
   /* Motion */
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
@@ -75,10 +75,11 @@ body {
 }
 
 ::selection {
-  background: rgba(99, 102, 241, 0.18);
+  background: rgba(0, 113, 227, 0.18);
   color: var(--text-1);
 }
 
+/* Refined scrollbars */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -98,12 +99,14 @@ body {
   background-clip: padding-box;
 }
 
+/* Keyboard focus */
 :focus-visible {
-  outline: 2px solid rgba(99, 102, 241, 0.55);
+  outline: 2px solid rgba(0, 113, 227, 0.55);
   outline-offset: 2px;
   border-radius: 6px;
 }
 
+/* Numeric data uses tabular figures */
 .tnum,
 .ant-statistic-content,
 .stat-value {
@@ -210,10 +213,12 @@ body {
   }
 }
 
+/* Route-level page transition (keyed by pathname in MainLayout) */
 .page-transition {
   animation: page-in 0.38s var(--ease-out) both;
 }
 
+/* Staggered entrance: wrap children and set --i per child */
 .stagger > * {
   animation: fade-up 0.55s var(--ease-out) both;
   animation-delay: calc(var(--i, 0) * 70ms);
@@ -231,6 +236,7 @@ body {
   animation-delay: calc(var(--i, 0) * 60ms);
 }
 
+/* Interactive surfaces */
 .hover-lift {
   transition: transform var(--dur-2) var(--ease-out), box-shadow var(--dur-2) var(--ease-out),
     border-color var(--dur-2) var(--ease-out);
@@ -248,12 +254,14 @@ body {
   transform: scale(0.97);
 }
 
+/* Glass surface (headers, overlays) */
 .glass {
   background: rgba(255, 255, 255, 0.72);
   backdrop-filter: saturate(1.8) blur(20px);
   -webkit-backdrop-filter: saturate(1.8) blur(20px);
 }
 
+/* Gradient headline text */
 .text-gradient {
   background: var(--accent-gradient);
   -webkit-background-clip: text;
@@ -264,6 +272,7 @@ body {
 
 /* ---------------- antd cohesion layer ---------------- */
 
+/* Cards: quieter border, elevation on demand */
 .ant-card {
   border-color: var(--border-2);
   box-shadow: var(--shadow-xs);
@@ -274,6 +283,7 @@ body {
   border-bottom-color: var(--border-2);
 }
 
+/* Primary buttons: brand gradient + lift */
 .ant-btn-primary:not(.ant-btn-dangerous):not(.ant-btn-background-ghost):not(:disabled) {
   background: var(--accent-gradient);
   border: none;
@@ -283,7 +293,7 @@ body {
 }
 .ant-btn-primary:not(.ant-btn-dangerous):not(.ant-btn-background-ghost):not(:disabled):hover {
   filter: brightness(1.07);
-  box-shadow: 0 10px 26px -6px rgba(99, 102, 241, 0.52);
+  box-shadow: 0 10px 26px -6px rgba(0, 113, 227, 0.5);
   transform: translateY(-1px);
 }
 .ant-btn-primary:not(.ant-btn-dangerous):not(.ant-btn-background-ghost):not(:disabled):active {
@@ -291,6 +301,7 @@ body {
   filter: brightness(0.97);
 }
 
+/* Default buttons: softer hover */
 .ant-btn-default:not(:disabled) {
   transition: all var(--dur-1) var(--ease-out);
 }
@@ -300,6 +311,7 @@ body {
   background: var(--accent-softer);
 }
 
+/* Tables */
 .ant-table-thead > tr > th {
   font-weight: 600;
   font-size: 12px;
@@ -311,12 +323,13 @@ body {
   border-bottom-color: var(--border-2);
 }
 .ant-table-tbody > tr:hover > td {
-  background: rgba(99, 102, 241, 0.035) !important;
+  background: rgba(0, 113, 227, 0.035) !important;
 }
 .ant-table-tbody > tr:last-child > td {
   border-bottom: none;
 }
 
+/* Menu */
 .ant-menu-light .ant-menu-item {
   transition: background var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out);
 }
@@ -330,12 +343,14 @@ body {
   font-weight: 600;
 }
 
+/* Tags */
 .ant-tag {
   font-weight: 500;
   border: none;
   padding-inline: 8px;
 }
 
+/* Tabs */
 .ant-tabs-top > .ant-tabs-nav::before {
   border-bottom: none;
 }
@@ -343,25 +358,30 @@ body {
   transition: color var(--dur-1) var(--ease-out);
 }
 
+/* Modals & drawers */
 .ant-modal-content,
 .ant-drawer-content {
   box-shadow: var(--shadow-lg);
 }
 
+/* Progress */
 .ant-progress .ant-progress-bg {
   transition: width 0.6s var(--ease-out);
 }
 
+/* Tooltip */
 .ant-tooltip .ant-tooltip-inner {
   font-size: 12px;
   border-radius: 8px;
 }
 
+/* Statistic */
 .ant-statistic .ant-statistic-title {
   font-size: 12px;
   letter-spacing: 0.02em;
 }
 
+/* Pagination */
 .ant-pagination .ant-pagination-item-active {
   border-color: var(--accent);
 }
@@ -369,6 +389,7 @@ body {
   color: var(--accent);
 }
 
+/* Empty */
 .ant-empty .ant-empty-description {
   color: var(--text-3);
 }
@@ -505,7 +526,7 @@ body {
 .login-scene {
   position: relative;
   overflow: hidden;
-  background: #0a0a12;
+  background: #08080d;
   /* Brand components adapt to the dark scene */
   --text-1: #ffffff;
   --text-3: rgba(255, 255, 255, 0.45);
@@ -523,7 +544,7 @@ body {
   height: 560px;
   top: -12%;
   left: -8%;
-  background: radial-gradient(circle at 30% 30%, rgba(99, 102, 241, 0.55), transparent 65%);
+  background: radial-gradient(circle at 30% 30%, rgba(0, 113, 227, 0.55), transparent 65%);
   animation: aurora-a 18s ease-in-out infinite;
 }
 .login-scene .aurora-b {
@@ -531,7 +552,7 @@ body {
   height: 480px;
   bottom: -14%;
   right: -6%;
-  background: radial-gradient(circle at 60% 60%, rgba(168, 85, 247, 0.5), transparent 65%);
+  background: radial-gradient(circle at 60% 60%, rgba(88, 86, 214, 0.5), transparent 65%);
   animation: aurora-b 22s ease-in-out infinite;
 }
 .login-scene .aurora-c {
@@ -539,7 +560,7 @@ body {
   height: 360px;
   top: 34%;
   left: 46%;
-  background: radial-gradient(circle at 50% 50%, rgba(129, 140, 248, 0.3), transparent 65%);
+  background: radial-gradient(circle at 50% 50%, rgba(64, 156, 255, 0.28), transparent 65%);
   animation: aurora-a 26s ease-in-out infinite reverse;
 }
 .login-scene .grid-overlay {

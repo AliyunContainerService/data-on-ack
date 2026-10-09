@@ -3,6 +3,7 @@ import { Table, Tag, Card, Space, Button, Badge, Tooltip, Typography, Modal, Inp
 import { ReloadOutlined, CheckCircleOutlined, CloseCircleOutlined, WarningOutlined, CodeOutlined, ThunderboltOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { get, post, getErrorMessage } from '@/api/client'
+import PageHeader from '@/components/PageHeader'
 
 const { Text, Paragraph } = Typography
 
@@ -97,10 +98,11 @@ export default function Nodes() {
       title: t('node.hostname'),
       dataIndex: 'name',
       key: 'name',
+      width: 210,
       render: (name: string, record: NodeInfo) => (
         <Space direction="vertical" size={0}>
           <Text strong style={{ fontSize: 13 }}>{name}</Text>
-          <Text type="secondary" style={{ fontSize: 11 }}>{record.ip}</Text>
+          <Text type="secondary" style={{ fontSize: 11 }} className="tnum">{record.ip}</Text>
         </Space>
       ),
     },
@@ -198,16 +200,19 @@ export default function Nodes() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-        <Typography.Title level={5} style={{ margin: 0 }}>{t('node.title')}</Typography.Title>
-        <Space>
-          <Button icon={<ThunderboltOutlined />} onClick={() => { setBatchNodes(nodes.map(n => n.name)); setBatchOpen(true) }}>
-            Batch Exec
-          </Button>
-          <Button icon={<ReloadOutlined />} onClick={fetchNodes} loading={loading}>{t('common.refresh')}</Button>
-        </Space>
-      </div>
-      <Card bordered={false} style={{ borderRadius: 10 }}>
+      <PageHeader
+        title={t('node.title')}
+        description={t('node.headerDesc')}
+        extra={
+          <>
+            <Button icon={<ThunderboltOutlined />} onClick={() => { setBatchNodes(nodes.map(n => n.name)); setBatchOpen(true) }}>
+              Batch Exec
+            </Button>
+            <Button icon={<ReloadOutlined />} onClick={fetchNodes} loading={loading}>{t('common.refresh')}</Button>
+          </>
+        }
+      />
+      <Card bordered={false} style={{ borderRadius: 16 }} styles={{ body: { paddingTop: 8 } }}>
         <Table
           columns={allColumns}
           dataSource={nodes}

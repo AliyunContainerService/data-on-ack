@@ -3,8 +3,10 @@ import { Card, Table, Tag, Space, Typography, Select, Progress, Row, Col, Statis
 import { DollarOutlined, ReloadOutlined, ClusterOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { get } from '@/api/client'
+import PageHeader from '@/components/PageHeader'
+import CountUp from '@/components/CountUp'
 
-const { Title, Text } = Typography
+const { Text } = Typography
 
 interface QuotaUsageInfo {
   name: string
@@ -113,49 +115,55 @@ export default function CostDashboard() {
   }
 
   return (
-    <div style={{ padding: '0 4px' }}>
-      <div style={{ marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div>
-          <Title level={4} style={{ marginBottom: 4 }}>{t('cost.title')}</Title>
-          <Text type="secondary">{t('cost.desc')}</Text>
-        </div>
-        <Space>
-          <Select value={timeRange} onChange={setTimeRange} style={{ width: 120 }} options={[
-            { label: '24h', value: '24h' },
-            { label: '7 days', value: '7d' },
-            { label: '30 days', value: '30d' },
-          ]} />
-          <Button icon={<ReloadOutlined />} onClick={() => fetchData(timeRange)}>{t('common.refresh')}</Button>
-        </Space>
-      </div>
+    <div>
+      <PageHeader
+        title={t('cost.title')}
+        description={t('cost.desc')}
+        extra={
+          <>
+            <Select value={timeRange} onChange={setTimeRange} style={{ width: 130 }} options={[
+              { label: '24h', value: '24h' },
+              { label: '7 days', value: '7d' },
+              { label: '30 days', value: '30d' },
+            ]} />
+            <Button icon={<ReloadOutlined />} onClick={() => fetchData(timeRange)}>{t('common.refresh')}</Button>
+          </>
+        }
+      />
 
       {/* Summary Stats */}
-      <Row gutter={16} style={{ marginBottom: 20 }}>
+      <Row gutter={16} style={{ marginBottom: 20 }} className="stagger">
         <Col span={8}>
-          <Card style={{ borderRadius: 14, border: 'none', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+          <Card style={{ borderRadius: 16, border: 'none' }} className="hover-lift" styles={{ body: { padding: 20 } }}>
             <Statistic
               title={t('cost.totalGpuHours')}
-              value={data?.totalGpuHours || 0}
-              precision={1}
-              suffix="h"
-              prefix={<DollarOutlined style={{ color: '#0071e3' }} />}
+              valueRender={() => (
+                <span style={{ fontSize: 30, fontWeight: 700, letterSpacing: '-0.02em' }}>
+                  <CountUp value={data?.totalGpuHours || 0} decimals={1} />
+                  <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-3)', marginLeft: 4 }}>h</span>
+                </span>
+              )}
             />
           </Card>
         </Col>
         <Col span={8}>
-          <Card style={{ borderRadius: 14, border: 'none', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+          <Card style={{ borderRadius: 16, border: 'none' }} className="hover-lift" styles={{ body: { padding: 20 } }}>
             <Statistic
               title={t('cost.gpuUsage') + ' (' + t('cost.user') + ')'}
-              value={data?.gpuUsage?.length || 0}
+              valueRender={() => (
+                <span style={{ fontSize: 30, fontWeight: 700, letterSpacing: '-0.02em' }}>
+                  <CountUp value={data?.gpuUsage?.length || 0} />
+                </span>
+              )}
             />
           </Card>
         </Col>
         <Col span={8}>
-          <Card style={{ borderRadius: 14, border: 'none', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+          <Card style={{ borderRadius: 16, border: 'none' }} className="hover-lift" styles={{ body: { padding: 20 } }}>
             <Statistic
               title={t('cost.timeRange')}
               value={timeRange}
-              valueStyle={{ fontSize: 24 }}
+              valueStyle={{ fontSize: 30, fontWeight: 700, letterSpacing: '-0.02em' }}
             />
           </Card>
         </Col>
@@ -165,7 +173,7 @@ export default function CostDashboard() {
       {data?.quotaTree && (
         <Card
           title={<Space><ClusterOutlined />{t('cost.quotaTree')}</Space>}
-          style={{ borderRadius: 14, border: 'none', boxShadow: '0 1px 3px rgba(0,0,0,0.04)', marginBottom: 20 }}
+          style={{ borderRadius: 16, border: 'none', marginBottom: 20 }}
           styles={{ body: { padding: 16 } }}
           loading={loading}
         >
@@ -176,7 +184,7 @@ export default function CostDashboard() {
       {/* GPU Usage Table */}
       <Card
         title={<Space><DollarOutlined />{t('cost.gpuUsage')}</Space>}
-        style={{ borderRadius: 14, border: 'none', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}
+        style={{ borderRadius: 16, border: 'none' }}
         styles={{ body: { padding: 0 } }}
         loading={loading}
       >

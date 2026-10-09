@@ -7,13 +7,14 @@ import {
 } from 'antd';
 import { PlusOutlined, DeleteOutlined, ReloadOutlined, ApiOutlined, ThunderboltOutlined, RocketOutlined, SendOutlined, FileTextOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
+import PageHeader from '../components/PageHeader';
 import {
   listServing, createServing, deleteServing, testServingEndpoint,
   listServingPods, getServingLogs,
   ServingInfo, ServingSpec, INFERENCE_ENGINES, ChatMessage, PodInfo,
 } from '../api/serving';
 
-const { Title, Text } = Typography;
+const { Text } = Typography;
 
 const statusConfig: Record<string, { status: 'processing' | 'success' | 'error' | 'warning' | 'default'; text: string }> = {
   Ready: { status: 'success', text: 'Ready' },
@@ -271,20 +272,20 @@ const Serving: React.FC = () => {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
-        <div>
-          <Title level={4} style={{ marginBottom: 4 }}>{t('serving.title')}</Title>
-          <Text type="secondary">{t('serving.desc')}</Text>
-        </div>
-        <Space>
-          <Button icon={<ReloadOutlined />} onClick={fetchData} />
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
-            {t('serving.create')}
-          </Button>
-        </Space>
-      </div>
+      <PageHeader
+        title={t('serving.title')}
+        description={t('serving.desc')}
+        extra={
+          <>
+            <Button icon={<ReloadOutlined />} onClick={fetchData} />
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
+              {t('serving.create')}
+            </Button>
+          </>
+        }
+      />
 
-      <Card bordered={false} style={{ borderRadius: 14 }}>
+      <Card bordered={false} style={{ borderRadius: 16 }} styles={{ body: { paddingTop: 8 } }}>
         <Table
           columns={columns}
           dataSource={services}

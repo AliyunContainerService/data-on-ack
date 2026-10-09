@@ -7,6 +7,7 @@ import {
   getBearerToken, downloadKubeConfig, fetchRamUsers, type K8sUser, type RamUser,
 } from '@/api/user'
 import { get, getErrorMessage } from '@/api/client'
+import PageHeader from '@/components/PageHeader'
 
 const { Text } = Typography
 
@@ -181,25 +182,30 @@ export default function ResearcherList() {
   ]
 
   return (
-    <Card
-      size="small"
-      title={<Space><UserAddOutlined />{t('user.title')}</Space>}
-      extra={
-        <Space>
-          <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>{t('user.create')}</Button>
-          <Button icon={<ReloadOutlined />} onClick={load} loading={loading} />
-        </Space>
-      }
-      style={{ borderRadius: 14, border: 'none', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}
-    >
-      <Table
-        dataSource={users}
-        columns={columns}
-        rowKey={(r) => r.metadata.name}
-        loading={loading}
-        size="small"
-        pagination={{ pageSize: 20, showSizeChanger: true, showTotal: (total) => `${total}` }}
+    <div>
+      <PageHeader
+        title={t('user.title')}
+        description={t('user.headerDesc')}
+        extra={
+          <>
+            <Button icon={<ReloadOutlined />} onClick={load} loading={loading} />
+            <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>{t('user.create')}</Button>
+          </>
+        }
       />
+      <Card
+        bordered={false}
+        style={{ borderRadius: 16 }}
+        styles={{ body: { paddingTop: 8 } }}
+      >
+        <Table
+          dataSource={users}
+          columns={columns}
+          rowKey={(r) => r.metadata.name}
+          loading={loading}
+          size="middle"
+          pagination={{ pageSize: 20, showSizeChanger: true, showTotal: (total) => `${total}` }}
+        />
       <Modal
         title={editUser ? t('user.edit') : t('user.create')}
         open={modalOpen}
@@ -263,5 +269,6 @@ export default function ResearcherList() {
         </Form>
       </Modal>
     </Card>
+    </div>
   )
 }

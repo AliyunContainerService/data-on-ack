@@ -1,11 +1,20 @@
 import React, { useState } from 'react';
-import { Button, Typography, Space, Input, Divider, message, Tooltip } from 'antd';
-import { CloudOutlined, CodeOutlined, ThunderboltOutlined, RocketOutlined, ExperimentOutlined, KeyOutlined, TranslationOutlined } from '@ant-design/icons';
+import { Button, Typography, Input, Divider, message, Tooltip } from 'antd';
+import {
+  CodeOutlined,
+  ThunderboltOutlined,
+  RocketOutlined,
+  ExperimentOutlined,
+  KeyOutlined,
+  TranslationOutlined,
+  ArrowRightOutlined,
+} from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { post } from '../api/client';
 import { useUserStore } from '../store/user';
+import BrandLogo from '../components/BrandLogo';
 
-const { Title, Text, Paragraph } = Typography;
+const { Title, Text } = Typography;
 
 const Login: React.FC = () => {
   const { t } = useTranslation();
@@ -23,7 +32,7 @@ const Login: React.FC = () => {
 
   const handleTokenLogin = async () => {
     if (!token.trim()) {
-      message.error('Please enter a valid token');
+      message.error(t('login.token.empty'));
       return;
     }
     setTokenLoading(true);
@@ -31,7 +40,7 @@ const Login: React.FC = () => {
       await post('/login/token', { token: token.trim() });
       window.location.href = '/';
     } catch {
-      message.error('Token authentication failed');
+      message.error(t('login.token.failed'));
     } finally {
       setTokenLoading(false);
     }
@@ -45,127 +54,165 @@ const Login: React.FC = () => {
   ];
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexWrap: 'wrap' }}>
-      {/* Left panel - branding */}
-      <div style={{
-        flex: '1 1 420px',
-        background: 'linear-gradient(160deg, #0f172a 0%, #1e293b 50%, #1e1b4b 100%)',
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'center',
-        padding: '60px 48px',
-        minWidth: 320,
-        boxSizing: 'border-box',
-        position: 'relative',
-        overflow: 'hidden',
-      }}>
-        {/* Background decoration */}
-        <div style={{
-          position: 'absolute', top: -100, right: -100,
-          width: 400, height: 400, borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(99,102,241,0.15) 0%, transparent 70%)',
-        }} />
-        <div style={{
-          position: 'absolute', bottom: -50, left: -50,
-          width: 300, height: 300, borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(22,119,255,0.1) 0%, transparent 70%)',
-        }} />
+    <div style={{ minHeight: '100vh', display: 'flex', flexWrap: 'wrap', background: '#fbfbfd' }}>
+      {/* Left — cinematic brand scene */}
+      <div
+        className="login-scene"
+        style={{
+          flex: '1 1 460px',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          alignItems: 'center',
+          padding: '64px 48px',
+          minWidth: 320,
+        }}
+      >
+        <div className="aurora aurora-a" />
+        <div className="aurora aurora-b" />
+        <div className="aurora aurora-c" />
+        <div className="grid-overlay" />
+        <div className="noise-overlay" />
 
-        <div style={{ position: 'relative', zIndex: 1 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 40 }}>
-            <div style={{
-              width: 44, height: 44, borderRadius: 10,
-              background: 'linear-gradient(135deg, #1677ff, #6366f1)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-              <ThunderboltOutlined style={{ color: '#fff', fontSize: 22 }} />
-            </div>
-            <Title level={3} style={{ color: '#fff', margin: 0 }}>{t('app.title')}</Title>
+        <div style={{ position: 'relative', zIndex: 1, maxWidth: 440, width: '100%' }}>
+          <div className="anim-fade-up" style={{ marginBottom: 44 }}>
+            <BrandLogo size={40} title={t('login.title')} subtitle={t('app.subtitle')} />
           </div>
 
-          <Title level={1} style={{ color: '#fff', fontWeight: 700, marginBottom: 16, fontSize: 36 }}>
+          <h1
+            className="anim-fade-up"
+            style={{
+              ['--i' as string]: 1,
+              margin: '0 0 14px',
+              fontSize: 42,
+              fontWeight: 700,
+              letterSpacing: '-0.03em',
+              lineHeight: 1.15,
+              color: '#fff',
+            }}
+          >
             {t('login.subtitle')}
-          </Title>
+          </h1>
 
-          <Paragraph style={{ color: 'rgba(255,255,255,0.6)', fontSize: 16, marginBottom: 48, maxWidth: 450 }}>
+          <p
+            className="anim-fade-up"
+            style={{ ['--i' as string]: 2, margin: '0 0 44px', fontSize: 15, lineHeight: 1.7, color: 'rgba(255,255,255,0.55)' }}
+          >
             {t('login.description')}
-          </Paragraph>
+          </p>
 
-          <Space direction="vertical" size={16}>
+          <div className="stagger" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {features.map((f, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{
-                  width: 36, height: 36, borderRadius: 8,
-                  background: 'rgba(255,255,255,0.08)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: '#818cf8', fontSize: 16,
-                }}>
+              <div
+                key={i}
+                className="glass-chip"
+                style={{
+                  ['--i' as string]: i + 3,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 14,
+                  padding: '14px 16px',
+                  borderRadius: 14,
+                }}
+              >
+                <div
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 10,
+                    background: 'rgba(255,255,255,0.09)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#a5b4fc',
+                    fontSize: 16,
+                    flexShrink: 0,
+                  }}
+                >
                   {f.icon}
                 </div>
-                <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 15 }}>{f.text}</Text>
+                <span style={{ color: 'rgba(255,255,255,0.85)', fontSize: 13.5, letterSpacing: 0.1 }}>{f.text}</span>
               </div>
             ))}
-          </Space>
+          </div>
+        </div>
+
+        <div style={{ position: 'absolute', bottom: 28, left: 0, right: 0, textAlign: 'center', zIndex: 1 }}>
+          <span style={{ color: 'rgba(255,255,255,0.28)', fontSize: 12, letterSpacing: 0.3 }}>{t('login.footer')}</span>
         </div>
       </div>
 
-      {/* Right panel - login form */}
-      <div style={{
-        width: 480,
-        maxWidth: '100%',
-        flexShrink: 0,
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'center',
-        alignItems: 'center',
-        padding: '60px',
-        background: '#fff',
-      }}>
-        <div style={{ width: '100%', maxWidth: 360 }}>
-          <Title level={2} style={{ marginBottom: 8 }}>
-            {t('login.title')}
-          </Title>
-              <Text type="secondary" style={{ display: 'block', marginBottom: 40 }}>
-                {t('login.subtitleForm')}
-              </Text>
+      {/* Right — sign-in form */}
+      <div
+        style={{
+          width: 500,
+          maxWidth: '100%',
+          flexShrink: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          alignItems: 'center',
+          padding: '64px 56px',
+          position: 'relative',
+        }}
+      >
+        <div style={{ position: 'absolute', top: 24, right: 24 }}>
+          <Tooltip title={locale === 'zh' ? 'English' : '中文'}>
+            <Button
+              type="text"
+              aria-label="Switch language"
+              icon={<TranslationOutlined />}
+              onClick={toggleLocale}
+              style={{ color: 'var(--text-2)' }}
+            />
+          </Tooltip>
+        </div>
+
+        <div style={{ width: '100%', maxWidth: 340 }}>
+          <div className="anim-fade-up">
+            <Title level={2} style={{ margin: '0 0 10px', fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text-1)' }}>
+              {t('login.title')}
+            </Title>
+            <Text style={{ fontSize: 14, color: 'var(--text-2)', display: 'block', marginBottom: 40 }}>
+              {t('login.subtitleForm')}
+            </Text>
+          </div>
 
           {!tokenMode ? (
             <>
-              <Button
-                type="primary"
-                size="large"
-                icon={<CloudOutlined />}
-                onClick={handleLogin}
-                block
-                style={{
-                  height: 52,
-                  fontSize: 16,
-                  borderRadius: 10,
-                  boxShadow: '0 4px 14px rgba(22,119,255,0.25)',
-                }}
-              >
-                {t('login.button')}
-              </Button>
+              <div className="anim-fade-up" style={{ ['--i' as string]: 1 }}>
+                <Button
+                  type="primary"
+                  size="large"
+                  block
+                  onClick={handleLogin}
+                  className="pressable"
+                  style={{ height: 50, borderRadius: 13, fontSize: 15, fontWeight: 600, letterSpacing: 0.2 }}
+                >
+                  {t('login.button')}
+                  <ArrowRightOutlined style={{ fontSize: 13, marginLeft: 4 }} />
+                </Button>
+              </div>
 
-              <Divider style={{ margin: '28px 0', color: '#ccc', fontSize: 12 }}>OR</Divider>
+              <Divider className="anim-fade-up" style={{ ['--i' as string]: 2, margin: '28px 0', color: 'var(--text-3)', fontSize: 12 }}>
+                OR
+              </Divider>
 
-              <Button
-                size="large"
-                icon={<KeyOutlined />}
-                onClick={() => setTokenMode(true)}
-                block
-                style={{
-                  height: 48,
-                  fontSize: 14,
-                  borderRadius: 10,
-                  borderColor: '#e8e8ed',
-                }}
-              >
-                {t('login.token.button')}
-              </Button>
+              <div className="anim-fade-up" style={{ ['--i' as string]: 3 }}>
+                <Button
+                  size="large"
+                  icon={<KeyOutlined />}
+                  onClick={() => setTokenMode(true)}
+                  block
+                  className="pressable"
+                  style={{ height: 50, fontSize: 14, borderRadius: 13, borderColor: 'var(--border-1)' }}
+                >
+                  {t('login.token.button')}
+                </Button>
+              </div>
             </>
           ) : (
-            <>
+            <div className="anim-fade-up" style={{ ['--i' as string]: 1 }}>
               <div style={{ marginBottom: 16 }}>
                 <Text strong style={{ display: 'block', marginBottom: 8, fontSize: 13 }}>
                   {t('login.token.label')}
@@ -175,10 +222,10 @@ const Login: React.FC = () => {
                   value={token}
                   onChange={(e) => setToken(e.target.value)}
                   placeholder={t('login.token.placeholder')}
-                  style={{ fontFamily: 'SF Mono, Monaco, Menlo, monospace', fontSize: 12, borderRadius: 8 }}
+                  style={{ fontFamily: 'SF Mono, Monaco, Menlo, monospace', fontSize: 12, borderRadius: 10 }}
                 />
               </div>
-              <Space style={{ width: '100%' }} direction="vertical" size={12}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <Button
                   type="primary"
                   size="large"
@@ -186,41 +233,32 @@ const Login: React.FC = () => {
                   onClick={handleTokenLogin}
                   loading={tokenLoading}
                   block
-                  style={{ height: 48, borderRadius: 10 }}
+                  className="pressable"
+                  style={{ height: 50, borderRadius: 13 }}
                 >
                   {t('login.token.submit')}
                 </Button>
-                <Button
-                  size="small"
-                  type="link"
-                  onClick={() => { setTokenMode(false); setToken(''); }}
-                  style={{ padding: 0 }}
-                >
+                <Button size="small" type="link" onClick={() => { setTokenMode(false); setToken(''); }} style={{ padding: 0 }}>
                   {t('login.token.back')}
                 </Button>
-              </Space>
-              <div style={{ marginTop: 16, padding: '12px 16px', background: '#f5f5f7', borderRadius: 8 }}>
-                <Text type="secondary" style={{ fontSize: 11, lineHeight: 1.5 }}>
-                  {t('login.token.hint')}<br />
+              </div>
+              <div
+                style={{
+                  marginTop: 16,
+                  padding: '12px 16px',
+                  background: 'var(--bg-canvas)',
+                  borderRadius: 10,
+                  border: '1px solid var(--border-2)',
+                }}
+              >
+                <Text style={{ fontSize: 11, lineHeight: 1.6, color: 'var(--text-2)' }}>
+                  {t('login.token.hint')}
+                  <br />
                   <code style={{ fontSize: 10 }}>kubectl get secret &lt;sa-name&gt;-token -o jsonpath=&#123;.data.token&#125; | base64 -d</code>
                 </Text>
               </div>
-            </>
+            </div>
           )}
-
-          <div style={{ marginTop: 32, textAlign: 'center' }}>
-            <Text type="secondary" style={{ fontSize: 12 }}>
-              {t('login.footer')}
-            </Text>
-          </div>
-          <Tooltip title={locale === 'zh' ? 'English' : '中文'}>
-            <Button
-              type="text"
-              icon={<TranslationOutlined />}
-              onClick={toggleLocale}
-              style={{ marginTop: 24 }}
-            />
-          </Tooltip>
         </div>
       </div>
     </div>
