@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+{% include head.html %}
+</head>
+<body class="layout-docs">
+{% include icons.html %}
+{% include header.html %}
+
+<div class="docs-shell">
+  <div class="docs-backdrop" id="docsBackdrop" hidden></div>
+  <aside class="docs-sidebar" id="docsSidebar" aria-label="侧边导航">
+    {% include nav.html %}
+  </aside>
+
+  <main class="docs-main" id="mainContent">
+    <article class="doc-article">
+      {%- if page.parent -%}
+        {%- assign p1 = site.pages | where: "title", page.parent | first -%}
+      {%- endif -%}
+      {%- if p1 and p1.parent -%}
+        {%- assign p2 = site.pages | where: "title", p1.parent | first -%}
+      {%- endif -%}
+      {%- if p2 and p2.parent -%}
+        {%- assign p3 = site.pages | where: "title", p2.parent | first -%}
+      {%- endif -%}
+      <header class="doc-hero">
+        {%- if p1 -%}
+        <nav class="breadcrumb" aria-label="面包屑">
+          {%- if p3 -%}<a href="{{ p3.url | relative_url }}">{{ p3.title }}</a><svg aria-hidden="true"><use href="#i-chev"/></svg>{%- endif -%}
+          {%- if p2 -%}<a href="{{ p2.url | relative_url }}">{{ p2.title }}</a><svg aria-hidden="true"><use href="#i-chev"/></svg>{%- endif -%}
+          <a href="{{ p1.url | relative_url }}">{{ p1.title }}</a><svg aria-hidden="true"><use href="#i-chev"/></svg>
+          <span aria-current="page">{{ page.title }}</span>
+        </nav>
+        {%- endif -%}
+        <h1 class="doc-title">{{ page.title }}</h1>
+        {%- if page.description -%}<p class="doc-lede">{{ page.description }}</p>{%- endif -%}
+      </header>
+
+      <div class="prose" id="prose">
+        {{ content }}
+      </div>
+
+      <nav class="doc-pager" id="docPager" aria-label="上一篇 / 下一篇"></nav>
+
+      {%- assign skip_edit = false -%}
+      {%- if page.nav_exclude -%}{%- assign skip_edit = true -%}{%- endif -%}
+      {%- if page.path contains "ray/" and page.has_children -%}{%- assign skip_edit = true -%}{%- endif -%}
+      {%- if page.path contains "ray/" -%}
+        {%- assign edit_path = page.path | remove: "index.md" | append: "README_ZH.md" -%}
+      {%- else -%}
+        {%- assign edit_path = "docs/" | append: page.path -%}
+      {%- endif -%}
+      {%- unless skip_edit -%}
+      <div class="doc-footer-meta">
+        <a class="edit-link" href="https://github.com/AliyunContainerService/data-on-ack/edit/main/{{ edit_path }}" target="_blank" rel="noopener">
+          <svg><use href="#i-edit"/></svg> 在 GitHub 上编辑此页
+        </a>
+      </div>
+      {%- endunless -%}
+    </article>
+
+    <aside class="docs-toc" id="docsToc" aria-label="本页目录">
+      <p class="toc-heading">本页目录</p>
+      <nav class="toc-nav" id="tocNav"></nav>
+    </aside>
+  </main>
+</div>
+
+<script src="{{ '/assets/js/site.js' | relative_url }}" defer></script>
+</body>
+</html>

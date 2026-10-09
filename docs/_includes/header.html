@@ -1,0 +1,37 @@
+<header class="site-header" id="siteHeader">
+  <div class="header-inner">
+    <a class="brand" href="{{ '/' | relative_url }}" aria-label="{{ site.title }} 首页">
+      <span class="brand-mark"><svg><use href="#i-logo"/></svg></span>
+      <span class="brand-name">Data/AI <em>on</em> ACK</span>
+    </a>
+    <nav class="header-nav" aria-label="主导航">
+      <a href="{{ '/' | relative_url }}" {% if page.url == "/" %}aria-current="page"{% endif %}>概览</a>
+      <a href="{{ '/deploy-guide.html' | relative_url }}" {% if page.url == "/deploy-guide.html" %}aria-current="page"{% endif %}>部署指南</a>
+      <a href="{{ '/user-guide.html' | relative_url }}" {% if page.url == "/user-guide.html" %}aria-current="page"{% endif %}>功能指南</a>
+      <a href="{{ '/ray.html' | relative_url }}" {% if page.url == "/ray.html" %}aria-current="page"{% endif %}>Ray 实践</a>
+    </nav>
+    <div class="header-actions">
+      <button class="search-trigger" id="searchTrigger" type="button" aria-label="搜索文档 (⌘K)">
+        <svg><use href="#i-search"/></svg>
+        <span class="search-trigger-label">搜索文档</span>
+        <kbd id="searchKbd">⌘K</kbd>
+      </button>
+      <a class="github-link" href="https://github.com/AliyunContainerService/data-on-ack" target="_blank" rel="noopener" aria-label="GitHub 仓库">
+        <svg><use href="#i-github"/></svg>
+        <span class="github-stars" id="githubStars" hidden></span>
+      </a>
+      <button class="menu-toggle" id="menuToggle" type="button" aria-label="打开导航菜单" aria-expanded="false">
+        <svg class="icon-menu"><use href="#i-menu"/></svg>
+        <svg class="icon-close"><use href="#i-close"/></svg>
+      </button>
+    </div>
+  </div>
+  <div class="scroll-progress" aria-hidden="true"><span id="scrollProgress"></span></div>
+  <nav class="mobile-nav" id="mobileNav" aria-label="移动端导航">
+    <a href="{{ '/' | relative_url }}">概览</a>
+    <a href="{{ '/deploy-guide.html' | relative_url }}">部署指南</a>
+    <a href="{{ '/user-guide.html' | relative_url }}">功能指南</a>
+    <a href="{{ '/ray.html' | relative_url }}">Ray 实践</a>
+    <a href="https://github.com/AliyunContainerService/data-on-ack" target="_blank" rel="noopener">GitHub</a>
+  </nav>
+</header>

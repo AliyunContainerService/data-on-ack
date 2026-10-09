@@ -11,4 +11,4 @@ has_children: true
 
 - [Ray 用户指南](ray/1-user-guide) — 部署 RayCluster、提交 Ray Job、使用 Ray Data / Ray Serve
 - [Ray 高级实践](ray/2-advanced) — 性能调优、容错、GPU 共享、RDMA 加速等
-- [Ray 端到端示例](ray/3-e2e-examples) — 完整的端到端落地示例
+- [Ray 端到端示例](https://github.com/AliyunContainerService/data-on-ack/tree/main/ray/3-e2e-examples) — 完整的端到端落地示例（英文版，翻译中）
