@@ -12,11 +12,19 @@ export interface ApiResponse<T = unknown> {
   data: T;
 }
 
+// Hard-navigating to /login while already on the login page would reload the
+// page, re-trigger the failing auth probe, and loop forever.
+function redirectToLogin() {
+  if (!window.location.pathname.startsWith('/login')) {
+    window.location.href = '/login';
+  }
+}
+
 http.interceptors.response.use(
   (resp) => resp,
   (error) => {
     if (error.response?.status === 401) {
-      window.location.href = '/login';
+      redirectToLogin();
     }
     return Promise.reject(error);
   }

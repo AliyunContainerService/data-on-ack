@@ -6,11 +6,19 @@ const client = axios.create({
   withCredentials: true,
 })
 
+// Hard-navigating to /login while already on the login page would reload the
+// page, re-trigger the failing auth probe, and loop forever.
+function redirectToLogin() {
+  if (!window.location.pathname.startsWith('/login')) {
+    window.location.href = '/login'
+  }
+}
+
 client.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401 || error.response?.status === 302) {
-      window.location.href = '/login'
+      redirectToLogin()
     }
     return Promise.reject(error)
   },
@@ -21,7 +29,7 @@ export async function get<T = any>(url: string, config?: AxiosRequestConfig): Pr
   const data = res.data
   if (data?.code === 10000) return data.data
   if (data?.code && [10101, 10102, 10103].includes(data.code)) {
-    window.location.href = '/login'
+    redirectToLogin()
   }
   throw data
 }
