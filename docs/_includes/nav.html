@@ -1,4 +1,5 @@
-{%- assign tops = site.pages | where_exp: "p", "p.parent == nil and p.title and p.nav_exclude != true" | sort: "nav_order" -%}
+{%- comment -%}Jekyll 3.10's where_exp parses a single condition only (no and/or), so chain one filter per condition.{%- endcomment -%}
+{%- assign tops = site.pages | where_exp: "p", "p.parent == nil" | where_exp: "p", "p.title" | where_exp: "p", "p.nav_exclude != true" | sort: "nav_order" -%}
 <nav class="side-nav" id="sideNav" aria-label="文档导航">
   <ul class="nav-root">
     {%- for top in tops -%}
