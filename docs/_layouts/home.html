@@ -74,8 +74,81 @@
     </div>
   </section>
 
+  <!-- ============ RAY ON ACK ============ -->
+  <section class="section" id="ray">
+    <div class="section-head reveal">
+      <p class="section-eyebrow">Ray on ACK · 生产实践</p>
+      <h2 class="section-title">把 Ray 算力，<span class="grad-text">稳稳跑在生产级 ACK 上</span></h2>
+      <p class="section-lede">十篇经过生产验证的实战指南：从第一个 RayCluster，到 eRDMA 上的高性能传输——每一步都有可直接复制的 YAML 与命令。</p>
+    </div>
+
+    <div class="ray-feature">
+      <div class="terminal ray-terminal reveal" data-tilt>
+        <div class="terminal-bar">
+          <span class="terminal-dot"></span><span class="terminal-dot"></span><span class="terminal-dot"></span>
+          <span class="terminal-title">ray-on-ack — kubectl</span>
+          <button class="terminal-copy" type="button" data-copy-target="#rayCmd" aria-label="复制 Ray 命令">
+            <svg class="icon-copy"><use href="#i-copy"/></svg><svg class="icon-ok"><use href="#i-check"/></svg>
+          </button>
+        </div>
+        <pre class="terminal-body" id="rayCmd"><code><span class="t-c"># 通过 KubeRay 一键部署 RayCluster（1 head + 1 worker）</span>
+<span class="t-p">$</span> kubectl apply -f ray-cluster.yaml
+<span class="t-o">raycluster.ray.io/demo-ray-cluster created</span>
+<span class="t-p">$</span> kubectl get pods
+<span class="t-o">demo-ray-cluster-head-mgdnb                1/1   Running</span>
+<span class="t-o">demo-ray-cluster-worker-group-worker-lvbr2 1/1   Running</span>
+<span class="t-p">$</span> kubectl exec -it $HEAD_POD -- ray status
+<span class="t-o">Idle: 1 worker-group, 1 headgroup · 2 CPUs ready</span></code></pre>
+      </div>
+
+      <div class="ray-points reveal">
+        <div class="ray-point">
+          <span class="ray-point-icon"><svg><use href="#i-gpu"/></svg></span>
+          <div>
+            <h3>GPU 共享与弹性调度</h3>
+            <p>cGPU 共享显卡、ElasticQuota 弹性配额，把每一块 GPU 用到极致。</p>
+          </div>
+        </div>
+        <div class="ray-point">
+          <span class="ray-point-icon"><svg><use href="#i-chart"/></svg></span>
+          <div>
+            <h3>eRDMA 高性能传输</h3>
+            <p>Ray Direct Transport 与 NIXL 跑在 eRDMA 上，参数同步与数据搬运告别 TCP 瓶颈。</p>
+          </div>
+        </div>
+        <div class="ray-point">
+          <span class="ray-point-icon"><svg><use href="#i-shield"/></svg></span>
+          <div>
+            <h3>生产级容错与安全</h3>
+            <p>GCS 容错、RBAC 认证、Plasma 对象溢出——直面真实生产场景，而非玩具示例。</p>
+          </div>
+        </div>
+        <a class="btn btn-primary ray-cta" href="{{ '/ray.html' | relative_url }}">进入 Ray 实践<svg><use href="#i-arrow"/></svg></a>
+      </div>
+    </div>
+
+    <div class="ray-index reveal">
+      <div class="ray-group">
+        <p class="ray-group-title">用户指南<span>Getting Started</span></p>
+        <a class="ray-item" href="{{ '/ray/1-user-guide/1-set-up-a-basic-raycluster/' | relative_url }}"><em>01</em><span>部署并使用基础 RayCluster</span><svg><use href="#i-arrow"/></svg></a>
+        <a class="ray-item" href="{{ '/ray/1-user-guide/2-run-a-basic-ray-job/' | relative_url }}"><em>02</em><span>运行基础 Ray Job</span><svg><use href="#i-arrow"/></svg></a>
+        <a class="ray-item" href="{{ '/ray/1-user-guide/3-ray-data-with-oss/' | relative_url }}"><em>03</em><span>使用 Ray Data 读取 OSS 数据</span><svg><use href="#i-arrow"/></svg></a>
+        <a class="ray-item" href="{{ '/ray/1-user-guide/4-deploy-a-basic-ray-service/' | relative_url }}"><em>04</em><span>部署并使用基础 Ray Service</span><svg><use href="#i-arrow"/></svg></a>
+      </div>
+      <div class="ray-group">
+        <p class="ray-group-title">高级实践<span>Advanced</span></p>
+        <a class="ray-item" href="{{ '/ray/2-advanced/ray-direct-transport-on-erdma/' | relative_url }}"><em>05</em><span>在 eRDMA 上运行 Ray Direct Transport（RDT）</span><svg><use href="#i-arrow"/></svg></a>
+        <a class="ray-item" href="{{ '/ray/2-advanced/ray-direct-transport-on-erdma/nixl/' | relative_url }}"><em>06</em><span>在 eRDMA 上使用 NIXL</span><svg><use href="#i-arrow"/></svg></a>
+        <a class="ray-item" href="{{ '/ray/2-advanced/gpu-sharing-with-cgpu/' | relative_url }}"><em>07</em><span>在 ACK 上从 Ray 使用 cGPU 共享显卡</span><svg><use href="#i-arrow"/></svg></a>
+        <a class="ray-item" href="{{ '/ray/2-advanced/gcs-fault-tolerance-on-aliyun/' | relative_url }}"><em>08</em><span>在阿里云上使用 Ray GCS 容错</span><svg><use href="#i-arrow"/></svg></a>
+        <a class="ray-item" href="{{ '/ray/2-advanced/plasma-object-store-conf-on-ack/' | relative_url }}"><em>09</em><span>配置 Ray 对象存储与对象溢出</span><svg><use href="#i-arrow"/></svg></a>
+        <a class="ray-item" href="{{ '/ray/2-advanced/access-ray-cluster-with-k8s-rbac-authentication/' | relative_url }}"><em>10</em><span>使用 Kubernetes RBAC 认证访问 Ray 集群</span><svg><use href="#i-arrow"/></svg></a>
+      </div>
+    </div>
+  </section>
+
   <!-- ============ CONSOLES ============ -->
-  <section class="section" id="consoles">
+  <section class="section section-alt" id="consoles">
     <div class="section-head reveal">
       <p class="section-eyebrow">Two Consoles, One Platform</p>
       <h2 class="section-title">一套平台，<span class="grad-text">双重视角</span></h2>
@@ -118,7 +191,7 @@
   </section>
 
   <!-- ============ CAPABILITIES ============ -->
-  <section class="section section-alt" id="capabilities">
+  <section class="section" id="capabilities">
     <div class="section-head reveal">
       <p class="section-eyebrow">Capabilities</p>
       <h2 class="section-title">从开发到上线，<span class="grad-text">全链路覆盖</span></h2>
@@ -158,7 +231,7 @@
   </section>
 
   <!-- ============ ARCHITECTURE ============ -->
-  <section class="section" id="architecture">
+  <section class="section section-alt" id="architecture">
     <div class="section-head reveal">
       <p class="section-eyebrow">Architecture</p>
       <h2 class="section-title">架构，<span class="grad-text">一目了然</span></h2>
@@ -197,7 +270,7 @@
   </section>
 
   <!-- ============ DOCS ============ -->
-  <section class="section section-alt" id="docs">
+  <section class="section" id="docs">
     <div class="section-head reveal">
       <p class="section-eyebrow">Documentation</p>
       <h2 class="section-title">文档，<span class="grad-text">即查即用</span></h2>
@@ -219,24 +292,6 @@
         <span class="doc-card-icon"><svg><use href="#i-shield"/></svg></span>
         <h3>运维指南</h3>
         <p>升级、扩缩容、故障排查与备份恢复的日常运维手册。</p>
-        <span class="doc-card-arrow"><svg><use href="#i-arrow"/></svg></span>
-      </a>
-      <a class="doc-card reveal" href="{{ '/ray/1-user-guide/' | relative_url }}">
-        <span class="doc-card-icon"><svg><use href="#i-layers"/></svg></span>
-        <h3>Ray 用户指南</h3>
-        <p>部署 RayCluster、提交 Ray Job、使用 Ray Data 与 Ray Serve。</p>
-        <span class="doc-card-arrow"><svg><use href="#i-arrow"/></svg></span>
-      </a>
-      <a class="doc-card reveal" href="{{ '/ray/2-advanced/' | relative_url }}">
-        <span class="doc-card-icon"><svg><use href="#i-gpu"/></svg></span>
-        <h3>Ray 高级实践</h3>
-        <p>性能调优、GCS 容错、cGPU 共享、eRDMA 高性能传输。</p>
-        <span class="doc-card-arrow"><svg><use href="#i-arrow"/></svg></span>
-      </a>
-      <a class="doc-card reveal" href="https://github.com/AliyunContainerService/data-on-ack/tree/main/ray/3-e2e-examples" target="_blank" rel="noopener">
-        <span class="doc-card-icon"><svg><use href="#i-terminal"/></svg></span>
-        <h3>Ray 端到端示例</h3>
-        <p>从数据处理到推理上线的完整落地示例（英文版，翻译中）。</p>
         <span class="doc-card-arrow"><svg><use href="#i-arrow"/></svg></span>
       </a>
     </div>
