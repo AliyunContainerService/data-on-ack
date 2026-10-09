@@ -43,20 +43,21 @@
 
       <nav class="doc-pager" id="docPager" aria-label="上一篇 / 下一篇"></nav>
 
-      {%- if page.path contains "ray/" and page.has_children -%}
-        {%- assign edit_path = "" -%}
-      {%- elsif page.path contains "ray/" -%}
+      {%- assign skip_edit = false -%}
+      {%- if page.nav_exclude -%}{%- assign skip_edit = true -%}{%- endif -%}
+      {%- if page.path contains "ray/" and page.has_children -%}{%- assign skip_edit = true -%}{%- endif -%}
+      {%- if page.path contains "ray/" -%}
         {%- assign edit_path = page.path | remove: "index.md" | append: "README_ZH.md" -%}
       {%- else -%}
         {%- assign edit_path = "docs/" | append: page.path -%}
       {%- endif -%}
-      {%- if edit_path != "" -%}
+      {%- unless skip_edit -%}
       <div class="doc-footer-meta">
         <a class="edit-link" href="https://github.com/AliyunContainerService/data-on-ack/edit/main/{{ edit_path }}" target="_blank" rel="noopener">
           <svg><use href="#i-edit"/></svg> 在 GitHub 上编辑此页
         </a>
       </div>
-      {%- endif -%}
+      {%- endunless -%}
     </article>
 
     <aside class="docs-toc" id="docsToc" aria-label="本页目录">

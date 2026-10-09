@@ -52,6 +52,7 @@ escape_liquid() {
 # Rewrite relative links so they survive publication:
 #   - sibling README_ZH.md links become the published pretty URL (dir with trailing slash)
 #   - links to companion files (yaml/sh/py/Dockerfile) become GitHub blob URLs
+#   - image links become raw.githubusercontent.com URLs so they render
 # Directory links (trailing slash) already resolve correctly on the site.
 # Skips fenced code blocks. $1 = source dir relative to repo root (no trailing slash).
 rewrite_links() {
@@ -63,7 +64,8 @@ rewrite_links() {
       if ($line =~ /^\s*```/) { $fence = !$fence; print $line; next; }
       if (!$fence) {
         $line =~ s{\]\(([^)#]*?)README_ZH\.md(#[^)]*)?\)}{ q{](} . (length $1 ? $1 : q{./}) . (defined $2 ? $2 : q{}) . q{)} }ge;
-        $line =~ s{\]\((?!https?:\/\/|#|\/|mailto:)([^)\s]+?)(?<!\/)\)}{](https:\/\/github.com\/AliyunContainerService\/data-on-ack\/blob\/main\/$base\/$1)}g;
+        $line =~ s{!\[([^\]]*)\]\((?!https?:\/\/|\/|data:)([^)\s#]+?)(?<!\/)(#[^)\s]*)?\)}{![$1](https:\/\/raw.githubusercontent.com\/AliyunContainerService\/data-on-ack\/main\/$base\/$2)}g;
+        $line =~ s{\]\((?!https?:\/\/|#|\/|mailto:)([^)\s#]+?)(?<!\/)(#[^)\s]*)?\)}{ q{](https://github.com/AliyunContainerService/data-on-ack/blob/main/} . $base . q{/} . $1 . (defined $2 ? $2 : q{}) . q{)} }ge;
       }
       print $line;
     }
@@ -73,7 +75,7 @@ rewrite_links() {
 # Generate pages for one guide dir; recurse into nested dirs (e.g. nixl/).
 # Only the Chinese version (README_ZH.md) is published, as index.md.
 generate_dir() {
-  local src_dir="$1" dst_dir="$2" parent_title="$3" prefix="$4"
+  local src_dir="${1%/}" dst_dir="${2%/}" parent_title="$3" prefix="$4"
   mkdir -p "$dst_dir"
 
   for subdir in "$src_dir"/*/; do
@@ -121,8 +123,12 @@ for entry in "${CATEGORIES[@]}"; do
   src_cat="$SRC/$cat_dir"
   [[ -d "$src_cat" ]] || continue
 
-  mkdir -p "$DST/$cat_dir"
-  cat > "$DST/$cat_dir/index.md" <<EOF
+  generate_dir "$src_cat" "$DST/$cat_dir" "$cat_title" ""
+
+  # Skip the category landing page when it has no published children
+  # (e.g. a category whose guides only exist in English so far).
+  if [[ -d "$DST/$cat_dir" ]] && find "$DST/$cat_dir" -mindepth 2 -name index.md -print -quit | grep -q .; then
+    cat > "$DST/$cat_dir/index.md" <<EOF
 ---
 title: "$cat_title"
 layout: default
@@ -135,7 +141,8 @@ has_children: true
 
 本部分收录在 ACK 上使用 Ray 的实践文档。
 EOF
-  echo "generated: docs/ray/$cat_dir/index.md"
-
-  generate_dir "$src_cat" "$DST/$cat_dir" "$cat_title" ""
+    echo "generated: docs/ray/$cat_dir/index.md"
+  else
+    rm -rf "$DST/$cat_dir"
+  fi
 done

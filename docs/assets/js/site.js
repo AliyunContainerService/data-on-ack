@@ -192,7 +192,9 @@
   $$("[data-copy-target]").forEach(function (btn) {
     var target = $(btn.getAttribute("data-copy-target"));
     if (!target) return;
-    wireCopy(btn, function () { return target.innerText.replace(/\n{3,}/g, "\n\n").trim(); });
+    wireCopy(btn, function () {
+      return target.innerText.replace(/^\$ /gm, "").replace(/\n{3,}/g, "\n\n").trim();
+    });
   });
   $$(".prose pre").forEach(function (pre) {
     if (pre.querySelector(".code-copy-btn")) return;
