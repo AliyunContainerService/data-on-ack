@@ -1,0 +1,10 @@
+---
+permalink: /search-index.json
+---
+[
+{%- assign docs_pages = site.pages | where_exp: "p", "p.title" -%}
+{%- for p in docs_pages -%}
+{%- assign clean = p.content | markdownify | strip_html | strip_newlines | replace: "  ", " " | truncate: 400 -%}
+  { "title": {{ p.title | jsonify }}, "url": {{ p.url | relative_url | jsonify }}, "parent": {{ p.parent | default: "" | jsonify }}, "excerpt": {{ clean | jsonify }} }{% unless forloop.last %},{% endunless %}
+{%- endfor -%}
+]

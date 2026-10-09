@@ -1,0 +1,36 @@
+{%- assign tops = site.pages | where_exp: "p", "p.parent == nil and p.title" | sort: "nav_order" -%}
+<nav class="side-nav" id="sideNav" aria-label="文档导航">
+  <ul class="nav-root">
+    {%- for top in tops -%}
+      {%- assign kids = site.pages | where: "parent", top.title | sort: "nav_order" -%}
+      <li class="nav-group">
+        <a class="nav-link nav-top{% if page.url == top.url %} is-active{% endif %}" href="{{ top.url | relative_url }}">
+          <span>{{ top.title }}</span>
+        </a>
+        {%- if kids.size > 0 -%}
+        <ul class="nav-sub">
+          {%- for kid in kids -%}
+            {%- assign grands = site.pages | where: "parent", kid.title | sort: "nav_order" -%}
+            <li>
+              <a class="nav-link{% if page.url == kid.url %} is-active{% endif %}" href="{{ kid.url | relative_url }}">
+                <span>{{ kid.title }}</span>
+              </a>
+              {%- if grands.size > 0 -%}
+              <ul class="nav-sub nav-sub-deep">
+                {%- for g in grands -%}
+                <li>
+                  <a class="nav-link{% if page.url == g.url %} is-active{% endif %}" href="{{ g.url | relative_url }}">
+                    <span>{{ g.title }}</span>
+                  </a>
+                </li>
+                {%- endfor -%}
+              </ul>
+              {%- endif -%}
+            </li>
+          {%- endfor -%}
+        </ul>
+        {%- endif -%}
+      </li>
+    {%- endfor -%}
+  </ul>
+</nav>

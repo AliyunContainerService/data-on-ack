@@ -1,16 +1,16 @@
 title: Data/AI on ACK
-description: 基于阿里云 ACK 的云原生 AI/ML 平台文档
-remote_theme: just-the-docs/just-the-docs@v0.10.0
-plugins:
-  - jekyll-remote-theme
-
+description: 基于阿里云容器服务 ACK 的开源云原生 AI/ML 平台，覆盖模型开发、训练、推理与运维的完整工具链。
 url: "https://aliyuncontainerservice.github.io"
 baseurl: "/data-on-ack"
+repository: AliyunContainerService/data-on-ack
 
-aux_links:
-  "GitHub":
-    - "https://github.com/AliyunContainerService/data-on-ack"
+markdown: kramdown
+highlighter: rouge
 
-nav_enabled: true
+kramdown:
+  input: GFM
+  syntax_highlighter: rouge
+  auto_ids: true
 
-footer_content: "Copyright &copy; 2024-2026 Alibaba Cloud. Distributed under the <a href=\"https://github.com/AliyunContainerService/data-on-ack/blob/main/LICENSE\">Apache-2.0 license.</a>"
+exclude:
+  - ".DS_Store"
