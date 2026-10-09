@@ -140,6 +140,21 @@ ul, ol { padding: 0; list-style: none; }
 .scroll-progress { position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: transparent; overflow: hidden; }
 .scroll-progress span { display: block; height: 100%; width: 100%; background: var(--grad); transform-origin: 0 50%; transform: scaleX(0); }
 
+.mobile-nav {
+  display: none;
+  position: absolute; top: var(--header-h); left: 0; right: 0;
+  background: rgba(7, 9, 15, 0.97);
+  -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border);
+  padding: 10px clamp(16px, 4vw, 40px) 18px;
+  flex-direction: column;
+  box-shadow: var(--shadow-lg);
+}
+.mobile-nav a { padding: 13px 6px; font-size: 16px; font-weight: 600; color: var(--text-2); border-bottom: 1px solid var(--border-soft); transition: color 0.2s, padding-left 0.25s; }
+.mobile-nav a:last-child { border-bottom: 0; }
+.mobile-nav a:hover { color: var(--text); padding-left: 12px; }
+body.mobile-nav-open .mobile-nav { display: flex; }
+
 /* ============================================================
    Home — Hero
    ============================================================ */

@@ -45,15 +45,17 @@
             <svg class="icon-copy"><use href="#i-copy"/></svg><svg class="icon-ok"><use href="#i-check"/></svg>
           </button>
         </div>
-        <pre class="terminal-body" id="quickstartCmd"><code><span class="t-c"># 一键部署双控制台到 ACK 集群</span>
-<span class="t-p">$</span> helm install ack-ai-dashboard charts/ack-ai-dashboard -n kube-ai
-<span class="t-p">$</span> helm install ack-ai-dev-console charts/ack-ai-dev-console -n kube-ai</code></pre>
+        <pre class="terminal-body" id="quickstartCmd"><code><span class="t-c"># 克隆仓库，一条 Helm 命令完成部署（必填参数见部署指南）</span>
+<span class="t-p">$</span> git clone https://github.com/AliyunContainerService/data-on-ack.git
+<span class="t-p">$</span> helm install ai-dashboard data-on-ack/charts/ack-ai-dashboard -n kube-ai \
+    --set admin-ui.dashboard.ingress.hosts[0].host=<span class="t-c">&lt;你的域名&gt;</span> \
+    --set grafana.adminPassword=<span class="t-c">&lt;你的密码&gt;</span> <span class="t-c"># + Prometheus 数据源</span></code></pre>
       </div>
 
       <dl class="hero-stats reveal">
         <div class="stat"><dt data-count="2">0</dt><dd>双控制台协同</dd></div>
         <div class="stat"><dt data-count="4">0</dt><dd>核心开源组件</dd></div>
-        <div class="stat"><dt data-count="12">0</dt><dd>篇实战文档</dd></div>
+        <div class="stat"><dt data-count="13">0</dt><dd>篇实战文档</dd></div>
         <div class="stat"><dt>Apache-2.0</dt><dd>完全开源</dd></div>
       </dl>
     </div>
@@ -231,10 +233,10 @@
         <p>性能调优、GCS 容错、cGPU 共享、eRDMA 高性能传输。</p>
         <span class="doc-card-arrow"><svg><use href="#i-arrow"/></svg></span>
       </a>
-      <a class="doc-card reveal" href="{{ '/ray/3-e2e-examples/' | relative_url }}">
+      <a class="doc-card reveal" href="https://github.com/AliyunContainerService/data-on-ack/tree/main/ray/3-e2e-examples" target="_blank" rel="noopener">
         <span class="doc-card-icon"><svg><use href="#i-terminal"/></svg></span>
         <h3>Ray 端到端示例</h3>
-        <p>从数据处理到推理上线的完整落地示例，拿来即用。</p>
+        <p>从数据处理到推理上线的完整落地示例（英文版，翻译中）。</p>
         <span class="doc-card-arrow"><svg><use href="#i-arrow"/></svg></span>
       </a>
     </div>

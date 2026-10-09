@@ -32,6 +32,7 @@
     if (menuToggle) menuToggle.setAttribute("aria-expanded", "false");
     document.body.style.overflow = "";
   }
+  var mobileNav = $("#mobileNav");
   if (menuToggle && sidebar) {
     menuToggle.addEventListener("click", function () {
       var open = sidebar.classList.toggle("open");
@@ -42,6 +43,24 @@
     if (backdrop) backdrop.addEventListener("click", closeMenu);
     document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeMenu(); });
     sidebar.addEventListener("click", function (e) { if (e.target.closest("a")) closeMenu(); });
+  } else if (menuToggle && mobileNav) {
+    /* Pages without a docs sidebar (e.g. the landing page) get a dropdown nav. */
+    menuToggle.addEventListener("click", function () {
+      var open = document.body.classList.toggle("mobile-nav-open");
+      menuToggle.setAttribute("aria-expanded", String(open));
+    });
+    mobileNav.addEventListener("click", function (e) {
+      if (e.target.closest("a")) {
+        document.body.classList.remove("mobile-nav-open");
+        menuToggle.setAttribute("aria-expanded", "false");
+      }
+    });
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") {
+        document.body.classList.remove("mobile-nav-open");
+        menuToggle.setAttribute("aria-expanded", "false");
+      }
+    });
   }
 
   /* ---------- Reveal on scroll ---------- */
@@ -285,7 +304,7 @@
     overlay = document.createElement("div");
     overlay.className = "search-overlay";
     overlay.innerHTML =
-      '<div class="search-panel" role="dialog" aria-label="搜索文档">' +
+      '<div class="search-panel" role="dialog" aria-modal="true" aria-label="搜索文档">' +
         '<div class="search-input-row">' +
           '<svg><use href="#i-search"/></svg>' +
           '<input type="text" placeholder="搜索文档、指南、实践…" autocomplete="off" spellcheck="false">' +

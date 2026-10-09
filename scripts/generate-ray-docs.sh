@@ -49,6 +49,27 @@ escape_liquid() {
   perl -pe 's/(\{\{.*?\}\})/{% raw %}${1}{% endraw %}/g'
 }
 
+# Rewrite relative links so they survive publication:
+#   - sibling README_ZH.md links become the published pretty URL (dir with trailing slash)
+#   - links to companion files (yaml/sh/py/Dockerfile) become GitHub blob URLs
+# Directory links (trailing slash) already resolve correctly on the site.
+# Skips fenced code blocks. $1 = source dir relative to repo root (no trailing slash).
+rewrite_links() {
+  local base="$1"
+  perl -e '
+    my $base = shift;
+    my $fence = 0;
+    while (my $line = <STDIN>) {
+      if ($line =~ /^\s*```/) { $fence = !$fence; print $line; next; }
+      if (!$fence) {
+        $line =~ s{\]\(([^)#]*?)README_ZH\.md(#[^)]*)?\)}{ q{](} . (length $1 ? $1 : q{./}) . (defined $2 ? $2 : q{}) . q{)} }ge;
+        $line =~ s{\]\((?!https?:\/\/|#|\/|mailto:)([^)\s]+?)(?<!\/)\)}{](https:\/\/github.com\/AliyunContainerService\/data-on-ack\/blob\/main\/$base\/$1)}g;
+      }
+      print $line;
+    }
+  ' "$base"
+}
+
 # Generate pages for one guide dir; recurse into nested dirs (e.g. nixl/).
 # Only the Chinese version (README_ZH.md) is published, as index.md.
 generate_dir() {
@@ -69,6 +90,8 @@ generate_dir() {
 
     if [[ -n "$zh_title" ]]; then
       mkdir -p "$dst_dir/$name"
+      local rel_base="${subdir#"$ROOT"/}"
+      rel_base="${rel_base%/}"
       cat > "$dst_dir/$name/index.md" <<EOF
 ---
 title: "$zh_title"
@@ -77,7 +100,7 @@ parent: "$parent_title"
 ${sub_prefix:+nav_order: $sub_prefix}
 ---
 
-$(cat "$subdir/README_ZH.md" | escape_liquid)
+$(cat "$subdir/README_ZH.md" | escape_liquid | rewrite_links "$rel_base")
 EOF
       echo "generated: docs/ray/${dst_dir#$DST/}/$name/index.md"
     fi
