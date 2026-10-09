@@ -5,6 +5,7 @@ const resources = {
   zh: {
     translation: {
       brand: 'AI 套件运维控制台',
+      brandSub: 'Cluster Operations',
       menu: {
         dashboard: '集群概览',
         nodes: '节点管理',
@@ -17,6 +18,9 @@ const resources = {
         datasets: '数据集',
         images: '镜像管理',
         settings: '平台设置',
+        sectionObserve: '观测',
+        sectionManage: '管理',
+        sectionSystem: '系统',
       },
       cost: {
         title: '资源配额与成本看板',
@@ -76,6 +80,7 @@ const resources = {
       },
       user: {
         title: '用户管理',
+        headerDesc: '管理平台用户及其角色、用户组与访问凭据',
         userName: '用户名',
         role: '角色',
         groups: '用户组',
@@ -93,6 +98,7 @@ const resources = {
       },
       quota: {
         title: '弹性配额树',
+        headerDesc: '层级化命名空间配额：设置 CPU / 内存 / GPU 的最小保障与最大上限',
         addNode: '新增节点',
         deleteNode: '删除节点',
         editNode: '编辑节点',
@@ -120,6 +126,7 @@ const resources = {
       },
       group: {
         title: '用户组管理',
+        headerDesc: '将用户组织为组并绑定配额与默认角色',
         groupName: '组名',
         quotaBinding: '配额绑定',
         defaultRoles: '默认角色',
@@ -132,6 +139,7 @@ const resources = {
       },
       dataset: {
         title: '数据集管理',
+        headerDesc: '查看与管理集群中的数据集及其加速运行时',
         sourceType: '数据源类型',
         accelerate: '加速',
         runtime: '运行时',
@@ -141,6 +149,7 @@ const resources = {
       },
       node: {
         title: '节点管理',
+        headerDesc: '集群节点健康、GPU 状态与条件诊断，支持单节点与批量命令执行',
         hostname: '主机名',
         ip: '内网 IP',
         role: '角色',
@@ -164,6 +173,8 @@ const resources = {
         owner: '所有者',
         gpuCount: 'GPU 数量',
         created: '创建时间',
+        headerDesc: '集群中全部 Notebook、训练与推理工作负载的统一视图',
+        filterType: '按类型筛选',
       },
       event: {
         title: '集群事件',
@@ -172,6 +183,7 @@ const resources = {
         message: '详情',
         source: '来源',
         time: '时间',
+        object: '对象',
       },
       login: {
         title: 'AI 套件运维控制台',
@@ -179,6 +191,7 @@ const resources = {
         button: '使用阿里云 RAM 账号登录',
         subtitleForm: '登录以访问运维控制台',
         ssoNote: '登录将跳转到阿里云 RAM SSO 完成认证。仅授权账号可访问本控制台。',
+        heroDesc: '面向 GPU 集群的一体化观测与治理：节点、配额、工作负载与成本，尽收眼底。',
         feature1: 'GPU 集群管理与监控',
         feature2: '资源配额与成本分析',
         feature3: '多租户 RBAC 与安全',
@@ -187,6 +200,16 @@ const resources = {
       header: {
         logout: '退出登录',
         language: '语言',
+        role: '平台管理员',
+        live: '集群正常',
+        clusterHealthy: '集群运行正常',
+        expand: '展开侧边栏',
+        collapse: '收起侧边栏',
+      },
+      notFound: {
+        title: '页面不存在',
+        desc: '您访问的页面不存在或已被移动',
+        back: '返回集群概览',
       },
       dashboard: {
         cluster: '集群概览',
@@ -200,12 +223,31 @@ const resources = {
         allocated: '已分配',
         total: '总量',
         events: '最近事件',
+        heroDesc: '集群资源、节点健康与告警事件一览',
+        tabOverview: '资源总览',
+        clusterMonitor: '集群监控',
+        unitCores: '核',
+        unitCards: '卡',
+        nodesTotal: '节点总数',
+        nodesReady: '就绪',
+        nodesNotReady: '未就绪',
+        gpuNodes: 'GPU 节点',
+        noEvents: '暂无告警事件',
+        noEventsDesc: '集群运行平稳，当前没有需要关注的事件',
+      },
+      settings: {
+        headerDesc: '平台级配置：Notebook 闲置回收、默认镜像与环境提交',
+      },
+      image: {
+        headerDesc: '各节点上的 AI 运行时镜像清单与清理',
+        filterPlaceholder: '筛选镜像...',
       },
     },
   },
   en: {
     translation: {
       brand: 'AI Suite Ops Console',
+      brandSub: 'Cluster Operations',
       menu: {
         dashboard: 'Cluster Overview',
         nodes: 'Node Management',
@@ -218,6 +260,9 @@ const resources = {
         datasets: 'Datasets',
         images: 'Image Registry',
         settings: 'Settings',
+        sectionObserve: 'Observe',
+        sectionManage: 'Manage',
+        sectionSystem: 'System',
       },
       cost: {
         title: 'Resource Quota & Cost Dashboard',
@@ -277,6 +322,7 @@ const resources = {
       },
       user: {
         title: 'User Management',
+        headerDesc: 'Manage platform users, their roles, groups, and access credentials',
         userName: 'Username',
         role: 'Role',
         groups: 'Groups',
@@ -294,6 +340,7 @@ const resources = {
       },
       quota: {
         title: 'Elastic Quota Tree',
+        headerDesc: 'Hierarchical namespace quotas: set min guarantees and max limits for CPU, memory, and GPU',
         addNode: 'Add Node',
         deleteNode: 'Delete Node',
         editNode: 'Edit Node',
@@ -321,6 +368,7 @@ const resources = {
       },
       group: {
         title: 'User Group Management',
+        headerDesc: 'Organize users into groups with quota bindings and default roles',
         groupName: 'Group Name',
         quotaBinding: 'Quota Binding',
         defaultRoles: 'Default Roles',
@@ -333,6 +381,7 @@ const resources = {
       },
       dataset: {
         title: 'Dataset Management',
+        headerDesc: 'View and manage datasets and their acceleration runtimes in the cluster',
         sourceType: 'Source Type',
         accelerate: 'Accelerate',
         runtime: 'Runtime',
@@ -342,6 +391,7 @@ const resources = {
       },
       node: {
         title: 'Node Management',
+        headerDesc: 'Node health, GPU status, and condition diagnostics, with single-node and batch command execution',
         hostname: 'Hostname',
         ip: 'Internal IP',
         role: 'Role',
@@ -365,6 +415,8 @@ const resources = {
         owner: 'Owner',
         gpuCount: 'GPUs',
         created: 'Created',
+        headerDesc: 'A unified view of all notebook, training, and serving workloads in the cluster',
+        filterType: 'Filter by type',
       },
       event: {
         title: 'Cluster Events',
@@ -373,6 +425,7 @@ const resources = {
         message: 'Message',
         source: 'Source',
         time: 'Time',
+        object: 'Object',
       },
       login: {
         title: 'AI Suite Operations Console',
@@ -380,6 +433,7 @@ const resources = {
         button: 'Login with Alibaba Cloud RAM',
         subtitleForm: 'Sign in to access the operations console',
         ssoNote: 'You will be redirected to Alibaba Cloud RAM SSO for authentication. Only authorized accounts can access this console.',
+        heroDesc: 'Unified observability and governance for GPU clusters: nodes, quotas, workloads, and cost — all in one view.',
         feature1: 'GPU Cluster Management & Monitoring',
         feature2: 'Resource Quota & Cost Analytics',
         feature3: 'Multi-tenant RBAC & Security',
@@ -388,6 +442,16 @@ const resources = {
       header: {
         logout: 'Logout',
         language: 'Language',
+        role: 'Platform Administrator',
+        live: 'Cluster healthy',
+        clusterHealthy: 'Cluster is operating normally',
+        expand: 'Expand sidebar',
+        collapse: 'Collapse sidebar',
+      },
+      notFound: {
+        title: 'Page not found',
+        desc: 'The page you are looking for does not exist or has been moved',
+        back: 'Back to overview',
       },
       dashboard: {
         cluster: 'Cluster Overview',
@@ -401,6 +465,24 @@ const resources = {
         allocated: 'Allocated',
         total: 'Total',
         events: 'Recent Events',
+        heroDesc: 'Cluster resources, node health, and warning events at a glance',
+        tabOverview: 'Resources',
+        clusterMonitor: 'Cluster Monitoring',
+        unitCores: 'cores',
+        unitCards: 'cards',
+        nodesTotal: 'Total nodes',
+        nodesReady: 'Ready',
+        nodesNotReady: 'Not ready',
+        gpuNodes: 'GPU nodes',
+        noEvents: 'No warning events',
+        noEventsDesc: 'The cluster is healthy — nothing needs your attention right now',
+      },
+      settings: {
+        headerDesc: 'Platform-wide configuration: notebook idle culling, default images, and environment commits',
+      },
+      image: {
+        headerDesc: 'AI runtime images on each node, with cleanup',
+        filterPlaceholder: 'Filter images...',
       },
     },
   },

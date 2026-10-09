@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { lazy, Suspense } from 'react'
 import { createBrowserRouter, Navigate } from 'react-router-dom'
-import { Spin } from 'antd'
 import MainLayout from '@/layouts/MainLayout'
+import PageLoading from '@/components/PageLoading'
+import { useUserStore } from '@/store/user'
 
 const Login = lazy(() => import('@/pages/Login'))
 const Dashboard = lazy(() => import('@/pages/Dashboard'))
@@ -16,15 +17,11 @@ const ResearcherGroup = lazy(() => import('@/pages/ResearcherGroup'))
 const DatasetList = lazy(() => import('@/pages/DatasetList'))
 const Images = lazy(() => import('@/pages/Images'))
 const Settings = lazy(() => import('@/pages/Settings'))
+const NotFound = lazy(() => import('@/pages/NotFound'))
 
-const PageLoading = (
-  <div style={{ height: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-    <Spin size="large" />
-  </div>
+const withSuspense = (element: React.ReactNode) => (
+  <Suspense fallback={<PageLoading />}>{element}</Suspense>
 )
-
-const withSuspense = (element: React.ReactNode) => <Suspense fallback={PageLoading}>{element}</Suspense>
-import { useUserStore } from '@/store/user'
 
 function ProtectedLayout() {
   const user = useUserStore((s) => s.user)
@@ -46,11 +43,7 @@ function ProtectedLayout() {
   }, [fetchUserInfo, initialized])
 
   if (!initialized) {
-    return (
-      <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <Spin size="large" />
-      </div>
-    )
+    return <PageLoading fullScreen />
   }
   if (!user) {
     return <Navigate to="/login" replace />
@@ -75,6 +68,7 @@ export const router = createBrowserRouter([
       { path: '/datasets', element: withSuspense(<DatasetList />) },
       { path: '/images', element: withSuspense(<Images />) },
       { path: '/settings', element: withSuspense(<Settings />) },
+      { path: '*', element: withSuspense(<NotFound />) },
     ],
   },
 ])

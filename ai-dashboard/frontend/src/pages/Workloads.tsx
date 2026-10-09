@@ -3,6 +3,7 @@ import { Table, Tag, Card, Space, Button, Badge, Select, Typography } from 'antd
 import { ReloadOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { get } from '@/api/client'
+import PageHeader from '@/components/PageHeader'
 
 const { Text } = Typography
 
@@ -105,26 +106,29 @@ export default function Workloads() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-        <Space>
-          <Typography.Title level={5} style={{ margin: 0 }}>{t('workload.title')}</Typography.Title>
-          <Select
-            allowClear
-            placeholder="Filter by type"
-            style={{ width: 150 }}
-            value={kindFilter || undefined}
-            onChange={(v) => setKindFilter(v || '')}
-            options={[
-              { label: 'Notebook', value: 'Notebook' },
-              { label: 'PyTorchJob', value: 'PyTorchJob' },
-              { label: 'TFJob', value: 'TFJob' },
-              { label: 'MPIJob', value: 'MPIJob' },
-            ]}
-          />
-        </Space>
-        <Button icon={<ReloadOutlined />} onClick={fetchWorkloads} loading={loading}>{t('common.refresh')}</Button>
-      </div>
-      <Card bordered={false} style={{ borderRadius: 10 }}>
+      <PageHeader
+        title={t('workload.title')}
+        description={t('workload.headerDesc')}
+        extra={
+          <>
+            <Select
+              allowClear
+              placeholder={t('workload.filterType')}
+              style={{ width: 170 }}
+              value={kindFilter || undefined}
+              onChange={(v) => setKindFilter(v || '')}
+              options={[
+                { label: 'Notebook', value: 'Notebook' },
+                { label: 'PyTorchJob', value: 'PyTorchJob' },
+                { label: 'TFJob', value: 'TFJob' },
+                { label: 'MPIJob', value: 'MPIJob' },
+              ]}
+            />
+            <Button icon={<ReloadOutlined />} onClick={fetchWorkloads} loading={loading}>{t('common.refresh')}</Button>
+          </>
+        }
+      />
+      <Card bordered={false} style={{ borderRadius: 16 }} styles={{ body: { paddingTop: 8 } }}>
         <Table
           columns={columns}
           dataSource={filtered}

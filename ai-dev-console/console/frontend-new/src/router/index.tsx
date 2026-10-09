@@ -1,7 +1,7 @@
 import { lazy, Suspense } from 'react';
-import { createBrowserRouter, Navigate } from 'react-router-dom';
-import { Spin } from 'antd';
+import { createBrowserRouter } from 'react-router-dom';
 import MainLayout from '../layouts/MainLayout';
+import PageLoading from '../components/PageLoading';
 
 const Login = lazy(() => import('../pages/Login'));
 const Dashboard = lazy(() => import('../pages/Dashboard'));
@@ -12,14 +12,9 @@ const Serving = lazy(() => import('../pages/Serving'));
 const Models = lazy(() => import('../pages/Models'));
 const Datasets = lazy(() => import('../pages/Datasets'));
 const Experiments = lazy(() => import('../pages/Experiments'));
+const NotFound = lazy(() => import('../pages/NotFound'));
 
-const PageLoading = (
-  <div style={{ height: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-    <Spin size="large" />
-  </div>
-);
-
-const withSuspense = (element: React.ReactNode) => <Suspense fallback={PageLoading}>{element}</Suspense>;
+const withSuspense = (element: React.ReactNode) => <Suspense fallback={<PageLoading />}>{element}</Suspense>;
 
 export const router = createBrowserRouter([
   {
@@ -38,7 +33,7 @@ export const router = createBrowserRouter([
       { path: 'serving', element: withSuspense(<Serving />) },
       { path: 'models', element: withSuspense(<Models />) },
       { path: 'datasets', element: withSuspense(<Datasets />) },
+      { path: '*', element: withSuspense(<NotFound />) },
     ],
   },
-  { path: '*', element: <Navigate to="/" replace /> },
 ]);

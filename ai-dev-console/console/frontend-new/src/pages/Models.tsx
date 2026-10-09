@@ -1,14 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Card, Button, Tag, Space, Typography, Row, Col, Input, Empty, Modal, Form, Select,
+  Card, Button, Tag, Space, Typography, Row, Col, Input, Modal, Form, Select,
   message, Popconfirm,
 } from 'antd';
 import { PlusOutlined, RocketOutlined, SearchOutlined, AppstoreOutlined, DeleteOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
+import PageHeader from '../components/PageHeader';
+import EmptyState from '../components/EmptyState';
 import { useNavigate } from 'react-router-dom';
 import { get, post, del } from '../api/client';
 
-const { Title, Text, Paragraph } = Typography;
+const { Text } = Typography;
 
 interface ModelInfo {
   name: string;
@@ -102,50 +104,44 @@ const Models: React.FC = () => {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
-        <div>
-          <Title level={4} style={{ marginBottom: 4 }}>{t('models.title')}</Title>
-          <Text type="secondary">{t('models.desc')}</Text>
-        </div>
-        <Space>
-          <Input
-            prefix={<SearchOutlined />}
-            placeholder={t('common.search')}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            style={{ width: 220 }}
-            allowClear
-          />
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setRegisterOpen(true)}>
-            {t('models.register')}
-          </Button>
-        </Space>
-      </div>
+      <PageHeader
+        title={t('models.title')}
+        description={t('models.desc')}
+        extra={
+          <>
+            <Input
+              prefix={<SearchOutlined />}
+              placeholder={t('common.search')}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              style={{ width: 220 }}
+              allowClear
+            />
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => setRegisterOpen(true)}>
+              {t('models.register')}
+            </Button>
+          </>
+        }
+      />
 
       {filteredModels.length === 0 && !loading ? (
-        <Card bordered={false} style={{ borderRadius: 12 }}>
-          <Empty
-            image={<AppstoreOutlined style={{ fontSize: 64, color: '#d1d5db' }} />}
-            imageStyle={{ height: 80 }}
-            description={
-              <Space direction="vertical" size={4}>
-                <Text type="secondary">No models registered yet</Text>
-                <Paragraph type="secondary" style={{ fontSize: 13 }}>
-                  Register a model from training output, HuggingFace Hub, or ModelScope to manage versions and deploy to inference.
-                </Paragraph>
-              </Space>
+        <Card bordered={false} style={{ borderRadius: 16 }}>
+          <EmptyState
+            icon={<AppstoreOutlined />}
+            title={t('models.empty.title')}
+            description={t('models.empty.desc')}
+            action={
+              <Button type="primary" icon={<PlusOutlined />} onClick={() => setRegisterOpen(true)}>
+                {t('models.register')}
+              </Button>
             }
-          >
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => setRegisterOpen(true)}>
-              Register Model
-            </Button>
-          </Empty>
+          />
         </Card>
       ) : (
-        <Row gutter={[16, 16]}>
+        <Row gutter={[16, 16]} className="stagger">
           {filteredModels.map((model) => (
             <Col xs={24} sm={12} lg={8} key={`${model.namespace}/${model.name}`}>
-              <Card className="hover-card" bordered={false} style={{ borderRadius: 12 }}>
+              <Card className="hover-lift" bordered={false} style={{ borderRadius: 16 }}>
                 <Space direction="vertical" size={8} style={{ width: '100%' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <Text strong style={{ fontSize: 14 }}>{model.name}</Text>

@@ -7,6 +7,7 @@ import {
   PlusOutlined, DeleteOutlined, ReloadOutlined, ExperimentOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
+import PageHeader from '../components/PageHeader';
 import {
   listExperiments, createExperiment, deleteExperiment, getExperiment,
   ExperimentInfo, ExperimentRun, ExperimentCreateSpec,
@@ -149,28 +150,28 @@ const Experiments: React.FC = () => {
   };
 
   return (
-    <div style={{ padding: '0 4px' }}>
-      <div style={{ marginBottom: 20 }}>
-        <Title level={4} style={{ marginBottom: 4 }}>{t('experiment.title')}</Title>
-        <Text type="secondary">{t('experiment.desc')}</Text>
-      </div>
-
-      <Card
-        styles={{ body: { padding: 0 } }}
-        style={{ borderRadius: 14, border: 'none', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}
-        title={
-          <Space>
-            <ExperimentOutlined />
-            <span>{t('experiment.title')}</span>
-            <Badge count={experiments.length} style={{ backgroundColor: '#f0f0f0', color: '#666' }} />
-          </Space>
-        }
+    <div>
+      <PageHeader
+        title={t('experiment.title')}
+        description={t('experiment.desc')}
         extra={
-          <Space>
+          <>
             <Button icon={<ReloadOutlined />} onClick={fetchData}>{t('common.refresh')}</Button>
             <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
               {t('experiment.create')}
             </Button>
+          </>
+        }
+      />
+
+      <Card
+        styles={{ body: { padding: 0 } }}
+        style={{ borderRadius: 16, border: 'none' }}
+        title={
+          <Space>
+            <ExperimentOutlined />
+            <span>{t('experiment.listTitle')}</span>
+            <Badge count={experiments.length} style={{ backgroundColor: 'var(--accent-soft)', color: 'var(--accent)' }} />
           </Space>
         }
       >

@@ -18,8 +18,9 @@ import {
   getNotebookSSHInfo, resizeNotebook,
   NotebookInfo, NotebookSpec, NotebookSSHInfo, NOTEBOOK_TEMPLATES, RESOURCE_PRESETS, NotebookTemplate,
 } from '../api/notebook';
+import PageHeader from '../components/PageHeader';
 
-const { Title, Text, Paragraph } = Typography;
+const { Text, Paragraph } = Typography;
 
 const statusConfig: Record<string, { color: string; label: string }> = {
   Running: { color: 'green', label: 'Running' },
@@ -291,13 +292,13 @@ const Notebooks: React.FC = () => {
 
   // Card view for notebooks
   const renderCardView = () => (
-    <Row gutter={[16, 16]}>
+    <Row gutter={[16, 16]} className="stagger">
       {notebooks.map((nb) => (
         <Col xs={24} sm={12} lg={8} xl={6} key={`${nb.namespace}/${nb.name}`}>
           <Card
-            className="hover-card"
+            className="hover-lift"
             size="small"
-            style={{ borderRadius: 10 }}
+            style={{ borderRadius: 16 }}
             actions={[
               nb.status === 'Running' && nb.url ? (
                 <a href={nb.url} target="_blank" rel="noreferrer"><LinkOutlined /> Open</a>
@@ -343,30 +344,30 @@ const Notebooks: React.FC = () => {
   return (
     <div>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
-        <div>
-          <Title level={4} style={{ marginBottom: 4 }}>{t('notebook.title')}</Title>
-          <Text type="secondary">{t('notebook.desc')}</Text>
-        </div>
-        <Space>
-          <Segmented
-            options={[
-              { value: 'list', icon: <UnorderedListOutlined /> },
-              { value: 'card', icon: <AppstoreOutlined /> },
-            ]}
-            value={viewMode}
-            onChange={(v) => setViewMode(v as string)}
-          />
-          <Button icon={<ReloadOutlined />} onClick={fetchData} />
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateModalOpen(true)}>
-            {t('notebook.create')}
-          </Button>
-        </Space>
-      </div>
+      <PageHeader
+        title={t('notebook.title')}
+        description={t('notebook.desc')}
+        extra={
+          <>
+            <Segmented
+              options={[
+                { value: 'list', icon: <UnorderedListOutlined /> },
+                { value: 'card', icon: <AppstoreOutlined /> },
+              ]}
+              value={viewMode}
+              onChange={(v) => setViewMode(v as string)}
+            />
+            <Button icon={<ReloadOutlined />} onClick={fetchData} />
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateModalOpen(true)}>
+              {t('notebook.create')}
+            </Button>
+          </>
+        }
+      />
 
       {/* Content */}
       {viewMode === 'list' ? (
-        <Card bordered={false} style={{ borderRadius: 12 }}>
+        <Card bordered={false} style={{ borderRadius: 16 }} styles={{ body: { paddingTop: 8 } }}>
           <Table
             columns={columns}
             dataSource={notebooks}

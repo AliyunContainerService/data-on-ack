@@ -17,8 +17,9 @@ import {
   TrainingJobInfo, TrainingJobSpec, PodInfo, EventInfo,
   GPUMetricsResponse, ExperimentInfo,
 } from '../api/training';
+import PageHeader from '../components/PageHeader';
 
-const { Title, Text } = Typography;
+const { Text } = Typography;
 
 const statusConfig: Record<string, { status: 'processing' | 'success' | 'error' | 'warning' | 'default'; text: string }> = {
   Running: { status: 'processing', text: 'Running' },
@@ -411,20 +412,20 @@ const Training: React.FC = () => {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
-        <div>
-          <Title level={4} style={{ marginBottom: 4 }}>{t('training.title')}</Title>
-          <Text type="secondary">{t('training.desc')}</Text>
-        </div>
-        <Space>
-          <Button icon={<ReloadOutlined />} onClick={fetchData} />
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
-            {t('training.create')}
-          </Button>
-        </Space>
-      </div>
+      <PageHeader
+        title={t('training.title')}
+        description={t('training.desc')}
+        extra={
+          <>
+            <Button icon={<ReloadOutlined />} onClick={fetchData} />
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
+              {t('training.create')}
+            </Button>
+          </>
+        }
+      />
 
-      <Card bordered={false} style={{ borderRadius: 14 }}>
+      <Card bordered={false} style={{ borderRadius: 16 }} styles={{ body: { paddingTop: 8 } }}>
         <Table
           columns={columns}
           dataSource={jobs}

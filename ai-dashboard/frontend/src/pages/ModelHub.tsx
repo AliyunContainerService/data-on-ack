@@ -9,8 +9,9 @@ import {
 } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { get, post, getErrorMessage } from '@/api/client'
+import PageHeader from '@/components/PageHeader'
 
-const { Title, Text } = Typography
+const { Text } = Typography
 
 interface ModelInfo {
   name: string
@@ -236,16 +237,16 @@ export default function ModelHub() {
   }
 
   return (
-    <div style={{ padding: '0 4px' }}>
-      <div style={{ marginBottom: 20 }}>
-        <Title level={4} style={{ marginBottom: 4 }}>{t('model.title')}</Title>
-        <Text type="secondary">{t('model.desc')}</Text>
-      </div>
+    <div>
+      <PageHeader
+        title={t('model.title')}
+        description={t('model.desc')}
+        extra={<Button icon={<ReloadOutlined />} onClick={fetchModels}>{t('common.refresh')}</Button>}
+      />
 
       <Card
-        title={<Space><AppstoreOutlined />{t('model.title')}<Badge count={models.length} style={{ backgroundColor: '#f0f0f0', color: '#666' }} /></Space>}
-        extra={<Button icon={<ReloadOutlined />} onClick={fetchModels}>{t('common.refresh')}</Button>}
-        style={{ borderRadius: 14, border: 'none', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}
+        title={<Space><AppstoreOutlined />{t('model.versions')}<Badge count={models.length} style={{ backgroundColor: 'var(--accent-soft)', color: 'var(--accent)' }} /></Space>}
+        style={{ borderRadius: 16, border: 'none' }}
         styles={{ body: { padding: 0 } }}
         loading={loading}
       >

@@ -1,20 +1,30 @@
 import React, { useEffect, useState } from 'react';
-import { Card, Row, Col, Statistic, Typography, Spin, Space, Button } from 'antd';
+import { Card, Row, Col, Typography } from 'antd';
 import {
   CodeOutlined,
   ThunderboltOutlined,
   CloudServerOutlined,
   RocketOutlined,
   ExperimentOutlined,
-  PlusOutlined,
   ArrowRightOutlined,
+  InboxOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { getOverview, DashboardOverview } from '../api/user';
 import { useUserStore } from '../store/user';
+import CountUp from '../components/CountUp';
+import EmptyState from '../components/EmptyState';
 
-const { Title, Text, Paragraph } = Typography;
+const { Text } = Typography;
+
+function greetingKey(): string {
+  const h = new Date().getHours();
+  if (h < 6) return 'dashboard.greeting.night';
+  if (h < 12) return 'dashboard.greeting.morning';
+  if (h < 18) return 'dashboard.greeting.afternoon';
+  return 'dashboard.greeting.evening';
+}
 
 const Dashboard: React.FC = () => {
   const { t } = useTranslation();
@@ -30,94 +40,118 @@ const Dashboard: React.FC = () => {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) {
-    return <Spin size="large" style={{ display: 'block', margin: '120px auto' }} />;
-  }
-
   const statCards = [
     {
       title: t('dashboard.notebooks'),
-      icon: <CodeOutlined style={{ fontSize: 20 }} />,
+      icon: <CodeOutlined style={{ fontSize: 18 }} />,
       data: overview?.notebooks,
-      className: 'stat-card-blue',
-      color: '#1677ff',
+      color: '#6366f1',
       path: '/notebooks',
     },
     {
       title: t('dashboard.training'),
-      icon: <ThunderboltOutlined style={{ fontSize: 20 }} />,
+      icon: <ThunderboltOutlined style={{ fontSize: 18 }} />,
       data: overview?.trainingJobs,
-      className: 'stat-card-purple',
-      color: '#722ed1',
+      color: '#a855f7',
       path: '/training',
     },
     {
       title: t('dashboard.serving'),
-      icon: <CloudServerOutlined style={{ fontSize: 20 }} />,
+      icon: <CloudServerOutlined style={{ fontSize: 18 }} />,
       data: overview?.servingJobs,
-      className: 'stat-card-green',
-      color: '#13c2c2',
+      color: '#0ea5e9',
       path: '/serving',
     },
   ];
 
   const quickActions = [
-    { icon: <CodeOutlined />, label: t('dashboard.quickstart.notebook'), path: '/notebooks', color: '#1677ff' },
-    { icon: <ThunderboltOutlined />, label: t('dashboard.quickstart.training'), path: '/training', color: '#722ed1' },
-    { icon: <RocketOutlined />, label: t('dashboard.quickstart.deploy'), path: '/serving', color: '#13c2c2' },
-    { icon: <ExperimentOutlined />, label: t('dashboard.quickstart.models'), path: '/models', color: '#eb2f96' },
+    { icon: <CodeOutlined />, label: t('dashboard.quickstart.notebook'), path: '/notebooks', color: '#6366f1' },
+    { icon: <ThunderboltOutlined />, label: t('dashboard.quickstart.training'), path: '/training', color: '#a855f7' },
+    { icon: <RocketOutlined />, label: t('dashboard.quickstart.deploy'), path: '/serving', color: '#0ea5e9' },
+    { icon: <ExperimentOutlined />, label: t('dashboard.quickstart.models'), path: '/models', color: '#d946ef' },
   ];
+
+  const runningTotal =
+    (overview?.notebooks?.running ?? 0) + (overview?.trainingJobs?.running ?? 0) + (overview?.servingJobs?.running ?? 0);
+  const pendingTotal =
+    (overview?.notebooks?.pending ?? 0) + (overview?.trainingJobs?.pending ?? 0) + (overview?.servingJobs?.pending ?? 0);
+  const failedTotal =
+    (overview?.notebooks?.failed ?? 0) + (overview?.trainingJobs?.failed ?? 0) + (overview?.servingJobs?.failed ?? 0);
 
   return (
     <div>
       {/* Welcome header */}
-      <div style={{ marginBottom: 28 }}>
-        <Title level={4} style={{ marginBottom: 4 }}>
-          {t('dashboard.welcome')}, {user?.loginName || user?.name || 'Developer'}
-        </Title>
-        <Text type="secondary">{t('dashboard.overview')}</Text>
+      <div className="anim-fade-up" style={{ marginBottom: 28 }}>
+        <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text-1)' }}>
+          {t(greetingKey())}, {user?.loginName || user?.name || 'Developer'}
+        </h1>
+        <p style={{ margin: '6px 0 0', fontSize: 13, color: 'var(--text-2)' }}>{t('dashboard.overview')}</p>
       </div>
 
       {/* Stat cards */}
-      <Row gutter={[20, 20]} style={{ marginBottom: 28 }}>
-        {statCards.map((card) => (
-          <Col xs={24} md={8} key={card.title}>
+      <Row gutter={[20, 20]} style={{ marginBottom: 24 }} className="stagger">
+        {statCards.map((card, i) => (
+          <Col xs={24} md={8} key={card.title} style={{ ['--i' as string]: i }}>
             <Card
-              className={`hover-card ${card.className}`}
+              className="hover-lift pressable"
               bordered={false}
-              style={{ borderRadius: 12, cursor: 'pointer' }}
+              style={{ borderRadius: 16, cursor: 'pointer', height: '100%' }}
               onClick={() => navigate(card.path)}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div>
-                  <Space style={{ marginBottom: 16 }}>
-                    <div style={{
-                      width: 36, height: 36, borderRadius: 8,
-                      background: `${card.color}15`,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      color: card.color,
-                    }}>
-                      {card.icon}
+              {loading ? (
+                <div className="skeleton-block" style={{ height: 96, borderRadius: 12 }} />
+              ) : (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div
+                        style={{
+                          width: 34,
+                          height: 34,
+                          borderRadius: 10,
+                          background: `${card.color}14`,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: card.color,
+                        }}
+                      >
+                        {card.icon}
+                      </div>
+                      <Text strong style={{ fontSize: 14 }}>
+                        {card.title}
+                      </Text>
                     </div>
-                    <Text strong style={{ fontSize: 15 }}>{card.title}</Text>
-                  </Space>
-                  <div style={{ display: 'flex', gap: 24 }}>
-                    <Statistic
-                      value={card.data?.total ?? 0}
-                      suffix={<Text type="secondary" style={{ fontSize: 12 }}>{t('dashboard.total')}</Text>}
-                      valueStyle={{ fontSize: 28, fontWeight: 600 }}
-                    />
+                    <ArrowRightOutlined style={{ color: card.color, opacity: 0.55, fontSize: 13 }} />
                   </div>
-                  <div style={{ marginTop: 8, display: 'flex', gap: 16 }}>
-                    <Text style={{ color: '#52c41a', fontSize: 12 }}>{card.data?.running ?? 0} {t('dashboard.running')}</Text>
-                    <Text style={{ color: '#faad14', fontSize: 12 }}>{card.data?.pending ?? 0} {t('dashboard.pending')}</Text>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                    <span style={{ fontSize: 34, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text-1)', lineHeight: 1 }}>
+                      <CountUp value={card.data?.total ?? 0} />
+                    </span>
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                      {t('dashboard.total')}
+                    </Text>
+                  </div>
+                  <div style={{ marginTop: 10, display: 'flex', gap: 14 }}>
+                    <span className="status-pill ok">
+                      <span className="dot" />
+                      <CountUp value={card.data?.running ?? 0} /> {t('dashboard.running')}
+                    </span>
+                    {(card.data?.pending ?? 0) > 0 && (
+                      <span className="status-pill warn">
+                        <span className="dot" />
+                        <CountUp value={card.data?.pending ?? 0} /> {t('dashboard.pending')}
+                      </span>
+                    )}
                     {(card.data?.failed ?? 0) > 0 && (
-                      <Text style={{ color: '#ff4d4f', fontSize: 12 }}>{card.data?.failed} {t('dashboard.failed')}</Text>
+                      <span className="status-pill err">
+                        <span className="dot" />
+                        <CountUp value={card.data?.failed ?? 0} /> {t('dashboard.failed')}
+                      </span>
                     )}
                   </div>
-                </div>
-                <ArrowRightOutlined style={{ color: card.color, opacity: 0.5 }} />
-              </div>
+                </>
+              )}
             </Card>
           </Col>
         ))}
@@ -127,78 +161,95 @@ const Dashboard: React.FC = () => {
       <Card
         title={<Text strong>{t('dashboard.quickstart')}</Text>}
         bordered={false}
-        style={{ borderRadius: 12, marginBottom: 20 }}
+        style={{ borderRadius: 16, marginBottom: 24 }}
+        className="anim-fade-up"
       >
-        <Row gutter={[16, 16]}>
-          {quickActions.map((action) => (
-            <Col xs={24} sm={12} md={6} key={action.label}>
-              <Button
-                block
-                size="large"
-                icon={<PlusOutlined />}
+        <Row gutter={[16, 16]} className="stagger">
+          {quickActions.map((action, i) => (
+            <Col xs={24} sm={12} md={6} key={action.label} style={{ ['--i' as string]: i }}>
+              <div
+                role="button"
+                tabIndex={0}
+                className="pressable"
                 onClick={() => navigate(action.path)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') navigate(action.path);
+                }}
                 style={{
-                  height: 64,
+                  height: 72,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  borderRadius: 10,
-                  borderStyle: 'dashed',
-                  gap: 8,
+                  gap: 10,
+                  borderRadius: 12,
+                  border: '1px dashed var(--border-1)',
+                  cursor: 'pointer',
+                  background: 'var(--bg-sunken)',
+                  transition: 'border-color 0.16s cubic-bezier(0.22,1,0.36,1), background 0.16s cubic-bezier(0.22,1,0.36,1)',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = action.color;
+                  e.currentTarget.style.background = `${action.color}0a`;
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--border-1)';
+                  e.currentTarget.style.background = 'var(--bg-sunken)';
                 }}
               >
-                <Space>
-                  <span style={{ color: action.color }}>{action.icon}</span>
-                  <span style={{ fontSize: 13 }}>{action.label}</span>
-                </Space>
-              </Button>
+                <span style={{ color: action.color, fontSize: 16 }}>{action.icon}</span>
+                <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-1)' }}>{action.label}</span>
+              </div>
             </Col>
           ))}
         </Row>
       </Card>
 
       {/* Platform info */}
-      <Row gutter={[20, 20]}>
-        <Col xs={24} md={12}>
-          <Card bordered={false} style={{ borderRadius: 12, height: '100%' }}>
-            <Title level={5}>{t('dashboard.status.title')}</Title>
-            <Paragraph type="secondary" style={{ marginBottom: 16 }}>
-              {t('dashboard.status.desc')}
-            </Paragraph>
+      <Row gutter={[20, 20]} className="stagger">
+        <Col xs={24} md={12} style={{ ['--i' as string]: 0 }}>
+          <Card bordered={false} style={{ borderRadius: 16, height: '100%' }}>
+            <h3 style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 600, color: 'var(--text-1)' }}>
+              {t('dashboard.status.title')}
+            </h3>
+            <p style={{ margin: '0 0 20px', fontSize: 12, color: 'var(--text-2)' }}>{t('dashboard.status.desc')}</p>
             <Row gutter={16}>
               <Col span={8}>
-                <Statistic
-                  title={t('dashboard.running')}
-                  value={(overview?.notebooks?.running ?? 0) + (overview?.trainingJobs?.running ?? 0) + (overview?.servingJobs?.running ?? 0)}
-                  valueStyle={{ color: '#52c41a' }}
-                />
+                <div style={{ textAlign: 'center' }}>
+                  <div className="tnum" style={{ fontSize: 26, fontWeight: 700, color: 'var(--ok)' }}>
+                    <CountUp value={runningTotal} />
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 2 }}>{t('dashboard.running')}</div>
+                </div>
               </Col>
               <Col span={8}>
-                <Statistic
-                  title={t('dashboard.pending')}
-                  value={(overview?.notebooks?.pending ?? 0) + (overview?.trainingJobs?.pending ?? 0) + (overview?.servingJobs?.pending ?? 0)}
-                  valueStyle={{ color: '#faad14' }}
-                />
+                <div style={{ textAlign: 'center' }}>
+                  <div className="tnum" style={{ fontSize: 26, fontWeight: 700, color: 'var(--warn)' }}>
+                    <CountUp value={pendingTotal} />
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 2 }}>{t('dashboard.pending')}</div>
+                </div>
               </Col>
               <Col span={8}>
-                <Statistic
-                  title={t('dashboard.failed')}
-                  value={(overview?.notebooks?.failed ?? 0) + (overview?.trainingJobs?.failed ?? 0) + (overview?.servingJobs?.failed ?? 0)}
-                  valueStyle={{ color: '#ff4d4f' }}
-                />
+                <div style={{ textAlign: 'center' }}>
+                  <div className="tnum" style={{ fontSize: 26, fontWeight: 700, color: 'var(--err)' }}>
+                    <CountUp value={failedTotal} />
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 2 }}>{t('dashboard.failed')}</div>
+                </div>
               </Col>
             </Row>
           </Card>
         </Col>
-        <Col xs={24} md={12}>
-          <Card bordered={false} style={{ borderRadius: 12, height: '100%' }}>
-            <Title level={5}>{t('dashboard.recent')}</Title>
-            <Paragraph type="secondary">
-              Your recent activities will appear here
-            </Paragraph>
-            <div style={{ color: '#9ca3af', textAlign: 'center', padding: '20px 0' }}>
-              {t('common.nodata')}
-            </div>
+        <Col xs={24} md={12} style={{ ['--i' as string]: 1 }}>
+          <Card bordered={false} style={{ borderRadius: 16, height: '100%' }}>
+            <h3 style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 600, color: 'var(--text-1)' }}>
+              {t('dashboard.recent')}
+            </h3>
+            <EmptyState
+              icon={<InboxOutlined />}
+              title={t('common.nodata')}
+              description={t('dashboard.recentEmpty')}
+            />
           </Card>
         </Col>
       </Row>

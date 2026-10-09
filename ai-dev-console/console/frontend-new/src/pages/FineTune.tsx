@@ -8,6 +8,7 @@ import {
   DatabaseOutlined, SettingOutlined, SendOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
+import PageHeader from '../components/PageHeader';
 import { useNavigate } from 'react-router-dom';
 import { createTrainingJob, TrainingJobSpec } from '../api/training';
 import { get } from '../api/client';
@@ -154,12 +155,12 @@ const FineTune: React.FC = () => {
 
   return (
     <div>
-      <div style={{ marginBottom: 24 }}>
-        <Title level={4} style={{ marginBottom: 4 }}>{isZh ? '模型微调' : 'Fine-Tuning'}</Title>
-        <Text type="secondary">{isZh ? '选择基座模型、数据集和微调方法，一键提交训练任务' : 'Select base model, dataset, and method to submit a fine-tuning job'}</Text>
-      </div>
+      <PageHeader
+        title={isZh ? '模型微调' : 'Fine-Tuning'}
+        description={isZh ? '选择基座模型、数据集和微调方法，一键提交训练任务' : 'Select base model, dataset, and method to submit a fine-tuning job'}
+      />
 
-      <Card bordered={false} style={{ borderRadius: 14, marginBottom: 20 }}>
+      <Card bordered={false} style={{ borderRadius: 16, marginBottom: 20 }}>
         <Steps current={step} size="small" items={steps} style={{ marginBottom: 32 }} />
 
         {/* Step 0: Select Model */}

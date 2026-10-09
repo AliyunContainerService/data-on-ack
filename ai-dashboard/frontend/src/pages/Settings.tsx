@@ -3,6 +3,7 @@ import { Card, Form, InputNumber, Input, Button, Space, Typography, message, Div
 import { SaveOutlined, ReloadOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { get, post, getErrorMessage } from '@/api/client'
+import PageHeader from '@/components/PageHeader'
 
 const { Title, Text, Paragraph } = Typography
 
@@ -47,17 +48,20 @@ export default function Settings() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-        <Title level={5} style={{ margin: 0 }}>{t('menu.settings')}</Title>
-        <Space>
-          <Button icon={<ReloadOutlined />} onClick={fetchConfig} loading={loading}>{t('common.refresh')}</Button>
-          <Button type="primary" icon={<SaveOutlined />} onClick={handleSave} loading={saving}>{t('common.save')}</Button>
-        </Space>
-      </div>
+      <PageHeader
+        title={t('menu.settings')}
+        description={t('settings.headerDesc')}
+        extra={
+          <>
+            <Button icon={<ReloadOutlined />} onClick={fetchConfig} loading={loading}>{t('common.refresh')}</Button>
+            <Button type="primary" icon={<SaveOutlined />} onClick={handleSave} loading={saving}>{t('common.save')}</Button>
+          </>
+        }
+      />
 
       <Form form={form} layout="vertical" style={{ maxWidth: 720 }}>
         {/* Idle Culling */}
-        <Card bordered={false} style={{ borderRadius: 10, marginBottom: 16 }}>
+        <Card bordered={false} style={{ borderRadius: 16, marginBottom: 16 }}>
           <Title level={5}>Notebook Idle Culling</Title>
           <Paragraph type="secondary" style={{ marginBottom: 16 }}>
             Automatically stop idle Notebooks to reclaim GPU/CPU resources.
@@ -77,7 +81,7 @@ export default function Settings() {
         </Card>
 
         {/* Default Images */}
-        <Card bordered={false} style={{ borderRadius: 10, marginBottom: 16 }}>
+        <Card bordered={false} style={{ borderRadius: 16, marginBottom: 16 }}>
           <Title level={5}>Default Notebook Images</Title>
           <Paragraph type="secondary" style={{ marginBottom: 16 }}>
             Pre-configured images available in the "Create Notebook" template gallery on the developer console.
@@ -97,7 +101,7 @@ export default function Settings() {
         </Card>
 
         {/* Commit Agent Registry */}
-        <Card bordered={false} style={{ borderRadius: 10, marginBottom: 16 }}>
+        <Card bordered={false} style={{ borderRadius: 16, marginBottom: 16 }}>
           <Title level={5}>Environment Commit Settings</Title>
           <Paragraph type="secondary" style={{ marginBottom: 16 }}>
             Configure the target container registry where commit-agent pushes saved notebook environments.
