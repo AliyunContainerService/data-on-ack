@@ -253,10 +253,6 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV TORCH_CUDA_ARCH_LIST="7.0;7.5;8.0;8.6;8.9;9.0;12.0"
 ENV FORCE_CUDA=1
 
-# init conda for non-interactive use
-RUN conda init bash
-SHELL ["/bin/bash", "-c"]
-
 RUN apt-get update && apt-get install -y --no-install-recommends \
         git \
         wget \
@@ -304,18 +300,17 @@ RUN pip install --no-cache-dir -r /root/.cache/data_juicer/assets/HaWoR/requirem
 # chumpy needs --no-build-isolation, install separately
 RUN pip install --no-cache-dir --no-build-isolation "chumpy @ git+https://github.com/mattloper/chumpy"
 
-RUN pip install --no-cache-dir scipy pyarrow av opencv-contrib-python Pillow
-RUN pip install --no-cache-dir openai
-RUN pip install numpy==1.26.4
-RUN pip install opencv-python==4.10.0.84 opencv-contrib-python==4.10.0.84
-RUN pip install --upgrade --force-reinstall click
+RUN pip install --no-cache-dir scipy pyarrow av Pillow openai
+RUN pip install --no-cache-dir \
+    "numpy==1.26.4" \
+    "opencv-python==4.10.0.84" \
+    "opencv-contrib-python==4.10.0.84" \
+    "pydantic==2.10.6" \
+    "click>=7.0"
 
-# ===============create mega-sam conda environment================
-RUN conda create -n mega-sam --clone base -y
-
-# clone mega-sam repository and patch source code:
-#   - replace .type() with .scalar_type() for newer PyTorch
-#   - add L20(8.9), H20(9.0), and Blackwell(12.0) CUDA arch support
+# 克隆 MegaSAM 并修改源码：
+#   - 将 .type() 替换为 .scalar_type()，以兼容新版 PyTorch
+#   - 增加 L20（8.9）、H20（9.0）和 Blackwell（12.0）CUDA 架构支持
 RUN git clone --recursive https://github.com/mega-sam/mega-sam.git /root/.cache/data_juicer/assets/mega-sam \
     && cd /root/.cache/data_juicer/assets/mega-sam \
     && sed -i 's/\.type()/\.scalar_type()/g' \
@@ -326,15 +321,14 @@ RUN git clone --recursive https://github.com/mega-sam/mega-sam.git /root/.cache/
         base/thirdparty/lietorch/lietorch/src/lietorch_cpu.cpp \
     && sed -i "/compute_86,code=sm_86/a\                    '-gencode=arch=compute_89,code=sm_89',\n                    '-gencode=arch=compute_90,code=sm_90',\n                    '-gencode=arch=compute_120,code=sm_120'," base/setup.py
 
-# build droid_backends + lietorch (CUDA compile, time-consuming)
-RUN cd /root/.cache/data_juicer/assets/mega-sam/base && conda run -n mega-sam python setup.py install
+# 在共享 Python 环境中编译 droid_backends 和 lietorch。
+RUN cd /root/.cache/data_juicer/assets/mega-sam/base && python setup.py install
 
-RUN conda run -n mega-sam pip install --force-reinstall pydantic pydantic-core typing-extensions
-RUN conda run -n mega-sam pip install numpy==1.26.4
-RUN conda run -n mega-sam pip install opencv-python==4.10.0.84 opencv-contrib-python==4.10.0.84
-RUN conda run -n mega-sam pip install --upgrade --force-reinstall click
+# 依赖不兼容或运行时模块无法导入时，直接终止镜像构建。
+RUN pip check \
+    && python -c "import cv2, data_juicer, droid_backends, lietorch, numpy, pydantic, ray, torch; assert data_juicer.__version__ == '1.6.0'; assert ray.__version__ == '2.56.0'; assert numpy.__version__ == '1.26.4'; assert cv2.__version__ == '4.10.0'; assert pydantic.__version__ == '2.10.6'"
 
-RUN conda clean -afy && pip cache purge 2>/dev/null || true
+RUN pip cache purge 2>/dev/null || true
 
 WORKDIR /workspace
 
@@ -956,7 +950,6 @@ def run() -> None:
         batch_size=GPU_BATCH_SIZE,
         num_gpus=COMBINED_GPUS,
         batch_format="pyarrow",
-        runtime_env={"conda": "mega-sam"},
         compute=combined_pool,
     )
     ds = ds.map_batches(
@@ -1478,6 +1471,296 @@ export DOCKER_CONFIG_JSON_BASE64="$(
     | base64 \
     | tr -d '\r\n'
 )"
+```
+
+创建 `rayjob.yaml.tpl`，内容如下：
+
+```yaml
+apiVersion: ray.io/v1
+kind: RayJob
+metadata:
+  name: "${RAY_JOB_NAME}"
+  namespace: "${NAMESPACE}"
+  labels:
+    app.kubernetes.io/name: vla-ray-job
+    app.kubernetes.io/component: rayjob
+spec:
+  submissionMode: K8sJobMode
+  entrypoint: "python /data/oss/code/vla_pipeline.py"
+  shutdownAfterJobFinishes: true
+  ttlSecondsAfterFinished: 600
+
+  submitterPodTemplate:
+    metadata:
+      labels:
+        app.kubernetes.io/name: vla-ray-job
+        app.kubernetes.io/component: submitter
+        app.kubernetes.io/instance: "${RAY_JOB_NAME}"
+    spec:
+      restartPolicy: Never
+      imagePullSecrets:
+        - name: "${IMAGE_PULL_SECRET_NAME}"
+      containers:
+        - name: ray-job-submitter
+          image: "${RAY_IMAGE}"
+          imagePullPolicy: IfNotPresent
+
+  rayClusterSpec:
+    rayVersion: "${RAY_VERSION}"
+    enableInTreeAutoscaling: true
+    autoscalerOptions:
+      upscalingMode: Aggressive
+      idleTimeoutSeconds: 120
+      imagePullPolicy: IfNotPresent
+
+    headGroupSpec:
+      rayStartParams:
+        dashboard-host: "0.0.0.0"
+        num-cpus: "0"
+        object-store-memory: "4294967296"
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: vla-ray-job
+            app.kubernetes.io/component: head
+            app.kubernetes.io/instance: "${RAY_JOB_NAME}"
+        spec:
+          imagePullSecrets:
+            - name: "${IMAGE_PULL_SECRET_NAME}"
+          containers:
+            - name: ray-head
+              image: "${RAY_IMAGE}"
+              imagePullPolicy: IfNotPresent
+              workingDir: /data/oss/code
+              env:
+                - name: PYTHONPATH
+                  value: /data/oss/code
+                - name: OPENAI_API_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: "${OPENAI_SECRET_NAME}"
+                      key: OPENAI_API_KEY
+                - name: OPENAI_BASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: "${OPENAI_SECRET_NAME}"
+                      key: OPENAI_BASE_URL
+              ports:
+                - name: gcs-server
+                  containerPort: 6379
+                  protocol: TCP
+                - name: dashboard
+                  containerPort: 8265
+                  protocol: TCP
+                - name: client
+                  containerPort: 10001
+                  protocol: TCP
+              resources:
+                requests:
+                  cpu: "4"
+                  memory: 16Gi
+                limits:
+                  cpu: "8"
+                  memory: 24Gi
+              volumeMounts:
+                - name: oss-root
+                  mountPath: /data/oss
+                  readOnly: true
+                - name: oss-output
+                  mountPath: /data/output
+                - name: dshm
+                  mountPath: /dev/shm
+                - name: raytmp
+                  mountPath: /tmp/ray
+                - name: workdir
+                  mountPath: /data/work
+          volumes:
+            - name: oss-root
+              persistentVolumeClaim:
+                claimName: "${OSS_ROOT_PVC_NAME}"
+                readOnly: true
+            - name: oss-output
+              persistentVolumeClaim:
+                claimName: "${OSS_OUTPUT_PVC_NAME}"
+            - name: dshm
+              emptyDir:
+                medium: Memory
+                sizeLimit: 8Gi
+            - name: raytmp
+              emptyDir:
+                sizeLimit: 30Gi
+            - name: workdir
+              persistentVolumeClaim:
+                claimName: "${OSS_OUTPUT_PVC_NAME}"
+
+    workerGroupSpecs:
+      - groupName: gpu-worker
+        replicas: 1
+        minReplicas: 1
+        maxReplicas: 1
+        rayStartParams:
+          num-cpus: "16"
+          memory: "103079215104"
+          object-store-memory: "25769803776"
+        template:
+          metadata:
+            labels:
+              app.kubernetes.io/name: vla-ray-job
+              app.kubernetes.io/component: gpu-worker
+              app.kubernetes.io/instance: "${RAY_JOB_NAME}"
+          spec:
+            imagePullSecrets:
+              - name: "${IMAGE_PULL_SECRET_NAME}"
+            tolerations:
+              - key: nvidia.com/gpu
+                operator: Exists
+                effect: NoSchedule
+            affinity:
+              podAntiAffinity:
+                requiredDuringSchedulingIgnoredDuringExecution:
+                  - topologyKey: kubernetes.io/hostname
+                    labelSelector:
+                      matchLabels:
+                        app.kubernetes.io/component: gpu-worker
+                        app.kubernetes.io/instance: "${RAY_JOB_NAME}"
+            containers:
+              - name: ray-worker
+                image: "${RAY_IMAGE}"
+                imagePullPolicy: IfNotPresent
+                workingDir: /data/oss/code
+                env:
+                  - name: PYTHONPATH
+                    value: /data/oss/code
+                  - name: OPENAI_API_KEY
+                    valueFrom:
+                      secretKeyRef:
+                        name: "${OPENAI_SECRET_NAME}"
+                        key: OPENAI_API_KEY
+                  - name: OPENAI_BASE_URL
+                    valueFrom:
+                      secretKeyRef:
+                        name: "${OPENAI_SECRET_NAME}"
+                        key: OPENAI_BASE_URL
+                resources:
+                  requests:
+                    cpu: "16"
+                    memory: 96Gi
+                    nvidia.com/gpu: "1"
+                  limits:
+                    cpu: "28"
+                    memory: 160Gi
+                    nvidia.com/gpu: "1"
+                volumeMounts:
+                  - name: oss-root
+                    mountPath: /data/oss
+                    readOnly: true
+                  - name: oss-output
+                    mountPath: /data/output
+                  - name: dshm
+                    mountPath: /dev/shm
+                  - name: raytmp
+                    mountPath: /tmp/ray
+                  - name: workdir
+                    mountPath: /data/work
+            volumes:
+              - name: oss-root
+                persistentVolumeClaim:
+                  claimName: "${OSS_ROOT_PVC_NAME}"
+                  readOnly: true
+              - name: oss-output
+                persistentVolumeClaim:
+                  claimName: "${OSS_OUTPUT_PVC_NAME}"
+              - name: dshm
+                emptyDir:
+                  medium: Memory
+                  sizeLimit: 32Gi
+              - name: raytmp
+                emptyDir:
+                  sizeLimit: 100Gi
+              - name: workdir
+                persistentVolumeClaim:
+                  claimName: "${OSS_OUTPUT_PVC_NAME}"
+
+      - groupName: cpu-worker
+        replicas: 0
+        minReplicas: 0
+        maxReplicas: 16
+        rayStartParams:
+          num-cpus: "16"
+          memory: "68719476736"
+          object-store-memory: "17179869184"
+        template:
+          metadata:
+            labels:
+              app.kubernetes.io/name: vla-ray-job
+              app.kubernetes.io/component: cpu-worker
+              app.kubernetes.io/instance: "${RAY_JOB_NAME}"
+          spec:
+            imagePullSecrets:
+              - name: "${IMAGE_PULL_SECRET_NAME}"
+            affinity:
+              podAntiAffinity:
+                requiredDuringSchedulingIgnoredDuringExecution:
+                  - topologyKey: kubernetes.io/hostname
+                    labelSelector:
+                      matchLabels:
+                        app.kubernetes.io/component: cpu-worker
+                        app.kubernetes.io/instance: "${RAY_JOB_NAME}"
+            containers:
+              - name: ray-worker
+                image: "${RAY_IMAGE}"
+                imagePullPolicy: IfNotPresent
+                workingDir: /data/oss/code
+                env:
+                  - name: PYTHONPATH
+                    value: /data/oss/code
+                  - name: OPENAI_API_KEY
+                    valueFrom:
+                      secretKeyRef:
+                        name: "${OPENAI_SECRET_NAME}"
+                        key: OPENAI_API_KEY
+                  - name: OPENAI_BASE_URL
+                    valueFrom:
+                      secretKeyRef:
+                        name: "${OPENAI_SECRET_NAME}"
+                        key: OPENAI_BASE_URL
+                resources:
+                  requests:
+                    cpu: "16"
+                    memory: 72Gi
+                  limits:
+                    cpu: "24"
+                    memory: 96Gi
+                volumeMounts:
+                  - name: oss-root
+                    mountPath: /data/oss
+                    readOnly: true
+                  - name: oss-output
+                    mountPath: /data/output
+                  - name: dshm
+                    mountPath: /dev/shm
+                  - name: raytmp
+                    mountPath: /tmp/ray
+                  - name: workdir
+                    mountPath: /data/work
+            volumes:
+              - name: oss-root
+                persistentVolumeClaim:
+                  claimName: "${OSS_ROOT_PVC_NAME}"
+                  readOnly: true
+              - name: oss-output
+                persistentVolumeClaim:
+                  claimName: "${OSS_OUTPUT_PVC_NAME}"
+              - name: dshm
+                emptyDir:
+                  medium: Memory
+                  sizeLimit: 24Gi
+              - name: raytmp
+                emptyDir:
+                  sizeLimit: 60Gi
+              - name: workdir
+                persistentVolumeClaim:
+                  claimName: "${OSS_OUTPUT_PVC_NAME}"
 ```
 
 ##  RayJob /RayCluster dashboard 访问/可观测
