@@ -12,7 +12,7 @@ VITRA is a Vision-Language-Action pretraining method for robotic manipulation th
 
 This guide walks through the VLA data pipeline for embodied intelligence on Ray running in ACK:
 
-1. Create an ACK cluster and install the managed ack-kuberay component.
+1. Prepare an ACK cluster (skip creation if you already have one) and install the managed ack-kuberay component.
 2. Prepare models and datasets.
 3. Prepare PVs and PVCs in the ACK cluster.
 4. Build the Ray VLA application image.
@@ -26,9 +26,17 @@ This guide walks through the VLA data pipeline for embodied intelligence on Ray 
 
 # Procedure
 
-## Create an ACK Cluster and Install the Managed ack-kuberay Component
+## Prepare an ACK Cluster and Install the Managed ack-kuberay Component
 
-### Create an ACK Cluster
+If you already have an ACK cluster, skip "Create an ACK Cluster (Optional)" and start from "Install the Kuberay-Operator Component". The existing cluster must meet the following requirements:
+
+- At least one schedulable GPU node, because the RayJob `gpu-worker` requests `nvidia.com/gpu: 1`, plus enough CPU and memory for the Ray head and workers. See [`rayjob.yaml.tpl`](./rayjob.yaml.tpl) for the resource specifications.
+- The `csi-plugin` component is installed for mounting OSS volumes.
+- The cluster is preferably in the same region as the OSS buckets and the ACR instance, so that internal endpoints can be used.
+
+### Create an ACK Cluster (Optional)
+
+Perform this section only if you do not have an ACK cluster yet.
 
 #### Option 1: Use the Console
 
@@ -41,6 +49,11 @@ Before using this option, configure Alibaba Cloud CLI as described in the append
 Creating the cluster incurs charges for ACK, ECS, SLB, NAT Gateway, and related resources. Before running the command, confirm the resource specifications, network design, quotas, and account balance. The following template creates an ACK managed Pro cluster with one GPU node pool. Replace every `<...>` placeholder and adjust the node configuration to match the instance types available in the target region.
 
 Create `create-ack.json`:
+
+Source file: [`create-ack.json`](./create-ack.json)
+
+<details markdown="1">
+<summary>View <code>create-ack.json</code></summary>
 
 ```json
 {
@@ -103,6 +116,8 @@ Create `create-ack.json`:
 }
 ```
 
+</details>
+
 Submit the creation request and record the cluster ID:
 
 ```bash
@@ -125,7 +140,7 @@ The template disables public access to the API server by default. Manage the clu
 
 ### Install the Kuberay-Operator Component
 
-Follow the [Ray on ACK best practices](https://help.aliyun.com/zh/ack/cloud-native-ai-suite/use-cases/ray-cluster-best-practices/) to install the managed Kuberay-Operator from the component management page in the ACK console. ACK maintains this component and integrates scheduling, elastic quotas, Prometheus, SLS, and OSS capabilities, so this guide does not replace it with the upstream Helm installation.
+Follow the [Ray on ACK best practices](https://help.aliyun.com/zh/ack/cloud-native-ai-suite/use-cases/ray-cluster-best-practices/) to install the managed Kuberay-Operator from the component management page in the ACK console. ACK maintains this component and integrates scheduling, elastic quotas, Prometheus, SLS, and OSS capabilities, so this guide does not replace it with the upstream Helm installation. Skip this section if the component is already installed in the cluster.
 
 ### Obtain the Cluster KubeConfig and Connect with kubectl
 
@@ -135,9 +150,13 @@ Follow [Obtain the KubeConfig file and connect with kubectl](https://help.aliyun
 
 #### Option 2: Use Alibaba Cloud CLI
 
-Reuse the `REGION_ID` and `CLUSTER_ID` returned when the cluster was created. KubeConfig contains cluster access credentials. Never commit it to Git or transmit it through an insecure channel.
+If you created the cluster in the previous step, reuse the exported `REGION_ID` and `CLUSTER_ID`. For an existing cluster, replace them with its region and cluster ID, which you can find in the cluster list of the ACK console or query with `aliyun cs GET /api/v1/clusters --region <region-id>`. KubeConfig contains cluster access credentials. Never commit it to Git or transmit it through an insecure channel.
 
 ```bash
+# Already exported when the cluster was created; replace the placeholders for an existing cluster.
+export REGION_ID="${REGION_ID:-<region-id>}"
+export CLUSTER_ID="${CLUSTER_ID:-<cluster-id>}"
+
 export KUBECONFIG="${HOME}/.kube/vla-ray-cluster.config"
 mkdir -p "$(dirname "${KUBECONFIG}")"
 
@@ -236,6 +255,11 @@ With `--update`, repeated runs upload only source files that are newer. Do not p
 
 ## Build the Ray VLA Image
 
+Source file: [`Dockerfile`](./Dockerfile)
+
+<details markdown="1">
+<summary>View <code>Dockerfile</code></summary>
+
 ```dockerfile
 FROM pytorch/pytorch:2.7.1-cuda12.8-cudnn9-devel
 
@@ -295,6 +319,8 @@ RUN pip install --no-cache-dir --no-build-isolation "chumpy @ git+https://github
 RUN pip install --no-cache-dir scipy pyarrow av Pillow openai
 RUN pip install --no-cache-dir \
     "numpy==1.26.4" \
+    "pyarrow>=19,<26" \
+    "plyfile==1.1.3" \
     "opencv-python==4.10.0.84" \
     "opencv-contrib-python==4.10.0.84" \
     "pydantic==2.10.6" \
@@ -318,59 +344,31 @@ RUN cd /root/.cache/data_juicer/assets/mega-sam/base && python setup.py install
 
 # Fail the image build on incompatible dependencies or unavailable runtime modules.
 RUN pip check \
-    && python -c "import cv2, data_juicer, droid_backends, lietorch, numpy, pydantic, ray, torch; assert data_juicer.__version__ == '1.6.0'; assert ray.__version__ == '2.56.0'; assert numpy.__version__ == '1.26.4'; assert cv2.__version__ == '4.10.0'; assert pydantic.__version__ == '2.10.6'"
+    && python -c "import torch; import cv2, data_juicer, droid_backends, lietorch, numpy, plyfile, pyarrow, pydantic, ray, ray.data; \
+assert data_juicer.__version__ == '1.6.0'; assert ray.__version__ == '2.56.0'; \
+assert numpy.__version__ == '1.26.4'; assert int(pyarrow.__version__.split('.')[0]) < 26, pyarrow.__version__; \
+assert cv2.__version__ == '4.10.0'; assert pydantic.__version__ == '2.10.6'; \
+assert torch.version.cuda == '12.8', torch.version.cuda"
 
 RUN pip cache purge 2>/dev/null || true
 
 WORKDIR /workspace
 
 ENTRYPOINT ["python"]
-
 ```
 
-After building the image, push it to an ACR instance in the same region. Record the internal image URL for the RayJob configuration.
+</details>
 
-### Prepare ACR and Push the Image with Alibaba Cloud CLI
-
-The following example uses an existing ACR Enterprise Edition instance. Instance creation is not covered by the CLI commands. If you do not have an instance, create one in the ACR console first. Skip the namespace or repository creation command if the resource already exists.
-
-```bash
-export ACR_INSTANCE_ID="<acr-instance-id>"
-export ACR_NAMESPACE="vla"
-export ACR_REPOSITORY="ray-vla-pipeline"
-export ACR_REGISTRY="<registry-domain>"
-export IMAGE_TAG="v1"
-
-# List instances and create a private namespace and repository.
-aliyun cr ListInstance
-aliyun cr CreateNamespace \
-  --InstanceId "${ACR_INSTANCE_ID}" \
-  --NamespaceName "${ACR_NAMESPACE}" \
-  --AutoCreateRepo false
-aliyun cr CreateRepository \
-  --InstanceId "${ACR_INSTANCE_ID}" \
-  --RepoNamespaceName "${ACR_NAMESPACE}" \
-  --RepoName "${ACR_REPOSITORY}" \
-  --RepoType PRIVATE \
-  --Summary "Ray VLA pipeline image"
-
-# Pass temporary login credentials to Docker through standard input.
-TOKEN_JSON="$(aliyun cr GetAuthorizationToken --InstanceId "${ACR_INSTANCE_ID}")"
-printf '%s' "$(printf '%s' "${TOKEN_JSON}" | jq -r '.data.authorizationToken')" \
-  | docker login "${ACR_REGISTRY}" \
-      --username "$(printf '%s' "${TOKEN_JSON}" | jq -r '.data.tempUserName')" \
-      --password-stdin
-
-export RAY_IMAGE="${ACR_REGISTRY}/${ACR_NAMESPACE}/${ACR_REPOSITORY}:${IMAGE_TAG}"
-docker build -t "${RAY_IMAGE}" .
-docker push "${RAY_IMAGE}"
-```
-
-`GetAuthorizationToken` returns temporary credentials intended only for this image push. For a long-lived Kubernetes `imagePullSecret`, use ACR instance credentials or a dedicated RAM identity with the minimum required read-only permissions. Never commit temporary tokens or personal credentials to the repository. When ACK pulls the image, set `RAY_IMAGE` to the ACR VPC endpoint in the same region whenever possible.
+After building the image, push it to an image registry. We recommend pushing it to an ACR instance in the same region and recording the internal image URL for use when creating the RayJob.
 
 ## Prepare ACK PVs, PVCs, and Secrets
 
 Adjust the environment variables in `init.sh` for your environment, and create `init.sh` and `fixed-resources.yaml.tpl`.
+
+Source file: [`init.sh`](./init.sh)
+
+<details markdown="1">
+<summary>View <code>init.sh</code></summary>
 
 ```shell
 # Kubernetes namespace
@@ -486,7 +484,15 @@ export DOCKER_CONFIG_JSON_BASE64="$(
     | tr -d '\r\n'
 )"
 ```
-```python
+
+</details>
+
+Source file: [`fixed-resources.yaml.tpl`](./fixed-resources.yaml.tpl)
+
+<details markdown="1">
+<summary>View <code>fixed-resources.yaml.tpl</code></summary>
+
+```yaml
 apiVersion: v1
 kind: Secret
 metadata:
@@ -595,8 +601,9 @@ spec:
   storageClassName: ""
   volumeMode: Filesystem
   volumeName: "${OSS_OUTPUT_PV_NAME}"
-
 ```
+
+</details>
 
 Run the following commands from an environment that can access the ACK cluster:
 
@@ -609,6 +616,11 @@ kubectl apply -f fixed-resources.yaml
 ## Implement the VLA Pipeline with Ray Data and Data-Juicer
 
 Upload `vla_pipeline.py` and `video_action_captioning_mapper.py` to the `code` directory in OSS. Use the OSS upload method described earlier.
+
+Source file: [`vla_pipeline.py`](./vla_pipeline.py)
+
+<details markdown="1">
+<summary>View <code>vla_pipeline.py</code></summary>
 
 ```python
 #!/usr/bin/env python3
@@ -1025,8 +1037,15 @@ def run() -> None:
 
 if __name__ == "__main__":
     run()
-
 ```
+
+</details>
+
+Source file: [`video_action_captioning_mapper.py`](./video_action_captioning_mapper.py)
+
+<details markdown="1">
+<summary>View <code>video_action_captioning_mapper.py</code></summary>
+
 ```python
 # yapf: disable
 import json
@@ -1336,8 +1355,9 @@ class VideoActionCaptioningMapper(Mapper):
                 sample[self.text_key] = action
 
         return sample
-
 ```
+
+</details>
 
 ## Build and Submit the RayJob Custom Resource
 
@@ -1349,122 +1369,13 @@ envsubst < rayjob.yaml.tpl > rayjob.yaml
 kubectl apply -f rayjob.yaml
 ```
 
-```python
-# Kubernetes namespace
-export NAMESPACE="default"
-
-# RayJob resource name
-export RAY_JOB_NAME="vla-ray-job"
-
-# Ray version; it must match the version in the container image.
-export RAY_VERSION="2.56.0"
-
-# Container image used by the Ray head and workers.
-export RAY_IMAGE="<registry>/<repository>:<tag>"
-
-
-# Name of the Kubernetes image pull Secret.
-export IMAGE_PULL_SECRET_NAME="ray-image-pull-secret"
-
-# Registry endpoint, for example registry-vpc.cn-hangzhou.aliyuncs.com.
-export REGISTRY_SERVER="<registry-server>"
-
-# Registry login username.
-export REGISTRY_USERNAME="<registry-username>"
-
-# Registry login password.
-export REGISTRY_PASSWORD="<registry-password>"
-
-
-# Name of the Kubernetes Secret that stores the OpenAI configuration.
-export OPENAI_SECRET_NAME="ray-openai-secret"
-
-# Raw OpenAI API key; the script encodes it with Base64.
-export OPENAI_API_KEY="<openai-api-key>"
-
-# Raw OpenAI-compatible endpoint; the script encodes it with Base64.
-export OPENAI_BASE_URL="<openai-base-url>"
-
-
-# Name of the Kubernetes Secret that stores OSS AccessKey credentials.
-export OSS_SECRET_NAME="ray-oss-secret"
-
-# OSS AccessKey ID
-export OSS_ACCESS_KEY_ID="<oss-access-key-id>"
-
-# OSS AccessKey Secret
-export OSS_ACCESS_KEY_SECRET="<oss-access-key-secret>"
-
-# OSS endpoint; use an internal endpoint in the cluster region.
-export OSS_ENDPOINT="<oss-endpoint>"
-
-# OSS signature version; ensure that the client supports V4.
-export OSS_SIG_VERSION="v4"
-
-
-# PV name for input data, models, and code.
-export OSS_ROOT_PV_NAME="ray-vla-root-pv"
-
-# PVC name for input data, models, and code.
-export OSS_ROOT_PVC_NAME="ray-vla-root-pvc"
-
-# OSS bucket for input data, models, and code.
-export OSS_ROOT_BUCKET="<input-and-model-bucket>"
-
-# Bucket prefix used as the mount root.
-export OSS_ROOT_PATH="/<input-and-model-prefix>"
-
-
-# PV name for output data.
-export OSS_OUTPUT_PV_NAME="ray-vla-output-pv"
-
-# PVC name for output data.
-export OSS_OUTPUT_PVC_NAME="ray-vla-output-pvc"
-
-# OSS bucket for job output.
-export OSS_OUTPUT_BUCKET="<output-bucket>"
-
-# Bucket prefix for job output.
-export OSS_OUTPUT_PATH="/<output-prefix>"
-
-
-required_vars=(
-  NAMESPACE RAY_JOB_NAME RAY_VERSION RAY_IMAGE
-  IMAGE_PULL_SECRET_NAME REGISTRY_SERVER REGISTRY_USERNAME REGISTRY_PASSWORD
-  OPENAI_SECRET_NAME OPENAI_API_KEY OPENAI_BASE_URL
-  OSS_SECRET_NAME OSS_ACCESS_KEY_ID OSS_ACCESS_KEY_SECRET OSS_ENDPOINT OSS_SIG_VERSION
-  OSS_ROOT_PV_NAME OSS_ROOT_PVC_NAME OSS_ROOT_BUCKET OSS_ROOT_PATH
-  OSS_OUTPUT_PV_NAME OSS_OUTPUT_PVC_NAME OSS_OUTPUT_BUCKET OSS_OUTPUT_PATH
-)
-
-for var_name in "${required_vars[@]}"; do
-  var_value="${!var_name:-}"
-  if [[ -z "${var_value}" || "${var_value}" == *"<"* || "${var_value}" == *">"* ]]; then
-    echo "Variable ${var_name} is unset or still contains an example placeholder" >&2
-    exit 1
-  fi
-done
-
-export OSS_ACCESS_KEY_ID_BASE64="$(printf '%s' "${OSS_ACCESS_KEY_ID}" | base64 | tr -d '\n')"
-export OSS_ACCESS_KEY_SECRET_BASE64="$(printf '%s' "${OSS_ACCESS_KEY_SECRET}" | base64 | tr -d '\n')"
-export OPENAI_API_KEY_BASE64="$(printf '%s' "${OPENAI_API_KEY}" | base64 | tr -d '\n')"
-export OPENAI_BASE_URL_BASE64="$(printf '%s' "${OPENAI_BASE_URL}" | base64 | tr -d '\n')"
-REGISTRY_AUTH_BASE64="$(
-  printf '%s' "${REGISTRY_USERNAME}:${REGISTRY_PASSWORD}" \
-    | base64 \
-    | tr -d '\r\n'
-)"
-
-export DOCKER_CONFIG_JSON_BASE64="$(
-  printf '{"auths":{"%s":{"auth":"%s"}}}' \
-    "${REGISTRY_SERVER}" \
-    "${REGISTRY_AUTH_BASE64}" \
-    | base64 \
-    | tr -d '\r\n'
-)"
-```
 
 Create `rayjob.yaml.tpl` with the following content:
+
+Source file: [`rayjob.yaml.tpl`](./rayjob.yaml.tpl)
+
+<details markdown="1">
+<summary>View <code>rayjob.yaml.tpl</code></summary>
 
 ```yaml
 apiVersion: ray.io/v1
@@ -1754,6 +1665,8 @@ spec:
                   claimName: "${OSS_OUTPUT_PVC_NAME}"
 ```
 
+</details>
+
 ## Access and Observe RayJob and RayCluster Dashboards
 
 ### Install and View Ray Cluster Monitoring
@@ -1797,13 +1710,18 @@ The output dataset uses the LeRobot format:
 
 Inspect the artifacts directly in OSS, or deploy an inspector with the following commands:
 
-```python
+```bash
 source init.sh
 envsubst  < inspect-deployment.tpl > inspect-deployment.yaml
 kubectl apply -f inspect-deployment.yaml
 ```
 
-```python
+Source file: [`inspect-deployment.tpl`](./inspect-deployment.tpl)
+
+<details markdown="1">
+<summary>View <code>inspect-deployment.tpl</code></summary>
+
+```yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -1855,14 +1773,21 @@ spec:
         - name: oss-output
           persistentVolumeClaim:
             claimName: "${OSS_OUTPUT_PVC_NAME}"
-
 ```
+
+</details>
 
 Upload `vis_hand_action_demo.py` to OSS, enter the `inspect-deployment` container, and run:
 
 ```bash
 python vis_hand_action_demo.py  --model_root /data/oss/models --data_path /xxx/xxx.parquet   --save_dir /xxx/xxx
 ```
+
+Source file: [`vis_hand_action_demo.py`](./vis_hand_action_demo.py)
+
+<details markdown="1">
+<summary>View <code>vis_hand_action_demo.py</code></summary>
+
 ```python
 #!/usr/bin/env python
 """Verify hand-action annotations without depending on ``hawor_utils``.
@@ -2854,8 +2779,9 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 ```
+
+</details>
 
 ## Debug and Optimize Operators
 
