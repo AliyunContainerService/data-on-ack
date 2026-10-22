@@ -12,7 +12,7 @@ VITRA 是一种机器人操作视觉—语言—动作（VLA）模型预训练�
 
 接下来将逐步分解如何通过 Ray on ACK 方案跑具身智能场景 VLA 数据管线：
 
-1.  ACK 集群创建+托管ack-kuberay 组件安装
+1.  准备 ACK 集群（已有集群可跳过创建）+ 托管 ack-kuberay 组件安装
 
 2.  模型和数据集准备
 
@@ -35,9 +35,17 @@ VITRA 是一种机器人操作视觉—语言—动作（VLA）模型预训练�
 
 # 操作步骤
 
-## ACK 集群创建 + 托管 ack-kuberay 组件安装
+## ACK 集群准备 + 托管 ack-kuberay 组件安装
 
-### 创建ACK集群
+如果已有可用的 ACK 集群，可跳过“创建 ACK 集群（可选）”，直接从“安装集群组件 Kuberay-Operator”开始。已有集群需满足以下条件：
+
+- 至少有一个可调度的 GPU 节点（RayJob 的 `gpu-worker` 申请 `nvidia.com/gpu: 1`），并为 Ray Head 和 Worker 预留足够的 CPU 与内存，具体规格见 [`rayjob.yaml.tpl`](./rayjob.yaml.tpl)。
+- 已安装 `csi-plugin` 组件，用于挂载 OSS 存储卷。
+- 建议与 OSS Bucket、ACR 实例位于同一地域，以便使用内网 Endpoint。
+
+### 创建 ACK 集群（可选）
+
+仅在尚无 ACK 集群时执行本节。
 
 #### 方式一：通过控制台创建
 
@@ -50,6 +58,11 @@ VITRA 是一种机器人操作视觉—语言—动作（VLA）模型预训练�
 集群创建会产生 ACK、ECS、SLB、NAT 网关等资源费用。执行前请确认资源规格、网络规划、配额和账户余额。下面的模板创建 ACK 托管版 Pro 集群和一个 GPU 节点池；请先替换所有 `<...>` 占位符，并根据目标地域可用规格调整节点配置。
 
 创建 `create-ack.json`：
+
+源文件：[`create-ack.json`](./create-ack.json)
+
+<details markdown="1">
+<summary>展开查看 <code>create-ack.json</code></summary>
 
 ```json
 {
@@ -112,6 +125,8 @@ VITRA 是一种机器人操作视觉—语言—动作（VLA）模型预训练�
 }
 ```
 
+</details>
+
 提交创建请求并记录集群 ID：
 
 ```bash
@@ -134,7 +149,7 @@ aliyun cs GET "/clusters/${CLUSTER_ID}" --region "${REGION_ID}" | jq .
 
 ### 安装集群组件 Kuberay-Operator
 
-按照 [Ray on ACK 最佳实践](https://help.aliyun.com/zh/ack/cloud-native-ai-suite/use-cases/ray-cluster-best-practices/)在 ACK 控制台的组件管理页面安装托管版 Kuberay-Operator。该托管组件由 ACK 负责版本维护，并集成调度、弹性配额、Prometheus、SLS 和 OSS 等能力，因此本文不使用 Helm 安装开源版本替代它。
+按照 [Ray on ACK 最佳实践](https://help.aliyun.com/zh/ack/cloud-native-ai-suite/use-cases/ray-cluster-best-practices/)在 ACK 控制台的组件管理页面安装托管版 Kuberay-Operator。该托管组件由 ACK 负责版本维护，并集成调度、弹性配额、Prometheus、SLS 和 OSS 等能力，因此本文不使用 Helm 安装开源版本替代它。如果集群已安装该组件，可跳过本节。
 
 ### 获取集群 KubeConfig 并通过 kubectl 连接集群
 
@@ -144,9 +159,13 @@ aliyun cs GET "/clusters/${CLUSTER_ID}" --region "${REGION_ID}" | jq .
 
 #### 方式二：通过阿里云 CLI 获取
 
-复用创建集群时得到的 `REGION_ID` 和 `CLUSTER_ID`。KubeConfig 包含集群访问凭据，不得提交到 Git 仓库或通过不安全渠道传递。
+新建集群时复用上一步导出的 `REGION_ID` 和 `CLUSTER_ID`；使用已有集群时，先将其替换为集群所在地域和集群 ID（可在 ACK 控制台集群列表中查看，或执行 `aliyun cs GET /api/v1/clusters --region <region-id>` 查询）。KubeConfig 包含集群访问凭据，不得提交到 Git 仓库或通过不安全渠道传递。
 
 ```bash
+# 新建集群时已在上一步导出；使用已有集群时替换占位符
+export REGION_ID="${REGION_ID:-<region-id>}"
+export CLUSTER_ID="${CLUSTER_ID:-<cluster-id>}"
+
 export KUBECONFIG="${HOME}/.kube/vla-ray-cluster.config"
 mkdir -p "$(dirname "${KUBECONFIG}")"
 
@@ -244,6 +263,11 @@ aliyun ossutil ls "oss://${OSS_ROOT_BUCKET}/models/" \
 
 ## Ray VLA 镜像构建
 
+源文件：[`Dockerfile`](./Dockerfile)
+
+<details markdown="1">
+<summary>展开查看 <code>Dockerfile</code></summary>
+
 ```dockerfile
 FROM pytorch/pytorch:2.7.1-cuda12.8-cudnn9-devel
 
@@ -303,6 +327,8 @@ RUN pip install --no-cache-dir --no-build-isolation "chumpy @ git+https://github
 RUN pip install --no-cache-dir scipy pyarrow av Pillow openai
 RUN pip install --no-cache-dir \
     "numpy==1.26.4" \
+    "pyarrow>=19,<26" \
+    "plyfile==1.1.3" \
     "opencv-python==4.10.0.84" \
     "opencv-contrib-python==4.10.0.84" \
     "pydantic==2.10.6" \
@@ -326,17 +352,22 @@ RUN cd /root/.cache/data_juicer/assets/mega-sam/base && python setup.py install
 
 # 依赖不兼容或运行时模块无法导入时，直接终止镜像构建。
 RUN pip check \
-    && python -c "import cv2, data_juicer, droid_backends, lietorch, numpy, pydantic, ray, torch; assert data_juicer.__version__ == '1.6.0'; assert ray.__version__ == '2.56.0'; assert numpy.__version__ == '1.26.4'; assert cv2.__version__ == '4.10.0'; assert pydantic.__version__ == '2.10.6'"
+    && python -c "import torch; import cv2, data_juicer, droid_backends, lietorch, numpy, plyfile, pyarrow, pydantic, ray, ray.data; \
+assert data_juicer.__version__ == '1.6.0'; assert ray.__version__ == '2.56.0'; \
+assert numpy.__version__ == '1.26.4'; assert int(pyarrow.__version__.split('.')[0]) < 26, pyarrow.__version__; \
+assert cv2.__version__ == '4.10.0'; assert pydantic.__version__ == '2.10.6'; \
+assert torch.version.cuda == '12.8', torch.version.cuda"
 
 RUN pip cache purge 2>/dev/null || true
 
 WORKDIR /workspace
 
 ENTRYPOINT ["python"]
-
 ```
 
-镜像构建完成后，推送至同地域 ACR，记录内网镜像访问地址，用于之后创建 RayJob。
+</details>
+
+镜像构建完成后，推送镜像到镜像仓库，建议推送至同地域 ACR 并记录内网镜像访问地址在创建 RayJob 时使用。
 
 ### 通过阿里云 CLI 准备 ACR 并推送镜像
 
@@ -379,6 +410,11 @@ docker push "${RAY_IMAGE}"
 ## ACK 集群PV/PVC/Secret 准备
 
 按实际情况调整init.sh中的环境变量，创建init.sh,fixed-resources.yaml.tpl
+
+源文件：[`init.sh`](./init.sh)
+
+<details markdown="1">
+<summary>展开查看 <code>init.sh</code></summary>
 
 ```shell
 # Kubernetes 命名空间
@@ -494,7 +530,15 @@ export DOCKER_CONFIG_JSON_BASE64="$(
     | tr -d '\r\n'
 )"
 ```
-```python
+
+</details>
+
+源文件：[`fixed-resources.yaml.tpl`](./fixed-resources.yaml.tpl)
+
+<details markdown="1">
+<summary>展开查看 <code>fixed-resources.yaml.tpl</code></summary>
+
+```yaml
 apiVersion: v1
 kind: Secret
 metadata:
@@ -603,12 +647,13 @@ spec:
   storageClassName: ""
   volumeMode: Filesystem
   volumeName: "${OSS_OUTPUT_PV_NAME}"
-
 ```
+
+</details>
 
 在可访问ACK集群的唤醒下执行以下代码
 
-```powershell
+```bash
 source init.sh
 envsubst < fixed-resources.yaml.tpl > fixed-resources.yaml
 kubectl apply -f fixed-resources.yaml
@@ -617,6 +662,11 @@ kubectl apply -f fixed-resources.yaml
 ## 基于 Ray Data + data juicer 的VLA 业务代码
 
 将 vla\_pipeline.py  video\_action\_captioning\_mapper.py 上传到OSS code 目录下，上传方式参考3.2.3
+
+源文件：[`vla_pipeline.py`](./vla_pipeline.py)
+
+<details markdown="1">
+<summary>展开查看 <code>vla_pipeline.py</code></summary>
 
 ```python
 #!/usr/bin/env python3
@@ -1032,8 +1082,15 @@ def run() -> None:
 
 if __name__ == "__main__":
     run()
-
 ```
+
+</details>
+
+源文件：[`video_action_captioning_mapper.py`](./video_action_captioning_mapper.py)
+
+<details markdown="1">
+<summary>展开查看 <code>video_action_captioning_mapper.py</code></summary>
+
 ```python
 # yapf: disable
 import json
@@ -1343,8 +1400,9 @@ class VideoActionCaptioningMapper(Mapper):
                 sample[self.text_key] = action
 
         return sample
-
 ```
+
+</details>
 
 ## 构建并提交RayJob CR
 
@@ -1352,128 +1410,19 @@ class VideoActionCaptioningMapper(Mapper):
 
 执行
 
-```python
+```bash
 source init.sh
 envsubst  < rayjob.yaml.tpl > rayjob.yaml
 kubectl apply -f  rayjob.yaml
 ```
 
-```python
-# Kubernetes 命名空间
-export NAMESPACE="default"
-
-# RayJob 资源名称
-export RAY_JOB_NAME="vla-ray-job"
-
-# Ray 版本，应与容器镜像中的 Ray 版本一致
-export RAY_VERSION="2.56.0"
-
-# Ray Head 和 Worker 使用的容器镜像
-export RAY_IMAGE="<registry>/<repository>:<tag>"
-
-
-# Kubernetes 镜像拉取凭据 Secret 名称
-export IMAGE_PULL_SECRET_NAME="ray-image-pull-secret"
-
-# 镜像仓库地址，例如 registry-vpc.cn-hangzhou.aliyuncs.com
-export REGISTRY_SERVER="<registry-server>"
-
-# 镜像仓库登录用户名
-export REGISTRY_USERNAME="<registry-username>"
-
-# 镜像仓库登录密码
-export REGISTRY_PASSWORD="<registry-password>"
-
-
-# 保存 OpenAI 配置的 Kubernetes Secret 名称
-export OPENAI_SECRET_NAME="ray-openai-secret"
-
-# OpenAI API 密钥，填写原始值，脚本会自动进行 Base64 编码
-export OPENAI_API_KEY="<openai-api-key>"
-
-# OpenAI 兼容接口地址，填写原始值，脚本会自动进行 Base64 编码
-export OPENAI_BASE_URL="<openai-base-url>"
-
-
-# 保存 OSS AccessKey 的 Kubernetes Secret 名称
-export OSS_SECRET_NAME="ray-oss-secret"
-
-# OSS AccessKey ID
-export OSS_ACCESS_KEY_ID="<oss-access-key-id>"
-
-# OSS AccessKey Secret
-export OSS_ACCESS_KEY_SECRET="<oss-access-key-secret>"
-
-# OSS Endpoint，建议使用与集群同地域的内网地址
-export OSS_ENDPOINT="<oss-endpoint>"
-
-# OSS 请求签名版本；使用 V4 时需确保客户端支持
-export OSS_SIG_VERSION="v4"
-
-
-# 输入数据、模型和代码存储对应的 PV 名称
-export OSS_ROOT_PV_NAME="ray-vla-root-pv"
-
-# 输入数据、模型和代码存储对应的 PVC 名称
-export OSS_ROOT_PVC_NAME="ray-vla-root-pvc"
-
-# 存放输入数据、模型和代码的 OSS Bucket
-export OSS_ROOT_BUCKET="<input-and-model-bucket>"
-
-# Bucket 内作为挂载根目录的前缀
-export OSS_ROOT_PATH="/<input-and-model-prefix>"
-
-
-# 输出数据存储对应的 PV 名称
-export OSS_OUTPUT_PV_NAME="ray-vla-output-pv"
-
-# 输出数据存储对应的 PVC 名称
-export OSS_OUTPUT_PVC_NAME="ray-vla-output-pvc"
-
-# 存放作业输出结果的 OSS Bucket
-export OSS_OUTPUT_BUCKET="<output-bucket>"
-
-# Bucket 内用于保存作业输出的前缀
-export OSS_OUTPUT_PATH="/<output-prefix>"
-
-
-required_vars=(
-  NAMESPACE RAY_JOB_NAME RAY_VERSION RAY_IMAGE
-  IMAGE_PULL_SECRET_NAME REGISTRY_SERVER REGISTRY_USERNAME REGISTRY_PASSWORD
-  OPENAI_SECRET_NAME OPENAI_API_KEY OPENAI_BASE_URL
-  OSS_SECRET_NAME OSS_ACCESS_KEY_ID OSS_ACCESS_KEY_SECRET OSS_ENDPOINT OSS_SIG_VERSION
-  OSS_ROOT_PV_NAME OSS_ROOT_PVC_NAME OSS_ROOT_BUCKET OSS_ROOT_PATH
-  OSS_OUTPUT_PV_NAME OSS_OUTPUT_PVC_NAME OSS_OUTPUT_BUCKET OSS_OUTPUT_PATH
-)
-
-for var_name in "${required_vars[@]}"; do
-  var_value="${!var_name:-}"
-  if [[ -z "${var_value}" || "${var_value}" == *"<"* || "${var_value}" == *">"* ]]; then
-    echo "变量 ${var_name} 未设置或仍包含示例占位符" >&2
-    exit 1
-  fi
-done
-
-export OSS_ACCESS_KEY_ID_BASE64="$(printf '%s' "${OSS_ACCESS_KEY_ID}" | base64 | tr -d '\n')"
-export OSS_ACCESS_KEY_SECRET_BASE64="$(printf '%s' "${OSS_ACCESS_KEY_SECRET}" | base64 | tr -d '\n')"
-export OPENAI_API_KEY_BASE64="$(printf '%s' "${OPENAI_API_KEY}" | base64 | tr -d '\n')"
-export OPENAI_BASE_URL_BASE64="$(printf '%s' "${OPENAI_BASE_URL}" | base64 | tr -d '\n')"
-REGISTRY_AUTH_BASE64="$(
-  printf '%s' "${REGISTRY_USERNAME}:${REGISTRY_PASSWORD}" \
-    | base64 \
-    | tr -d '\r\n'
-)"
-
-export DOCKER_CONFIG_JSON_BASE64="$(
-  printf '{"auths":{"%s":{"auth":"%s"}}}' \
-    "${REGISTRY_SERVER}" \
-    "${REGISTRY_AUTH_BASE64}" \
-    | base64 \
-    | tr -d '\r\n'
-)"
-```
 
 创建 `rayjob.yaml.tpl`，内容如下：
+
+源文件：[`rayjob.yaml.tpl`](./rayjob.yaml.tpl)
+
+<details markdown="1">
+<summary>展开查看 <code>rayjob.yaml.tpl</code></summary>
 
 ```yaml
 apiVersion: ray.io/v1
@@ -1763,6 +1712,8 @@ spec:
                   claimName: "${OSS_OUTPUT_PVC_NAME}"
 ```
 
+</details>
+
 ##  RayJob /RayCluster dashboard 访问/可观测
 
 ### 安装并查看Ray集群监控
@@ -1806,13 +1757,18 @@ ACK Ray为用户暴露Ray Dashboard，用户可以通过Ray Dashboard查看�
 
 可以访问oss，检查构建产物或通过以下方式检查
 
-```python
+```bash
 source init.sh
 envsubst  < inspect-deployment.tpl > inspect-deployment.yaml
 kubectl apply -f inspect-deployment.yaml
 ```
 
-```python
+源文件：[`inspect-deployment.tpl`](./inspect-deployment.tpl)
+
+<details markdown="1">
+<summary>展开查看 <code>inspect-deployment.tpl</code></summary>
+
+```yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -1864,14 +1820,21 @@ spec:
         - name: oss-output
           persistentVolumeClaim:
             claimName: "${OSS_OUTPUT_PVC_NAME}"
-
 ```
+
+</details>
 
 上传vis\_hand\_action\_demo.py到OSS，进入inspect-deployment容器内，执行命令
 
 ```bash
 python vis_hand_action_demo.py  --model_root /data/oss/models --data_path /xxx/xxx.parquet   --save_dir /xxx/xxx
 ```
+
+源文件：[`vis_hand_action_demo.py`](./vis_hand_action_demo.py)
+
+<details markdown="1">
+<summary>展开查看 <code>vis_hand_action_demo.py</code></summary>
+
 ```python
 #!/usr/bin/env python
 """Verify hand-action annotations without depending on ``hawor_utils``.
@@ -2863,8 +2826,9 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 ```
+
+</details>
 
 ## 业务代码调试 算子优化，重新走 3.5 流程
 

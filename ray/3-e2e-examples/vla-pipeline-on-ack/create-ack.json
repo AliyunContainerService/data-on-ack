@@ -1,0 +1,58 @@
+{
+  "name": "vla-ray-cluster",
+  "cluster_type": "ManagedKubernetes",
+  "profile": "Default",
+  "cluster_spec": "ack.pro.small",
+  "region_id": "<region-id>",
+  "snat_entry": true,
+  "endpoint_public_access": false,
+  "deletion_protection": true,
+  "proxy_mode": "ipvs",
+  "timezone": "Asia/Shanghai",
+  "addons": [
+    {
+      "name": "terway-controlplane",
+      "config": "{\"ENITrunking\":\"true\"}"
+    },
+    {
+      "name": "terway-eniip",
+      "config": "{\"IPVlan\":\"false\",\"NetworkPolicy\":\"false\",\"ENITrunking\":\"true\"}"
+    },
+    { "name": "csi-plugin" },
+    { "name": "managed-csiprovisioner" }
+  ],
+  "os_type": "Linux",
+  "platform": "AliyunLinux",
+  "image_type": "AliyunLinux3",
+  "pod_vswitch_ids": ["<pod-vswitch-id>"],
+  "charge_type": "PostPaid",
+  "vpcid": "<vpc-id>",
+  "service_cidr": "172.21.0.0/20",
+  "vswitch_ids": ["<vswitch-id>"],
+  "ip_stack": "ipv4",
+  "nodepools": [
+    {
+      "nodepool_info": {
+        "name": "gpu-worker"
+      },
+      "scaling_group": {
+        "system_disk_category": "cloud_essd",
+        "system_disk_size": 120,
+        "system_disk_performance_level": "PL0",
+        "vswitch_ids": ["<vswitch-id>"],
+        "instance_types": ["<gpu-instance-type>"],
+        "instance_charge_type": "PostPaid",
+        "platform": "AliyunLinux",
+        "image_type": "AliyunLinux3",
+        "desired_size": 1
+      },
+      "kubernetes_config": {
+        "cpu_policy": "none",
+        "cms_enabled": true,
+        "unschedulable": false,
+        "runtime": "containerd",
+        "runtime_version": "1.6.36"
+      }
+    }
+  ]
+}
