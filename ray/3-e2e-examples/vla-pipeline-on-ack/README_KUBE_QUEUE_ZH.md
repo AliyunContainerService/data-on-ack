@@ -1,5 +1,7 @@
 # 在 ACK 上使用 ack-kube-queue 管理 VLA 任务
 
+[English](./README_KUBE_QUEUE.md) | 简体中文
+
 本文以第一视角视频转 LeRobot 数据集的 VLA 数据处理任务为例，介绍如何在 ACK 集群中使用 ack-kube-queue 对 RayJob 排队、按配额放行并查看执行结果。VLA 算子、模型、镜像和 OSS 挂载的准备方法沿用 [VLA 管线指南](https://github.com/AliyunContainerService/data-on-ack/blob/main/ray/3-e2e-examples/vla-pipeline-on-ack/README_ZH.md)。本文重点说明任务队列的接入过程。
 
 ## 整体流程
