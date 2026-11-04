@@ -37,9 +37,12 @@ ray-admission queue --address auto quota delete <ray-job-id>
 不限额，`{"GPU": 0}` 会阻止新的 GPU 申请。未配置的 Job 默认不限额，应在
 业务提交前完成配额配置。`status` 按配额 namespace、Job ID 展示用量与额度。
 
-`start` 创建 detached 控制器，CLI 退出后仍运行；集群关闭后其状态不持久化。
+`start` 创建 detached 控制器，CLI 退出后仍运行。
 管理员令牌只用于启动和修改配额，不要放进业务 Job。`list` 和 `status` 不需要
 该令牌。
+配额配置和管理员令牌摘要保存在 Ray GCS KV。同一集群内重建控制器时，使用原令牌
+执行 `start` 可恢复配额。运行中的许可、等待请求和计数不会恢复，因此应在没有
+已准入任务运行时重建控制器。跨集群重启能否保留配额取决于 GCS 是否配置持久化存储。
 
 ## 业务 driver 接入
 
@@ -70,5 +73,5 @@ env:
 
 新提交的 task 和 actor 的 worker 通过启动 hook 沿用同一配额 namespace；
 已运行的 actor 和其他 driver 不会被追溯接管。普通 task 的全部返回引用就绪后
-归还配额，actor 在 GCS 报告 `DEAD` 后归还。该原型不提供控制器持久化，
-也不覆盖 Ray Client、Java 或 C++ 提交。
+归还配额，actor 在 GCS 报告 `DEAD` 后归还。该原型不覆盖 Ray Client、Java
+或 C++ 提交。

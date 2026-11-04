@@ -52,12 +52,16 @@ Actor methods do not charge the actor resources again. Default actors reserve
 zero lifetime CPUs, matching Ray. Resource-bearing tasks require positive fixed
 returns. Nested submissions can deadlock if the parent holds the job's budget.
 Requests larger than the current quota wait until the quota is increased.
-There is no durable recovery or lease expiry for submitters lost before tracking.
+Quota configuration survives a controller actor restart within the same Ray cluster.
+Active permits, waiting requests, and counters do not survive a controller restart.
+Cluster shutdown removes the GCS KV state unless Ray's GCS storage is persistent.
+There is no lease expiry for submitters lost before tracking.
 Administrator tokens authorize configuration RPCs; they are not a sandbox for
 mutually untrusted code with full access to the same Ray cluster. Submission job
 IDs and resource claims remain cooperative metadata in this prototype.
 """
 
+import argparse
 import asyncio
 import functools
 import hashlib
@@ -85,6 +89,31 @@ _quota_namespace = None
 _originals = {}
 _runtime_env_cache = {}
 _MARKER = "RAY_SUBMISSION_QUEUE_IDENTITY"
+_STATE_KEY = "controller-state-v1"
+DESCRIPTION = "Per-Job resource quota and FIFO submission queue"
+
+
+def _load_state():
+    from ray.experimental.internal_kv import _internal_kv_get
+
+    raw = _internal_kv_get(_STATE_KEY, namespace=_NAMESPACE)
+    if raw is None:
+        return None
+    state = json.loads(raw)
+    if state.get("version") != 1 or not isinstance(state.get("quotas"), list):
+        raise RuntimeError("Unsupported or corrupt queue state in Ray GCS KV")
+    return state
+
+
+def _save_state(state, *, overwrite=True):
+    from ray.experimental.internal_kv import _internal_kv_put
+
+    _internal_kv_put(
+        _STATE_KEY,
+        json.dumps(state, sort_keys=True),
+        overwrite=overwrite,
+        namespace=_NAMESPACE,
+    )
 
 
 def _current_quota_namespace():
@@ -153,9 +182,24 @@ class _QueueController:
     """Per-job resource budgets and FIFO admission on one async event loop."""
 
     def __init__(self, admin_token_digest):
-        self._admin_token_digest = admin_token_digest
+        state = _load_state()
+        if state is None:
+            state = {
+                "version": 1,
+                "admin_token_digest": admin_token_digest,
+                "quotas": [],
+            }
+            _save_state(state, overwrite=False)
+            state = _load_state()
+        if state["admin_token_digest"] != admin_token_digest:
+            raise PermissionError(
+                "Existing queue state requires its original administrator token"
+            )
+        self._admin_token_digest = state["admin_token_digest"]
         self._counts = Counter()
         self._quotas = {}
+        for namespace, job_id, resources in state["quotas"]:
+            self._quotas[(namespace, job_id)] = dict(resources)
         self._usage = {}
         self._waiting = {}
         self._permits = {}
@@ -185,11 +229,23 @@ class _QueueController:
         if not isinstance(quota_namespace, str) or not quota_namespace:
             raise ValueError("quota_namespace must be a nonempty string")
         key = (quota_namespace, job_id)
+        quotas = dict(self._quotas)
         if resources is None:
-            self._quotas.pop(key, None)
+            quotas.pop(key, None)
         else:
             _validate_resources(resources)
-            self._quotas[key] = dict(resources)
+            quotas[key] = dict(resources)
+        _save_state(
+            {
+                "version": 1,
+                "admin_token_digest": self._admin_token_digest,
+                "quotas": [
+                    [namespace, quota_job_id, quota]
+                    for (namespace, quota_job_id), quota in sorted(quotas.items())
+                ],
+            }
+        )
+        self._quotas = quotas
         self._drain()
 
     async def acquire(self, request, ticket):
@@ -601,3 +657,77 @@ def disable_admission():
                 setattr(cls, method, original)
         _originals.clear()
         _runtime_env_cache.clear()
+
+
+def _cli_resources(value):
+    try:
+        resources = json.loads(value)
+        _validate_resources(resources)
+        return resources
+    except (ValueError, TypeError) as error:
+        raise argparse.ArgumentTypeError(str(error)) from error
+
+
+def _cli_token(args):
+    token = args.admin_token or os.environ.get("RAY_ADMISSION_ADMIN_TOKEN")
+    if not token:
+        raise ValueError("Set RAY_ADMISSION_ADMIN_TOKEN or pass --admin-token")
+    return token
+
+
+def register_cli(parser):
+    """Add this implementation's commands to the shared CLI parser."""
+    parser.add_argument("--address", default=None, help="Ray cluster address")
+    parser.add_argument(
+        "--admin-token", help="Administrator token (environment variable is preferred)"
+    )
+    commands = parser.add_subparsers(dest="command", required=True)
+    commands.add_parser("start", help="Start or authenticate to the detached queue")
+    commands.add_parser("status", help="Show quotas, usage, and waiting requests")
+    quota = commands.add_parser("quota", help="Manage per-Job quotas")
+    quota_commands = quota.add_subparsers(dest="quota_command", required=True)
+    set_quota = quota_commands.add_parser("set")
+    set_quota.add_argument("job_id")
+    set_quota.add_argument(
+        "resources", type=_cli_resources, help='JSON, e.g. {"CPU": 4}'
+    )
+    delete_quota = quota_commands.add_parser("delete")
+    delete_quota.add_argument("job_id")
+
+
+def run_cli(args):
+    """Execute a parsed queue command."""
+    try:
+        if args.command == "start":
+            if args.address is not None:
+                ray.init(address=args.address, namespace=_NAMESPACE)
+            start(admin_token=_cli_token(args))
+            print(json.dumps({"name": _NAME, "namespace": _NAMESPACE}))
+        else:
+            ray.init(address=args.address, namespace=_NAMESPACE)
+            controller = ray.get_actor(_NAME, namespace=_NAMESPACE)
+            if args.command == "status":
+                print(json.dumps(ray.get(controller.status.remote()), indent=2))
+            else:
+                resources = args.resources if args.quota_command == "set" else None
+                quota_namespace = _current_quota_namespace()
+                ray.get(
+                    controller.set_job_quota.remote(
+                        args.job_id,
+                        resources,
+                        quota_namespace=quota_namespace,
+                        admin_token=_cli_token(args),
+                    )
+                )
+                print(
+                    json.dumps(
+                        {
+                            "quota_namespace": quota_namespace,
+                            "job_id": args.job_id,
+                            "resources": resources,
+                        }
+                    )
+                )
+    finally:
+        if ray.is_initialized():
+            ray.shutdown()

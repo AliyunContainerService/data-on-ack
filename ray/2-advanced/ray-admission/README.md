@@ -33,6 +33,11 @@ ray-admission queue --address auto status
 The Job ID is `ray.get_runtime_context().get_job_id()` in the business driver.
 Unconfigured `(quota namespace, Job ID)` pairs are unlimited. `quota set`
 replaces the full resource vector; `quota delete <ray-job-id>` removes it.
+Quota configuration and the administrator token digest are saved in Ray GCS KV.
+If the controller actor is recreated in the same cluster, call `start` with the
+original token to restore the quotas. The controller does not recover active
+permits, waiting submissions, or counters; restart it only when no admitted work
+is running. Cluster-wide durability depends on persistent GCS storage.
 
 ## Enable in a business driver
 
@@ -56,5 +61,4 @@ before it submits work. New task and actor workers inherit this quota namespace
 through the worker startup hook.
 
 The queue uses cooperative Python interception; it does not provide isolation
-from untrusted code, durable controller state, or support for Ray Client, Java,
-or C++ submissions.
+from untrusted code or support for Ray Client, Java, or C++ submissions.

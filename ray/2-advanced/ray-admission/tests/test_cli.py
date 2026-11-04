@@ -3,12 +3,16 @@ from contextlib import redirect_stdout
 from io import StringIO
 from unittest.mock import patch
 
-from ray_admission.cli import _parser, _resources, main
+from ray_admission.cli import _implementations, _parser, main
+from ray_admission.queue import _cli_resources
 
 
 class CliTest(unittest.TestCase):
     def test_zero_quota_is_preserved(self):
-        self.assertEqual(_resources('{"GPU": 0}'), {"GPU": 0})
+        self.assertEqual(_cli_resources('{"GPU": 0}'), {"GPU": 0})
+
+    def test_discovers_queue_submodule(self):
+        self.assertIn("queue", _implementations())
 
     def test_defaults(self):
         args = _parser().parse_args(["queue", "start"])
@@ -20,7 +24,7 @@ class CliTest(unittest.TestCase):
                 with self.assertRaises(SystemExit):
                     _parser().parse_args(["queue", option, "other", "start"])
 
-    @patch("ray_admission.cli.ray")
+    @patch("ray_admission.queue.ray")
     def test_list_does_not_connect_to_ray(self, ray):
         output = StringIO()
         with redirect_stdout(output):
@@ -34,8 +38,8 @@ class CliTest(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 _parser().parse_args(["start"])
 
-    @patch("ray_admission.cli.ray")
-    @patch("ray_admission.cli.submission_queue.start")
+    @patch("ray_admission.queue.ray")
+    @patch("ray_admission.queue.start")
     def test_start_uses_token_from_environment(self, start, ray):
         ray.is_initialized.return_value = False
         with patch.dict(
@@ -50,7 +54,7 @@ class CliTest(unittest.TestCase):
             admin_token="secret",
         )
 
-    @patch("ray_admission.cli.ray")
+    @patch("ray_admission.queue.ray")
     def test_quota_uses_environment_namespace(self, ray):
         ray.is_initialized.return_value = False
         with patch.dict(

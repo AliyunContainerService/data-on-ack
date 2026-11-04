@@ -102,14 +102,33 @@ class SubmissionQueueTest(unittest.TestCase):
         ray.shutdown()
 
     def setUp(self):
+        from ray.experimental.internal_kv import _internal_kv_del
+
+        _internal_kv_del(queue._STATE_KEY, namespace=queue._NAMESPACE)
         self.controller = None
         self.admin_token = secrets.token_urlsafe(32)
 
     def tearDown(self):
+        from ray.experimental.internal_kv import _internal_kv_del
+
         queue.disable_admission()
         if self.controller is not None:
             ray.kill(self.controller)
             wait_until(lambda: controller_is_absent(queue._NAMESPACE))
+        _internal_kv_del(queue._STATE_KEY, namespace=queue._NAMESPACE)
+
+    def test_quota_survives_controller_recreation(self):
+        controller = queue.start(admin_token=self.admin_token)
+        self.controller = controller
+        ray.get(
+            controller.set_job_quota.remote(
+                "saved-job", {"CPU": 2}, admin_token=self.admin_token
+            )
+        )
+        ray.kill(controller)
+        wait_until(lambda: controller_is_absent(queue._NAMESPACE))
+        self.controller = queue.start(admin_token=self.admin_token)
+        self.assertEqual(status(self.controller)["quotas"], {"saved-job": {"CPU": 2}})
 
     def enable_admission(self):
         queue.start(admin_token=self.admin_token)
