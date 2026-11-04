@@ -130,6 +130,77 @@ class SubmissionQueueTest(unittest.TestCase):
         self.controller = queue.start(admin_token=self.admin_token)
         self.assertEqual(status(self.controller)["quotas"], {"saved-job": {"CPU": 2}})
 
+    def test_running_task_permit_survives_automatic_restart(self):
+        gate = _Gate.remote()
+
+        @ray.remote(num_cpus=1)
+        def work():
+            return ray.get(gate.block.remote("task"))
+
+        controller = self.enable_admission()
+        job_id = ray.get_runtime_context().get_job_id()
+        ray.get(
+            controller.set_job_quota.remote(
+                job_id, {"CPU": 1}, admin_token=self.admin_token
+            )
+        )
+        task = work.remote()
+        wait_until(lambda: status(controller)["usage"].get(job_id) == {"CPU": 1})
+        ray.kill(controller, no_restart=False)
+        wait_until(lambda: status(controller)["usage"].get(job_id) == {"CPU": 1})
+        gate.open.remote("task")
+        self.assertEqual(ray.get(task), "task")
+        wait_until(lambda: status(controller)["usage"].get(job_id) == {"CPU": 0})
+
+    def test_running_actor_permit_survives_automatic_restart(self):
+        @ray.remote(num_cpus=0.5)
+        class Service:
+            def ready(self):
+                return True
+
+        controller = self.enable_admission()
+        job_id = ray.get_runtime_context().get_job_id()
+        ray.get(
+            controller.set_job_quota.remote(
+                job_id, {"CPU": 0.5}, admin_token=self.admin_token
+            )
+        )
+        actor = Service.remote()
+        self.assertTrue(ray.get(actor.ready.remote()))
+        wait_until(lambda: status(controller)["usage"].get(job_id) == {"CPU": 0.5})
+        ray.kill(controller, no_restart=False)
+        wait_until(lambda: status(controller)["usage"].get(job_id) == {"CPU": 0.5})
+        ray.kill(actor)
+        wait_until(lambda: status(controller)["usage"].get(job_id) == {"CPU": 0})
+
+    def test_waiting_submission_retries_after_automatic_restart(self):
+        gate = _Gate.remote()
+
+        @ray.remote(num_cpus=1)
+        def work(token):
+            return ray.get(gate.block.remote(token))
+
+        controller = self.enable_admission()
+        job_id = ray.get_runtime_context().get_job_id()
+        ray.get(
+            controller.set_job_quota.remote(
+                job_id, {"CPU": 1}, admin_token=self.admin_token
+            )
+        )
+        first = work.remote("first")
+        wait_until(lambda: status(controller)["usage"].get(job_id) == {"CPU": 1})
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            second = pool.submit(work.remote, "second")
+            wait_until(lambda: len(status(controller)["waiting"]) == 1)
+            ray.kill(controller, no_restart=False)
+            wait_until(lambda: len(status(controller)["waiting"]) == 1)
+            self.assertFalse(second.done())
+            ray.get(gate.open.remote("first"))
+            self.assertEqual(ray.get(first), "first")
+            second_ref = second.result(timeout=30)
+            ray.get(gate.open.remote("second"))
+            self.assertEqual(ray.get(second_ref), "second")
+
     def enable_admission(self):
         queue.start(admin_token=self.admin_token)
         self.controller = queue.enable_admission()

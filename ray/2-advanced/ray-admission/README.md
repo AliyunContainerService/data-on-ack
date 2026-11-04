@@ -33,11 +33,14 @@ ray-admission queue --address auto status
 The Job ID is `ray.get_runtime_context().get_job_id()` in the business driver.
 Unconfigured `(quota namespace, Job ID)` pairs are unlimited. `quota set`
 replaces the full resource vector; `quota delete <ray-job-id>` removes it.
-Quota configuration and the administrator token digest are saved in Ray GCS KV.
-If the controller actor is recreated in the same cluster, call `start` with the
-original token to restore the quotas. The controller does not recover active
-permits, waiting submissions, or counters; restart it only when no admitted work
-is running. Cluster-wide durability depends on persistent GCS storage.
+Quota configuration, the administrator token digest, and active resource
+reservations are saved in Ray GCS KV. The detached controller restarts after an
+unexpected actor failure and restores task ObjectRefs and actor IDs to monitor
+their completion. In-flight admission calls are retried by Ray; waiting requests
+re-enter the per-Job queue. Counters and the exact pre-crash waiting order are
+not restored. A reservation granted just before a crash but never tracked by
+its submitter remains reserved until that submitter releases it. Cluster-wide
+durability depends on persistent GCS storage.
 
 ## Enable in a business driver
 

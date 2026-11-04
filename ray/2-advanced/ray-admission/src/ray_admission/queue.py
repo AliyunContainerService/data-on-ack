@@ -52,8 +52,8 @@ Actor methods do not charge the actor resources again. Default actors reserve
 zero lifetime CPUs, matching Ray. Resource-bearing tasks require positive fixed
 returns. Nested submissions can deadlock if the parent holds the job's budget.
 Requests larger than the current quota wait until the quota is increased.
-Quota configuration survives a controller actor restart within the same Ray cluster.
-Active permits, waiting requests, and counters do not survive a controller restart.
+Quota configuration and admitted resource reservations survive a controller actor
+restart within the same Ray cluster. In-flight admission RPCs are retried by Ray.
 Cluster shutdown removes the GCS KV state unless Ray's GCS storage is persistent.
 There is no lease expiry for submitters lost before tracking.
 Administrator tokens authorize configuration RPCs; they are not a sandbox for
@@ -63,6 +63,7 @@ IDs and resource claims remain cooperative metadata in this prototype.
 
 import argparse
 import asyncio
+import base64
 import functools
 import hashlib
 import hmac
@@ -188,6 +189,7 @@ class _QueueController:
                 "version": 1,
                 "admin_token_digest": admin_token_digest,
                 "quotas": [],
+                "permits": [],
             }
             _save_state(state, overwrite=False)
             state = _load_state()
@@ -206,6 +208,47 @@ class _QueueController:
         self._tracked = {}
         self._actors = {}
         self._monitor = None
+        for saved in state.get("permits", []):
+            ticket = saved["ticket"]
+            key = (saved["quota_namespace"], saved["job_id"])
+            resources = _validate_resources(saved["resources"])
+            self._permits[ticket] = (key, resources)
+            self._usage.setdefault(key, Counter()).update(resources)
+            if saved.get("refs"):
+                self._tracked[ticket] = {
+                    ray.cloudpickle.loads(base64.b64decode(value))
+                    for value in saved["refs"]
+                }
+            if saved.get("actor_id"):
+                self._actors[ticket] = saved["actor_id"]
+        if self._tracked or self._actors:
+            self._start_monitor()
+
+    def _persist(self):
+        _save_state(
+            {
+                "version": 1,
+                "admin_token_digest": self._admin_token_digest,
+                "quotas": [
+                    [namespace, job_id, quota]
+                    for (namespace, job_id), quota in sorted(self._quotas.items())
+                ],
+                "permits": [
+                    {
+                        "ticket": ticket,
+                        "quota_namespace": key[0],
+                        "job_id": key[1],
+                        "resources": resources,
+                        "refs": [
+                            base64.b64encode(ray.cloudpickle.dumps(ref)).decode()
+                            for ref in self._tracked.get(ticket, ())
+                        ],
+                        "actor_id": self._actors.get(ticket),
+                    }
+                    for ticket, (key, resources) in sorted(self._permits.items())
+                ],
+            }
+        )
 
     def check_admin(self, admin_token):
         if not isinstance(admin_token, str) or not admin_token:
@@ -235,20 +278,18 @@ class _QueueController:
         else:
             _validate_resources(resources)
             quotas[key] = dict(resources)
-        _save_state(
-            {
-                "version": 1,
-                "admin_token_digest": self._admin_token_digest,
-                "quotas": [
-                    [namespace, quota_job_id, quota]
-                    for (namespace, quota_job_id), quota in sorted(quotas.items())
-                ],
-            }
-        )
+        previous = self._quotas
         self._quotas = quotas
+        try:
+            self._persist()
+        except Exception:
+            self._quotas = previous
+            raise
         self._drain()
 
     async def acquire(self, request, ticket):
+        if ticket in self._permits:
+            return True  # Ray retried an approved RPC after actor restart.
         job_id = request["job_id"]
         quota_namespace = request.get("quota_namespace", _NAMESPACE)
         key = (quota_namespace, job_id)
@@ -289,6 +330,7 @@ class _QueueController:
                 if resources:
                     usage.update(resources)
                     self._permits[ticket] = (key, resources)
+                    self._persist()
                 self._counts[request["kind"]] += 1
                 future.set_result(True)
             if not waiting:
@@ -303,6 +345,8 @@ class _QueueController:
                 usage[resource] = max(0, usage[resource] - amount)
         self._tracked.pop(ticket, None)
         self._actors.pop(ticket, None)
+        if permit is not None:
+            self._persist()
         for waiting in self._waiting.values():
             for queued_ticket, _, _, future in waiting:
                 if queued_ticket == ticket:
@@ -314,6 +358,7 @@ class _QueueController:
         if ticket not in self._permits:
             return  # A request with no resource demand needs no permit.
         self._tracked[ticket] = set(refs)
+        self._persist()
         self._start_monitor()
 
     async def track_actor(self, ticket, actor_id):
@@ -323,6 +368,7 @@ class _QueueController:
             self.release(ticket)
             return
         self._actors[ticket] = actor_id
+        self._persist()
         self._start_monitor()
 
     def _start_monitor(self):
@@ -572,6 +618,8 @@ def start(*, admin_token):
                 lifetime="detached",
                 get_if_exists=True,
                 num_cpus=0,
+                max_restarts=-1,
+                max_task_retries=-1,
             )
             .remote(hashlib.sha256(admin_token.encode("utf-8")).hexdigest())
         )
