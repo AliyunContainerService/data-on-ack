@@ -48,8 +48,6 @@ import ray
 from ray_admission.queue import enable_admission
 
 ray.init(address="auto")
-print("Ray Job ID:", ray.get_runtime_context().get_job_id(), flush=True)
-input("管理员配置该 Job 配额后按 Enter：")
 enable_admission()
 
 @ray.remote(num_cpus=1)

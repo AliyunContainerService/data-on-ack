@@ -41,8 +41,6 @@ import ray
 from ray_admission.queue import enable_admission
 
 ray.init(address="auto")
-print(ray.get_runtime_context().get_job_id())
-input("Configure the Job quota, then press Enter: ")
 enable_admission()
 
 @ray.remote(num_cpus=1)
