@@ -173,6 +173,37 @@ class SubmissionQueueTest(unittest.TestCase):
         ray.kill(actor)
         wait_until(lambda: status(controller)["usage"].get(job_id) == {"CPU": 0})
 
+    def test_actor_dead_before_controller_recreation_is_released(self):
+        @ray.remote(num_cpus=0.5)
+        class Service:
+            def ready(self):
+                return True
+
+        controller = queue.start(admin_token=self.admin_token)
+        self.controller = controller
+        job_id = ray.get_runtime_context().get_job_id()
+        ray.get(
+            controller.set_job_quota.remote(
+                job_id, {"CPU": 0.5}, admin_token=self.admin_token
+            )
+        )
+        actor = Service.remote()
+        self.assertTrue(ray.get(actor.ready.remote()))
+        ticket = uuid.uuid4().hex
+        request = {
+            "kind": "actor_creation",
+            "name": "Service",
+            "job_id": job_id,
+            "resources": {"CPU": 0.5},
+        }
+        ray.get(controller.acquire.remote(request, ticket))
+        ray.get(controller.track_actor.remote(ticket, actor._ray_actor_id.hex()))
+        ray.kill(controller)
+        wait_until(lambda: controller_is_absent(queue._NAMESPACE))
+        ray.kill(actor)
+        self.controller = queue.start(admin_token=self.admin_token)
+        wait_until(lambda: status(self.controller)["usage"].get(job_id) == {"CPU": 0})
+
     def test_waiting_submission_retries_after_automatic_restart(self):
         gate = _Gate.remote()
 

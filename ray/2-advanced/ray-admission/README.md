@@ -41,6 +41,8 @@ re-enter the per-Job queue. Counters and the exact pre-crash waiting order are
 not restored. A reservation granted just before a crash but never tracked by
 its submitter remains reserved until that submitter releases it. Cluster-wide
 durability depends on persistent GCS storage.
+An actor that died while the controller was down is released when its GCS state
+reports `DEAD`; if that state is unavailable, its reservation remains held.
 
 ## Enable in a business driver
 
