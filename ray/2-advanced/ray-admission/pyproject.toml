@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ray-admission"
+version = "0.1.0"
+description = "Standalone Ray submission admission queue and CLI"
+requires-python = ">=3.10"
+dependencies = ["ray>=2.58"]
+readme = "README.md"
+
+[project.scripts]
+ray-admission = "ray_admission.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
