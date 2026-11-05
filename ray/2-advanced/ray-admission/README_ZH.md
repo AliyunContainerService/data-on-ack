@@ -1,5 +1,7 @@
 # Ray Admission 使用说明
 
+许可状态、故障处理及存储优化方案见 [控制器设计](DESIGN.md)。
+
 本目录是独立的 `ray-admission` Python 安装包，提供 `ray-admission` CLI 和
 `ray_admission.queue` 模块。当前 `ray-admission list` 只有 `queue` 实现：
 它在 Ray task 或 actor 提交前检查资源配额，不足时让 `.remote()` 等待。

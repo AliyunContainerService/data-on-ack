@@ -208,6 +208,10 @@ class _QueueController:
         self._tracked = {}
         self._actors = {}
         self._monitor = None
+        self._storage_error = None
+        self._monitor_error = None
+        self._released = set(state.get("released", []))
+        self._pending = {}
         for saved in state.get("permits", []):
             ticket = saved["ticket"]
             key = (saved["quota_namespace"], saved["job_id"])
@@ -225,10 +229,28 @@ class _QueueController:
             self._start_monitor()
 
     def _persist(self):
+        self._ensure_writable()
+        try:
+            self._write_snapshot()
+        except Exception as error:
+            # A failed response does not prove the KV write was rejected. Stop
+            # all mutations until reconstruction reads the authoritative state.
+            self._storage_error = str(error)
+            for future in self._pending.values():
+                if not future.done():
+                    future.set_exception(RuntimeError("Queue storage unavailable; restart required"))
+            raise RuntimeError("Queue storage unavailable; restart required") from error
+
+    def _ensure_writable(self):
+        if self._storage_error is not None:
+            raise RuntimeError("Queue storage unavailable; restart required")
+
+    def _write_snapshot(self):
         _save_state(
             {
                 "version": 1,
                 "admin_token_digest": self._admin_token_digest,
+                "released": sorted(self._released),
                 "quotas": [
                     [namespace, job_id, quota]
                     for (namespace, job_id), quota in sorted(self._quotas.items())
@@ -267,6 +289,7 @@ class _QueueController:
         admitted work. Existing usage is retained and new requests wait.
         """
         self.check_admin(admin_token)
+        self._ensure_writable()
         if not isinstance(job_id, str) or not job_id:
             raise ValueError("job_id must be a nonempty string")
         if not isinstance(quota_namespace, str) or not quota_namespace:
@@ -288,8 +311,13 @@ class _QueueController:
         self._drain()
 
     async def acquire(self, request, ticket):
+        self._ensure_writable()
+        if ticket in self._released:
+            raise ValueError("Ticket has already been released")
         if ticket in self._permits:
             return True  # Ray retried an approved RPC after actor restart.
+        if ticket in self._pending:
+            return await asyncio.shield(self._pending[ticket])
         job_id = request["job_id"]
         quota_namespace = request.get("quota_namespace", _NAMESPACE)
         key = (quota_namespace, job_id)
@@ -301,17 +329,24 @@ class _QueueController:
         if not request.get("trackable", True) and resources:
             raise ValueError("Resource accounting requires positive fixed returns")
         future = asyncio.get_running_loop().create_future()
+        self._pending[ticket] = future
         self._waiting.setdefault(key, deque()).append(
             (ticket, request, resources, future)
         )
-        self._drain()
         try:
-            return await future
+            self._drain()
+            return await asyncio.shield(future)
         except asyncio.CancelledError:
             self.release(ticket)
             raise
+        finally:
+            if future.done():
+                if not future.cancelled():
+                    future.exception()  # Retrieve a storage failure set before awaiting.
+                self._pending.pop(ticket, None)
 
     def _drain(self):
+        self._ensure_writable()
         # FIFO within each job: a blocked job does not block another job.
         for key, waiting in list(self._waiting.items()):
             usage = self._usage.setdefault(key, Counter())
@@ -337,6 +372,9 @@ class _QueueController:
                 del self._waiting[key]
 
     def release(self, ticket):
+        self._ensure_writable()
+        if ticket in self._released:
+            return
         permit = self._permits.pop(ticket, None)
         if permit is not None:
             key, resources = permit
@@ -345,8 +383,8 @@ class _QueueController:
                 usage[resource] = max(0, usage[resource] - amount)
         self._tracked.pop(ticket, None)
         self._actors.pop(ticket, None)
-        if permit is not None:
-            self._persist()
+        self._released.add(ticket)
+        self._persist()
         for waiting in self._waiting.values():
             for queued_ticket, _, _, future in waiting:
                 if queued_ticket == ticket:
@@ -355,14 +393,31 @@ class _QueueController:
         self._drain()
 
     async def track(self, ticket, refs):
+        self._ensure_writable()
         if ticket not in self._permits:
             return  # A request with no resource demand needs no permit.
-        self._tracked[ticket] = set(refs)
+        refs = set(refs)
+        if ticket in self._actors:
+            raise ValueError("Ticket already tracks an actor")
+        if ticket in self._tracked:
+            if self._tracked[ticket] != refs:
+                raise ValueError("Ticket already tracks different task returns")
+            self._start_monitor()
+            return
+        self._tracked[ticket] = refs
         self._persist()
         self._start_monitor()
 
     async def track_actor(self, ticket, actor_id):
+        self._ensure_writable()
         if ticket not in self._permits:
+            return
+        if ticket in self._tracked:
+            raise ValueError("Ticket already tracks task returns")
+        if ticket in self._actors:
+            if self._actors[ticket] != actor_id:
+                raise ValueError("Ticket already tracks a different actor")
+            self._start_monitor()
             return
         if actor_id in self._actors.values():
             self.release(ticket)
@@ -376,9 +431,25 @@ class _QueueController:
             self._monitor = asyncio.create_task(self._watch_completions())
 
     async def _watch_completions(self):
+        delay = 0.02
+        while self._tracked or self._actors:
+            if self._storage_error is not None:
+                return
+            try:
+                await self._poll_completions()
+                self._monitor_error = None
+                delay = 0.02
+            except asyncio.CancelledError:
+                raise
+            except Exception as error:
+                self._monitor_error = str(error)
+                delay = min(max(delay * 2, 0.1), 5)
+            await asyncio.sleep(delay)
+
+    async def _poll_completions(self):
         from ray._private.state import actors
 
-        while self._tracked or self._actors:
+        if self._tracked or self._actors:
             refs = list({ref for refs in self._tracked.values() for ref in refs})
             if refs:
                 ready, _ = ray.wait(
@@ -386,14 +457,12 @@ class _QueueController:
                 )
                 ready = set(ready)
                 for ticket, pending in list(self._tracked.items()):
-                    pending.difference_update(ready)
-                    if not pending:
+                    if pending.issubset(ready):
                         self.release(ticket)
             for ticket, actor_id in list(self._actors.items()):
                 state = await asyncio.to_thread(actors, actor_id)
                 if state and state.get("State") == "DEAD":
                     self.release(ticket)
-            await asyncio.sleep(0.02)
 
     def snapshot(self):
         return dict(self._counts)
@@ -406,6 +475,21 @@ class _QueueController:
             return result
 
         return {
+            "health": {
+                "storage_error": self._storage_error,
+                "monitor_error": self._monitor_error,
+                "accepting": self._storage_error is None,
+            },
+            "permits": [
+                {
+                    "ticket": ticket,
+                    "state": "TRACKED" if ticket in self._tracked or ticket in self._actors else "RESERVED",
+                    "quota_namespace": key[0],
+                    "job_id": key[1],
+                    "resources": dict(resources),
+                }
+                for ticket, (key, resources) in self._permits.items()
+            ],
             "quotas": nested(self._quotas),
             "usage": nested(self._usage),
             "waiting": [

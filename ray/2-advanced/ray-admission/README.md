@@ -7,6 +7,8 @@ a detached Ray actor named `ray-submission-queue` in the fixed
 selects the **quota namespace**; it does not change the controller location.
 
 See [中文使用说明](README_ZH.md) for the complete workflow.
+See [controller lifecycle and storage design](DESIGN.md) for failure handling,
+retry guarantees, and the proposed storage optimization.
 
 ## Install
 
