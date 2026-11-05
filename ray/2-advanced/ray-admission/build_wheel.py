@@ -45,6 +45,8 @@ def main():
         ).encode(),
     }
     record = io.StringIO(newline="")
+    for source in (package / "src/ray_admission").rglob("*.py"):
+        files[source.relative_to(package / "src").as_posix()] = source.read_bytes()
     writer = csv.writer(record)
     for name, data in files.items():
         digest = base64.urlsafe_b64encode(hashlib.sha256(data).digest()).rstrip(b"=")

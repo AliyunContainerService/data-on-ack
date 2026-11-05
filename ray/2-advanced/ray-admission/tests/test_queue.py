@@ -13,6 +13,7 @@ from unittest.mock import patch
 
 import ray
 from ray_admission import queue
+from etcd_test_support import configure_storage
 
 
 @ray.remote(num_cpus=0)
@@ -64,6 +65,9 @@ def status(controller):
 
 
 class AutoStartTest(unittest.TestCase):
+    def setUp(self):
+        configure_storage()
+
     def test_enable_admission_initializes_ray(self):
         self.assertFalse(ray.is_initialized())
         initialize = ray.init
@@ -102,20 +106,15 @@ class SubmissionQueueTest(unittest.TestCase):
         ray.shutdown()
 
     def setUp(self):
-        from ray.experimental.internal_kv import _internal_kv_del
-
-        _internal_kv_del(queue._STATE_KEY, namespace=queue._NAMESPACE)
+        configure_storage()
         self.controller = None
         self.admin_token = secrets.token_urlsafe(32)
 
     def tearDown(self):
-        from ray.experimental.internal_kv import _internal_kv_del
-
         queue.disable_admission()
         if self.controller is not None:
             ray.kill(self.controller)
             wait_until(lambda: controller_is_absent(queue._NAMESPACE))
-        _internal_kv_del(queue._STATE_KEY, namespace=queue._NAMESPACE)
 
     def test_quota_survives_controller_recreation(self):
         controller = queue.start(admin_token=self.admin_token)

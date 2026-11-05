@@ -54,7 +54,7 @@ returns. Nested submissions can deadlock if the parent holds the job's budget.
 Requests larger than the current quota wait until the quota is increased.
 Quota configuration and admitted resource reservations survive a controller actor
 restart within the same Ray cluster. In-flight admission RPCs are retried by Ray.
-Cluster shutdown removes the GCS KV state unless Ray's GCS storage is persistent.
+State lives in etcd; use a distinct storage prefix for each Ray cluster lifetime.
 There is no lease expiry for submitters lost before tracking.
 Administrator tokens authorize configuration RPCs; they are not a sandbox for
 mutually untrusted code with full access to the same Ray cluster. Submission job
@@ -62,23 +62,20 @@ IDs and resource claims remain cooperative metadata in this prototype.
 """
 
 import argparse
-import asyncio
-import base64
 import functools
 import hashlib
-import hmac
 import inspect
 import json
 import math
 import os
 import threading
 import uuid
-from collections import Counter, deque
 from contextlib import contextmanager
 
 import ray
 from ray.actor import ActorClass, ActorHandle
 from ray.remote_function import RemoteFunction
+from ray_admission._controller import QueueController as _QueueController
 
 _NAME = "ray-submission-queue"
 _NAMESPACE = "ray-submission-queue"
@@ -90,31 +87,40 @@ _quota_namespace = None
 _originals = {}
 _runtime_env_cache = {}
 _MARKER = "RAY_SUBMISSION_QUEUE_IDENTITY"
-_STATE_KEY = "controller-state-v1"
+_session_sequence = 0
+_session_watermark = 0
+_session_done = set()
+_session_opened = False
 DESCRIPTION = "Per-Job resource quota and FIFO submission queue"
 
 
-def _load_state():
-    from ray.experimental.internal_kv import _internal_kv_get
+def _next_ticket():
+    global _session_sequence, _session_opened
+    with _lock:
+        if not _session_opened:
+            with _bypass():
+                ray.get(_controller.open_session.remote(_identity[1]))
+            _session_opened = True
+        _session_sequence += 1
+        return f"{_identity[1]}:{_session_sequence}"
 
-    raw = _internal_kv_get(_STATE_KEY, namespace=_NAMESPACE)
-    if raw is None:
-        return None
-    state = json.loads(raw)
-    if state.get("version") != 1 or not isinstance(state.get("quotas"), list):
-        raise RuntimeError("Unsupported or corrupt queue state in Ray GCS KV")
-    return state
 
-
-def _save_state(state, *, overwrite=True):
-    from ray.experimental.internal_kv import _internal_kv_put
-
-    _internal_kv_put(
-        _STATE_KEY,
-        json.dumps(state, sort_keys=True),
-        overwrite=overwrite,
-        namespace=_NAMESPACE,
-    )
+def _ack_ticket(controller, ticket):
+    global _session_watermark
+    session, sequence = ticket.split(":")
+    with _lock:
+        _session_done.add(int(sequence))
+        while _session_watermark + 1 in _session_done:
+            _session_watermark += 1
+            _session_done.remove(_session_watermark)
+        watermark = _session_watermark
+    try:
+        with _bypass():
+            ray.get(controller.acknowledge.remote(session, watermark), timeout=10)
+    except Exception:
+        # A lost acknowledgment only delays compaction; the next completed
+        # submission resends the cumulative watermark.
+        pass
 
 
 def _current_quota_namespace():
@@ -177,334 +183,6 @@ def _propagated_runtime_env(runtime_env):
         env = upload_worker_process_setup_hook_if_needed(env, global_worker)
         _runtime_env_cache[cache_key] = env
     return _runtime_env_cache[cache_key]
-
-
-class _QueueController:
-    """Per-job resource budgets and FIFO admission on one async event loop."""
-
-    def __init__(self, admin_token_digest):
-        state = _load_state()
-        if state is None:
-            state = {
-                "version": 1,
-                "admin_token_digest": admin_token_digest,
-                "quotas": [],
-                "permits": [],
-            }
-            _save_state(state, overwrite=False)
-            state = _load_state()
-        if state["admin_token_digest"] != admin_token_digest:
-            raise PermissionError(
-                "Existing queue state requires its original administrator token"
-            )
-        self._admin_token_digest = state["admin_token_digest"]
-        self._counts = Counter()
-        self._quotas = {}
-        for namespace, job_id, resources in state["quotas"]:
-            self._quotas[(namespace, job_id)] = dict(resources)
-        self._usage = {}
-        self._waiting = {}
-        self._permits = {}
-        self._tracked = {}
-        self._actors = {}
-        self._monitor = None
-        self._storage_error = None
-        self._monitor_error = None
-        self._released = set(state.get("released", []))
-        self._pending = {}
-        for saved in state.get("permits", []):
-            ticket = saved["ticket"]
-            key = (saved["quota_namespace"], saved["job_id"])
-            resources = _validate_resources(saved["resources"])
-            self._permits[ticket] = (key, resources)
-            self._usage.setdefault(key, Counter()).update(resources)
-            if saved.get("refs"):
-                self._tracked[ticket] = {
-                    ray.cloudpickle.loads(base64.b64decode(value))
-                    for value in saved["refs"]
-                }
-            if saved.get("actor_id"):
-                self._actors[ticket] = saved["actor_id"]
-        if self._tracked or self._actors:
-            self._start_monitor()
-
-    def _persist(self):
-        self._ensure_writable()
-        try:
-            self._write_snapshot()
-        except Exception as error:
-            # A failed response does not prove the KV write was rejected. Stop
-            # all mutations until reconstruction reads the authoritative state.
-            self._storage_error = str(error)
-            for future in self._pending.values():
-                if not future.done():
-                    future.set_exception(RuntimeError("Queue storage unavailable; restart required"))
-            raise RuntimeError("Queue storage unavailable; restart required") from error
-
-    def _ensure_writable(self):
-        if self._storage_error is not None:
-            raise RuntimeError("Queue storage unavailable; restart required")
-
-    def _write_snapshot(self):
-        _save_state(
-            {
-                "version": 1,
-                "admin_token_digest": self._admin_token_digest,
-                "released": sorted(self._released),
-                "quotas": [
-                    [namespace, job_id, quota]
-                    for (namespace, job_id), quota in sorted(self._quotas.items())
-                ],
-                "permits": [
-                    {
-                        "ticket": ticket,
-                        "quota_namespace": key[0],
-                        "job_id": key[1],
-                        "resources": resources,
-                        "refs": [
-                            base64.b64encode(ray.cloudpickle.dumps(ref)).decode()
-                            for ref in self._tracked.get(ticket, ())
-                        ],
-                        "actor_id": self._actors.get(ticket),
-                    }
-                    for ticket, (key, resources) in sorted(self._permits.items())
-                ],
-            }
-        )
-
-    def check_admin(self, admin_token):
-        if not isinstance(admin_token, str) or not admin_token:
-            raise PermissionError("Queue administrator credentials required")
-        digest = hashlib.sha256(admin_token.encode("utf-8")).hexdigest()
-        if not hmac.compare_digest(digest, self._admin_token_digest):
-            raise PermissionError("Invalid queue administrator credentials")
-
-    def set_job_quota(
-        self, job_id, resources, *, quota_namespace=_NAMESPACE, admin_token=None
-    ):
-        """Set resource ceilings; unspecified dimensions/jobs are unlimited.
-
-        Requires the queue administrator token, even when changing one's own job.
-        Pass None to remove a job's ceilings. Lowering a ceiling does not evict
-        admitted work. Existing usage is retained and new requests wait.
-        """
-        self.check_admin(admin_token)
-        self._ensure_writable()
-        if not isinstance(job_id, str) or not job_id:
-            raise ValueError("job_id must be a nonempty string")
-        if not isinstance(quota_namespace, str) or not quota_namespace:
-            raise ValueError("quota_namespace must be a nonempty string")
-        key = (quota_namespace, job_id)
-        quotas = dict(self._quotas)
-        if resources is None:
-            quotas.pop(key, None)
-        else:
-            _validate_resources(resources)
-            quotas[key] = dict(resources)
-        previous = self._quotas
-        self._quotas = quotas
-        try:
-            self._persist()
-        except Exception:
-            self._quotas = previous
-            raise
-        self._drain()
-
-    async def acquire(self, request, ticket):
-        self._ensure_writable()
-        if ticket in self._released:
-            raise ValueError("Ticket has already been released")
-        if ticket in self._permits:
-            return True  # Ray retried an approved RPC after actor restart.
-        if ticket in self._pending:
-            return await asyncio.shield(self._pending[ticket])
-        job_id = request["job_id"]
-        quota_namespace = request.get("quota_namespace", _NAMESPACE)
-        key = (quota_namespace, job_id)
-        resources = _validate_resources(request["resources"])
-        if request["kind"] == "actor_method":
-            # Actor lifetime resources are charged once at creation.
-            self._counts[request["kind"]] += 1
-            return True
-        if not request.get("trackable", True) and resources:
-            raise ValueError("Resource accounting requires positive fixed returns")
-        future = asyncio.get_running_loop().create_future()
-        self._pending[ticket] = future
-        self._waiting.setdefault(key, deque()).append(
-            (ticket, request, resources, future)
-        )
-        try:
-            self._drain()
-            return await asyncio.shield(future)
-        except asyncio.CancelledError:
-            self.release(ticket)
-            raise
-        finally:
-            if future.done():
-                if not future.cancelled():
-                    future.exception()  # Retrieve a storage failure set before awaiting.
-                self._pending.pop(ticket, None)
-
-    def _drain(self):
-        self._ensure_writable()
-        # FIFO within each job: a blocked job does not block another job.
-        for key, waiting in list(self._waiting.items()):
-            usage = self._usage.setdefault(key, Counter())
-            limits = self._quotas.get(key, {})
-            while waiting:
-                ticket, request, resources, future = waiting[0]
-                if future.cancelled():
-                    waiting.popleft()
-                    continue
-                if any(
-                    usage[r] + resources.get(r, 0) > limit + 1e-9
-                    for r, limit in limits.items()
-                ):
-                    break
-                waiting.popleft()
-                if resources:
-                    usage.update(resources)
-                    self._permits[ticket] = (key, resources)
-                    self._persist()
-                self._counts[request["kind"]] += 1
-                future.set_result(True)
-            if not waiting:
-                del self._waiting[key]
-
-    def release(self, ticket):
-        self._ensure_writable()
-        if ticket in self._released:
-            return
-        permit = self._permits.pop(ticket, None)
-        if permit is not None:
-            key, resources = permit
-            usage = self._usage[key]
-            for resource, amount in resources.items():
-                usage[resource] = max(0, usage[resource] - amount)
-        self._tracked.pop(ticket, None)
-        self._actors.pop(ticket, None)
-        self._released.add(ticket)
-        self._persist()
-        for waiting in self._waiting.values():
-            for queued_ticket, _, _, future in waiting:
-                if queued_ticket == ticket:
-                    future.cancel()
-                    break
-        self._drain()
-
-    async def track(self, ticket, refs):
-        self._ensure_writable()
-        if ticket not in self._permits:
-            return  # A request with no resource demand needs no permit.
-        refs = set(refs)
-        if ticket in self._actors:
-            raise ValueError("Ticket already tracks an actor")
-        if ticket in self._tracked:
-            if self._tracked[ticket] != refs:
-                raise ValueError("Ticket already tracks different task returns")
-            self._start_monitor()
-            return
-        self._tracked[ticket] = refs
-        self._persist()
-        self._start_monitor()
-
-    async def track_actor(self, ticket, actor_id):
-        self._ensure_writable()
-        if ticket not in self._permits:
-            return
-        if ticket in self._tracked:
-            raise ValueError("Ticket already tracks task returns")
-        if ticket in self._actors:
-            if self._actors[ticket] != actor_id:
-                raise ValueError("Ticket already tracks a different actor")
-            self._start_monitor()
-            return
-        if actor_id in self._actors.values():
-            self.release(ticket)
-            return
-        self._actors[ticket] = actor_id
-        self._persist()
-        self._start_monitor()
-
-    def _start_monitor(self):
-        if self._monitor is None or self._monitor.done():
-            self._monitor = asyncio.create_task(self._watch_completions())
-
-    async def _watch_completions(self):
-        delay = 0.02
-        while self._tracked or self._actors:
-            if self._storage_error is not None:
-                return
-            try:
-                await self._poll_completions()
-                self._monitor_error = None
-                delay = 0.02
-            except asyncio.CancelledError:
-                raise
-            except Exception as error:
-                self._monitor_error = str(error)
-                delay = min(max(delay * 2, 0.1), 5)
-            await asyncio.sleep(delay)
-
-    async def _poll_completions(self):
-        from ray._private.state import actors
-
-        if self._tracked or self._actors:
-            refs = list({ref for refs in self._tracked.values() for ref in refs})
-            if refs:
-                ready, _ = ray.wait(
-                    refs, num_returns=len(refs), timeout=0, fetch_local=False
-                )
-                ready = set(ready)
-                for ticket, pending in list(self._tracked.items()):
-                    if pending.issubset(ready):
-                        self.release(ticket)
-            for ticket, actor_id in list(self._actors.items()):
-                state = await asyncio.to_thread(actors, actor_id)
-                if state and state.get("State") == "DEAD":
-                    self.release(ticket)
-
-    def snapshot(self):
-        return dict(self._counts)
-
-    def status(self):
-        def nested(values):
-            result = {}
-            for (namespace, job_id), value in values.items():
-                result.setdefault(namespace, {})[job_id] = dict(value)
-            return result
-
-        return {
-            "health": {
-                "storage_error": self._storage_error,
-                "monitor_error": self._monitor_error,
-                "accepting": self._storage_error is None,
-            },
-            "permits": [
-                {
-                    "ticket": ticket,
-                    "state": "TRACKED" if ticket in self._tracked or ticket in self._actors else "RESERVED",
-                    "quota_namespace": key[0],
-                    "job_id": key[1],
-                    "resources": dict(resources),
-                }
-                for ticket, (key, resources) in self._permits.items()
-            ],
-            "quotas": nested(self._quotas),
-            "usage": nested(self._usage),
-            "waiting": [
-                {
-                    "ticket": ticket,
-                    "name": request["name"],
-                    "job_id": key[1],
-                    "quota_namespace": key[0],
-                    "resources": dict(resources),
-                }
-                for key, waiting in self._waiting.items()
-                for ticket, request, resources, future in waiting
-                if not future.cancelled()
-            ],
-        }
 
 
 def _validate_resources(resources):
@@ -635,10 +313,10 @@ def _wrap(original, kind):
                     env = _propagated_runtime_env(options.get("runtime_env"))
                     options["runtime_env"] = env
                     if kind == "task":
-                        bound.arguments[
-                            "serialized_runtime_env_info"
-                        ] = get_runtime_env_info(env, serialize=True)
-                ticket = uuid.uuid4().hex
+                        bound.arguments["serialized_runtime_env_info"] = (
+                            get_runtime_env_info(env, serialize=True)
+                        )
+                ticket = _next_ticket()
                 try:
                     with _bypass():
                         allowed = ray.get(controller.acquire.remote(request, ticket))
@@ -654,6 +332,7 @@ def _wrap(original, kind):
                     try:
                         with _bypass():
                             ray.get(controller.release.remote(ticket), timeout=5)
+                        _ack_ticket(controller, ticket)
                     except Exception:
                         pass
                     raise
@@ -672,13 +351,14 @@ def _wrap(original, kind):
                                     ticket, result._ray_actor_id.hex()
                                 )
                             )
+                _ack_ticket(controller, ticket)
                 return result
         return original(target, *args, **kwargs)
 
     return submit
 
 
-def start(*, admin_token):
+def start(*, admin_token, etcd_endpoint=None, etcd_prefix=None, etcd_ca_file=None):
     """Administrator entry point: create or authenticate to a detached queue.
 
     Keep the token outside business jobs. Only its hash is stored in the actor;
@@ -687,6 +367,12 @@ def start(*, admin_token):
     """
     if not isinstance(admin_token, str) or not admin_token:
         raise ValueError("A nonempty administrator token is required")
+    etcd_endpoint = etcd_endpoint or os.environ.get("RAY_ADMISSION_ETCD_ENDPOINT")
+    etcd_prefix = etcd_prefix or os.environ.get("RAY_ADMISSION_ETCD_PREFIX")
+    if not etcd_endpoint or not etcd_prefix:
+        raise ValueError(
+            "Configure RAY_ADMISSION_ETCD_ENDPOINT and RAY_ADMISSION_ETCD_PREFIX"
+        )
     if not ray.is_initialized():
         ray.init(namespace=_NAMESPACE)
     from ray._private.client_mode_hook import client_mode_should_convert
@@ -705,7 +391,12 @@ def start(*, admin_token):
                 max_restarts=-1,
                 max_task_retries=-1,
             )
-            .remote(hashlib.sha256(admin_token.encode("utf-8")).hexdigest())
+            .remote(
+                hashlib.sha256(admin_token.encode("utf-8")).hexdigest(),
+                etcd_endpoint,
+                etcd_prefix,
+                etcd_ca_file or os.environ.get("RAY_ADMISSION_ETCD_CA_FILE"),
+            )
         )
         # Existing queues retain their credentials; start cannot replace them.
         ray.get(controller.check_admin.remote(admin_token))
@@ -754,10 +445,16 @@ def enable_admission():
 
 def _install(controller, quota_namespace):
     global _controller, _identity, _quota_namespace
+    global _session_sequence, _session_watermark, _session_opened
     if _controller is not None:
         if _quota_namespace != quota_namespace:
             raise ValueError("Process already attached to another quota namespace")
         return
+    session = uuid.uuid4().hex
+    _session_opened = False
+    _session_sequence = 0
+    _session_watermark = 0
+    _session_done.clear()
     for cls, method, kind in (
         (RemoteFunction, "_remote", "task"),
         (ActorClass, "_remote", "actor_creation"),
@@ -767,7 +464,7 @@ def _install(controller, quota_namespace):
         wrapper = _wrap(original, kind)
         _originals[cls, method] = (original, wrapper)
         setattr(cls, method, wrapper)
-    _identity = (quota_namespace, uuid.uuid4().hex)
+    _identity = (quota_namespace, session)
     _quota_namespace = quota_namespace
     _controller = controller
 
@@ -814,7 +511,12 @@ def register_cli(parser):
         "--admin-token", help="Administrator token (environment variable is preferred)"
     )
     commands = parser.add_subparsers(dest="command", required=True)
-    commands.add_parser("start", help="Start or authenticate to the detached queue")
+    start_parser = commands.add_parser(
+        "start", help="Start or authenticate to the detached queue"
+    )
+    start_parser.add_argument("--etcd-endpoint", default=None)
+    start_parser.add_argument("--etcd-prefix", default=None)
+    start_parser.add_argument("--etcd-ca-file", default=None)
     commands.add_parser("status", help="Show quotas, usage, and waiting requests")
     quota = commands.add_parser("quota", help="Manage per-Job quotas")
     quota_commands = quota.add_subparsers(dest="quota_command", required=True)
@@ -833,7 +535,12 @@ def run_cli(args):
         if args.command == "start":
             if args.address is not None:
                 ray.init(address=args.address, namespace=_NAMESPACE)
-            start(admin_token=_cli_token(args))
+            options = {
+                key: getattr(args, key)
+                for key in ("etcd_endpoint", "etcd_prefix", "etcd_ca_file")
+                if getattr(args, key) is not None
+            }
+            start(admin_token=_cli_token(args), **options)
             print(json.dumps({"name": _NAME, "namespace": _NAMESPACE}))
         else:
             ray.init(address=args.address, namespace=_NAMESPACE)

@@ -25,6 +25,8 @@ ray-admission list
 
 ```bash
 export RAY_ADMISSION_ADMIN_TOKEN='用安全随机源生成的长令牌'
+export RAY_ADMISSION_ETCD_ENDPOINT=http://etcd:2379
+export RAY_ADMISSION_ETCD_PREFIX=/ray-admission/my-ray-cluster
 ray-admission queue --address auto start
 ray-admission queue --address auto status
 
@@ -42,11 +44,14 @@ ray-admission queue --address auto quota delete <ray-job-id>
 `start` 创建 detached 控制器，CLI 退出后仍运行。
 管理员令牌只用于启动和修改配额，不要放进业务 Job。`list` 和 `status` 不需要
 该令牌。
-配额配置、管理员令牌摘要和运行中的资源预留保存在 Ray GCS KV。控制器 actor
+配额配置、管理员令牌摘要和运行中的资源预留以独立记录保存在 etcd。控制器 actor
 意外失败后会自动重启，并恢复 task 的 ObjectRef 和 actor ID，继续监控其结束。
 Ray 会重试进行中的准入调用；等待请求重新进入各 Job 的队列。计数和故障前
 等待请求的精确顺序不会恢复。故障前已获许可但提交端尚未上报跟踪对象的预留会
-保留，直到提交端主动释放。跨集群重启能否保留状态取决于 GCS 是否配置持久化存储。
+保留，直到提交端主动释放。etcd 数据可持久化，但 ObjectRef 只适用于原 Ray 集群；
+替换集群时应使用新的存储 prefix 并重新配置 quota。释放记录在客户端确认水位后清理，
+每个进程的 session 水位仍保留，用于拒绝迟到的重试。旧 GCS 快照格式不支持在线迁移；
+升级前需排空旧服务并导出 quota，在新 prefix 中重新配置后再接入业务。
 若 actor 在控制器停机期间结束，重建后的控制器读到 GCS 的 `DEAD` 状态后会
 释放其预留；若该状态已不可用，则保守地继续保留预留量。
 
