@@ -1,16 +1,15 @@
-"""Single-writer admission state machine backed by fenced etcd transactions."""
+"""Single-writer admission state machine backed by recoverable GCS KV records."""
 
 import asyncio
 import base64
 import hashlib
 import hmac
 import json
-import os
 from collections import Counter, deque
 
 import ray
 
-from ray_admission._storage import BoundedWriter, EtcdStore
+from ray_admission._storage import BoundedWriter, GcsStore
 
 NAMESPACE = "ray-submission-queue"
 
@@ -29,16 +28,11 @@ def ticket_parts(ticket):
 
 
 class QueueController:
-    def __init__(self, admin_token_digest, endpoint=None, prefix=None, ca_file=None):
+    def __init__(self, admin_token_digest):
         from ray_admission.queue import _validate_resources
 
         self._validate = _validate_resources
-        self._store = EtcdStore(
-            endpoint or os.environ.get("RAY_ADMISSION_ETCD_ENDPOINT"),
-            prefix or os.environ.get("RAY_ADMISSION_ETCD_PREFIX"),
-            admin_token_digest,
-            ca_file=ca_file or os.environ.get("RAY_ADMISSION_ETCD_CA_FILE"),
-        )
+        self._store = GcsStore(admin_token_digest)
         self._writer = BoundedWriter(self._store)
         self._admin_token_digest = admin_token_digest
         self._lock = asyncio.Lock()
@@ -228,7 +222,6 @@ class QueueController:
             if ticket in self._permits:
                 if self._permits[ticket] != (key, resources):
                     raise ValueError("Ticket reused for a different request")
-                await self._commit([])  # Fence stale read-only approval retries too.
                 return True
             if request["kind"] == "actor_method":
                 self._counts[request["kind"]] += 1
@@ -461,8 +454,9 @@ class QueueController:
                 "accepting": self._storage_error is None,
             },
             "storage": {
-                "backend": "etcd",
-                "transactions": self._store.transactions,
+                "backend": "gcs-kv",
+                "batches": self._store.batches,
+                "kv_writes": self._store.kv_writes,
                 "bytes_written": self._store.bytes_written,
                 "released_records": len(self._released),
                 "sessions": len(self._sessions),

@@ -13,7 +13,7 @@ from unittest.mock import patch
 
 import ray
 from ray_admission import queue
-from etcd_test_support import configure_storage
+from gcs_test_support import configure_storage
 
 
 @ray.remote(num_cpus=0)

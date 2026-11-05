@@ -54,7 +54,7 @@ returns. Nested submissions can deadlock if the parent holds the job's budget.
 Requests larger than the current quota wait until the quota is increased.
 Quota configuration and admitted resource reservations survive a controller actor
 restart within the same Ray cluster. In-flight admission RPCs are retried by Ray.
-State lives in etcd; use a distinct storage prefix for each Ray cluster lifetime.
+State lives in Ray GCS KV and follows the cluster GCS persistence configuration.
 There is no lease expiry for submitters lost before tracking.
 Administrator tokens authorize configuration RPCs; they are not a sandbox for
 mutually untrusted code with full access to the same Ray cluster. Submission job
@@ -358,7 +358,7 @@ def _wrap(original, kind):
     return submit
 
 
-def start(*, admin_token, etcd_endpoint=None, etcd_prefix=None, etcd_ca_file=None):
+def start(*, admin_token):
     """Administrator entry point: create or authenticate to a detached queue.
 
     Keep the token outside business jobs. Only its hash is stored in the actor;
@@ -367,12 +367,6 @@ def start(*, admin_token, etcd_endpoint=None, etcd_prefix=None, etcd_ca_file=Non
     """
     if not isinstance(admin_token, str) or not admin_token:
         raise ValueError("A nonempty administrator token is required")
-    etcd_endpoint = etcd_endpoint or os.environ.get("RAY_ADMISSION_ETCD_ENDPOINT")
-    etcd_prefix = etcd_prefix or os.environ.get("RAY_ADMISSION_ETCD_PREFIX")
-    if not etcd_endpoint or not etcd_prefix:
-        raise ValueError(
-            "Configure RAY_ADMISSION_ETCD_ENDPOINT and RAY_ADMISSION_ETCD_PREFIX"
-        )
     if not ray.is_initialized():
         ray.init(namespace=_NAMESPACE)
     from ray._private.client_mode_hook import client_mode_should_convert
@@ -391,12 +385,7 @@ def start(*, admin_token, etcd_endpoint=None, etcd_prefix=None, etcd_ca_file=Non
                 max_restarts=-1,
                 max_task_retries=-1,
             )
-            .remote(
-                hashlib.sha256(admin_token.encode("utf-8")).hexdigest(),
-                etcd_endpoint,
-                etcd_prefix,
-                etcd_ca_file or os.environ.get("RAY_ADMISSION_ETCD_CA_FILE"),
-            )
+            .remote(hashlib.sha256(admin_token.encode("utf-8")).hexdigest())
         )
         # Existing queues retain their credentials; start cannot replace them.
         ray.get(controller.check_admin.remote(admin_token))
@@ -511,12 +500,7 @@ def register_cli(parser):
         "--admin-token", help="Administrator token (environment variable is preferred)"
     )
     commands = parser.add_subparsers(dest="command", required=True)
-    start_parser = commands.add_parser(
-        "start", help="Start or authenticate to the detached queue"
-    )
-    start_parser.add_argument("--etcd-endpoint", default=None)
-    start_parser.add_argument("--etcd-prefix", default=None)
-    start_parser.add_argument("--etcd-ca-file", default=None)
+    commands.add_parser("start", help="Start or authenticate to the detached queue")
     commands.add_parser("status", help="Show quotas, usage, and waiting requests")
     quota = commands.add_parser("quota", help="Manage per-Job quotas")
     quota_commands = quota.add_subparsers(dest="quota_command", required=True)
@@ -535,12 +519,7 @@ def run_cli(args):
         if args.command == "start":
             if args.address is not None:
                 ray.init(address=args.address, namespace=_NAMESPACE)
-            options = {
-                key: getattr(args, key)
-                for key in ("etcd_endpoint", "etcd_prefix", "etcd_ca_file")
-                if getattr(args, key) is not None
-            }
-            start(admin_token=_cli_token(args), **options)
+            start(admin_token=_cli_token(args))
             print(json.dumps({"name": _NAME, "namespace": _NAMESPACE}))
         else:
             ray.init(address=args.address, namespace=_NAMESPACE)

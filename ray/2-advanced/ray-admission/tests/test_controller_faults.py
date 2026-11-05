@@ -1,14 +1,24 @@
 import asyncio
+import json
 import threading
 import unittest
 from unittest.mock import patch
 
-from etcd_test_support import configure_storage
+from gcs_test_support import configure_storage
 from ray_admission import queue
-from ray_admission._storage import FencedError
+import ray
+from ray_admission._storage import GcsStore
 
 
 class ControllerFaultTest(unittest.IsolatedAsyncioTestCase):
+    @classmethod
+    def setUpClass(cls):
+        ray.init(num_cpus=1, include_dashboard=False)
+
+    @classmethod
+    def tearDownClass(cls):
+        ray.shutdown()
+
     async def asyncSetUp(self):
         configure_storage()
         self.controllers = []
@@ -108,15 +118,59 @@ class ControllerFaultTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(calls, 2)
         self.assertIsNone(c._monitor_error)
 
-    async def test_old_controller_is_fenced(self):
-        old = self.controller
-        await old.acquire(self.request, "cached")
-        new = self.restore()
-        with self.assertRaises(FencedError):
-            old._store.commit([("permit/stale", {"state": "RELEASED"})])
-        self.assertNotIn("permit/stale", new._store.load())
-        with self.assertRaises(RuntimeError):
-            await old.acquire(self.request, "cached")
+    async def test_partial_batch_replayed_before_recovery(self):
+        store = self.controller._store
+        original = store._put
+
+        def fail_second(key, value, **kwargs):
+            if key == store.PREFIX + b"permit/two":
+                raise OSError("interrupted record batch")
+            original(key, value, **kwargs)
+
+        with patch.object(store, "_put", side_effect=fail_second):
+            with self.assertRaises(OSError):
+                store.commit(
+                    [
+                        ("permit/one", {"state": "RELEASED"}),
+                        ("permit/two", {"state": "RELEASED"}),
+                    ]
+                )
+        restored = GcsStore("digest")
+        self.assertEqual(set(restored.load()), {"permit/one", "permit/two"})
+        self.assertIsNone(restored._get(b"pending-v2"))
+
+    async def test_legacy_migration_checks_token_and_preserves_records(self):
+        store = self.controller._store
+        store._delete(b"auth-v2")
+        store._put(
+            b"controller-state-v1",
+            json.dumps(
+                {
+                    "version": 1,
+                    "admin_token_digest": "digest",
+                    "quotas": [["team", "job", {"CPU": 2}]],
+                    "permits": [
+                        {
+                            "ticket": "old",
+                            "quota_namespace": "team",
+                            "job_id": "job",
+                            "resources": {"CPU": 1},
+                        }
+                    ],
+                    "released": ["done"],
+                }
+            ).encode(),
+        )
+        with self.assertRaises(PermissionError):
+            GcsStore("wrong")
+        self.assertIsNone(store._get(b"auth-v2"))
+        restored = GcsStore("digest")
+        records = restored.load()
+        self.assertEqual(records["permit/old"]["state"], "RESERVED")
+        self.assertEqual(records["permit/done"]["state"], "RELEASED")
+        self.assertEqual(len(records), 3)
+        restored.commit([("permit/old", None)])
+        self.assertNotIn("permit/old", GcsStore("digest").load())
 
     async def test_cancelled_write_requires_recovery_and_does_not_block_loop(self):
         c = self.controller
@@ -198,14 +252,14 @@ class ControllerFaultTest(unittest.IsolatedAsyncioTestCase):
             for i in range(96)
         ]
         await asyncio.sleep(0.02)
-        before = c._store.transactions
+        before = c._store.batches
         c._quotas.clear()
         c._schedule_drain()
         await asyncio.gather(*waiters)
-        self.assertEqual(c._store.transactions - before, 3)
+        self.assertEqual(c._store.batches - before, 3)
         before = c._store.bytes_written
         await c.acquire(self.request, "one-record")
         size = c._store.bytes_written - before
         self.assertLess(size, 1500)
-        # Active-set size does not appear in the transaction payload.
+        # Active-set size does not appear in the batch payload.
         self.assertEqual(len(c._permits), 97)

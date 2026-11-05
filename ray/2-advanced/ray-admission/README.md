@@ -8,7 +8,7 @@ selects the **quota namespace**; it does not change the controller location.
 
 See [中文使用说明](README_ZH.md) for the complete workflow.
 See [controller lifecycle and storage design](DESIGN.md) for failure handling,
-retry guarantees, and the transactional storage implementation.
+retry guarantees, and the GCS KV record storage implementation.
 
 ## Install
 
@@ -26,8 +26,6 @@ ray-admission list
 
 ```bash
 export RAY_ADMISSION_ADMIN_TOKEN='a-long-random-secret'
-export RAY_ADMISSION_ETCD_ENDPOINT=http://etcd:2379
-export RAY_ADMISSION_ETCD_PREFIX=/ray-admission/my-ray-cluster
 ray-admission queue --address auto start
 export RAY_NAMESPACE=my-team
 ray-admission queue --address auto quota set <ray-job-id> '{"CPU": 4, "GPU": 1}'
@@ -38,16 +36,19 @@ The Job ID is `ray.get_runtime_context().get_job_id()` in the business driver.
 Unconfigured `(quota namespace, Job ID)` pairs are unlimited. `quota set`
 replaces the full resource vector; `quota delete <ray-job-id>` removes it.
 Quota configuration, the administrator token digest, and active resource
-reservations are saved as individual etcd records. The detached controller restarts after an
+reservations are saved as individual Ray GCS KV records. The detached controller restarts after an
 unexpected actor failure and restores task ObjectRefs and actor IDs to monitor
 their completion. In-flight admission calls are retried by Ray; waiting requests
 re-enter the per-Job queue. Counters and the exact pre-crash waiting order are
 not restored. A reservation granted just before a crash but never tracked by
 its submitter remains reserved until that submitter releases it. Cluster-wide
-durability depends on etcd. Use a new prefix for a replacement Ray cluster;
-saved ObjectRefs cannot be transferred between clusters. Released records are
+durability follows the Ray GCS persistence configuration. No external database
+is required. Saved ObjectRefs cannot be transferred between clusters. Released records are
 compacted below the client's durable acknowledgment watermark. Each process's
 session watermark remains stored to reject delayed retries.
+Earlier GCS snapshots are migrated before serving requests after the old
+controller stops. Partial record writes are recovered using a redo journal;
+GCS KV does not provide multi-key transactions or independent writer fencing.
 An actor that died while the controller was down is released when its GCS state
 reports `DEAD`; if that state is unavailable, its reservation remains held.
 

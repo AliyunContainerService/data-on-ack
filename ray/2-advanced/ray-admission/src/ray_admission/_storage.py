@@ -1,132 +1,139 @@
-"""Transactional per-record storage through the etcd v3 JSON gateway."""
+"""Per-record GCS KV storage with single-writer redo recovery."""
 
 import asyncio
-import base64
 import json
-import ssl
-import uuid
-from urllib.request import Request, urlopen
+
+from ray.experimental.internal_kv import (
+    _internal_kv_get,
+    _internal_kv_put,
+    _internal_kv_del,
+    _internal_kv_list,
+)
 
 
-def _b64(value):
-    return base64.b64encode(value.encode()).decode()
-
-
-class FencedError(RuntimeError):
-    pass
-
-
-class EtcdStore:
+class GcsStore:
     MAX_OPS = 32
+    NAMESPACE = "ray-submission-queue"
+    PREFIX = b"records-v2/"
 
-    def __init__(self, endpoint, prefix, digest, *, ca_file=None):
-        if not endpoint or not endpoint.startswith(("http://", "https://")):
-            raise ValueError("Set RAY_ADMISSION_ETCD_ENDPOINT to an etcd v3 endpoint")
-        if not prefix or not prefix.startswith("/"):
-            raise ValueError("etcd prefix must be an absolute, cluster-specific path")
-        self.endpoint = endpoint.rstrip("/")
-        self.prefix = prefix.rstrip("/") + "/"
-        self.context = ssl.create_default_context(cafile=ca_file)
-        self.generation = uuid.uuid4().hex
-        self.transactions = 0
+    def __init__(self, digest, *, namespace=NAMESPACE):
+        self.namespace = namespace
+        self.batches = 0
         self.bytes_written = 0
-        auth = self._key("auth")
-        self._call(
-            "txn",
-            {
-                "compare": [{"key": auth, "target": "VERSION", "version": "0"}],
-                "success": [{"request_put": {"key": auth, "value": _b64(digest)}}],
-            },
-        )
-        response = self._call("range", {"key": auth})
-        if base64.b64decode(response["kvs"][0]["value"]).decode() != digest:
+        self.kv_writes = 0
+        legacy = self._get(b"controller-state-v1")
+        if legacy is not None:
+            state = json.loads(legacy)
+            if state.get("version") != 1 or state.get("admin_token_digest") != digest:
+                raise PermissionError(
+                    "Legacy state requires its original administrator token and supported schema"
+                )
+        self._put(b"auth-v2", digest.encode(), overwrite=False)
+        if self._get(b"auth-v2") != digest.encode():
             raise PermissionError(
                 "Existing storage requires the original administrator token"
             )
-        # A new incarnation supersedes the previous writer. Every subsequent
-        # transaction compares this generation atomically with its mutations.
-        self._call(
-            "put", {"key": self._key("generation"), "value": _b64(self.generation)}
-        )
+        # Ray's fixed named actor is the sole writer. GCS KV has no CAS:
+        # this redo journal is not a distributed lock or multi-writer transaction.
+        pending = self._get(b"pending-v2")
+        if pending is not None:
+            self._apply(json.loads(pending))
+            self._delete(b"pending-v2")
+        self._migrate_legacy(digest)
 
-    def _key(self, suffix):
-        return _b64(self.prefix + suffix)
+    def _get(self, key):
+        return _internal_kv_get(key, namespace=self.namespace)
 
-    def _call(self, method, data):
-        body = json.dumps(data).encode()
-        request = Request(
-            self.endpoint + "/v3/kv/" + method,
-            body,
-            {"Content-Type": "application/json"},
-        )
-        with urlopen(request, timeout=10, context=self.context) as response:
-            result = json.load(response)
-        if "error" in result:
-            raise RuntimeError(result["error"])
-        return result
+    def _put(self, key, value, *, overwrite=True):
+        _internal_kv_put(key, value, overwrite=overwrite, namespace=self.namespace)
+        self.bytes_written += len(key) + len(value)
+        self.kv_writes += 1
+
+    def _delete(self, key):
+        _internal_kv_del(key, namespace=self.namespace)
+        self.kv_writes += 1
+
+    def _apply(self, changes):
+        for suffix, value in changes:
+            key = self.PREFIX + suffix.encode()
+            if value is None:
+                self._delete(key)
+            else:
+                self._put(
+                    key,
+                    json.dumps(value, separators=(",", ":"), sort_keys=True).encode(),
+                )
+
+    def _migrate_legacy(self, digest):
+        raw = self._get(b"controller-state-v1")
+        if raw is None or self._get(b"migrated-v1"):
+            return
+        state = json.loads(raw)
+        if state["admin_token_digest"] != digest:
+            raise PermissionError(
+                "Legacy state requires its original administrator token"
+            )
+        # Migration runs before serving requests. Replaying after an interrupted
+        # copy is safe; the old named actor must have stopped before this starts.
+        changes = []
+        import base64
+
+        for namespace, job, resources in state["quotas"]:
+            key = [namespace, job]
+            suffix = (
+                "quota/" + base64.urlsafe_b64encode(json.dumps(key).encode()).decode()
+            )
+            changes.append(
+                (suffix, {"key": key, "resources": resources, "revision": 1})
+            )
+        for permit in state.get("permits", []):
+            changes.append(
+                (
+                    "permit/" + permit["ticket"],
+                    {
+                        "key": [permit["quota_namespace"], permit["job_id"]],
+                        "resources": permit["resources"],
+                        "refs": permit.get("refs", []),
+                        "actor_id": permit.get("actor_id"),
+                        "revision": 1,
+                        "state": "TRACKED"
+                        if permit.get("refs") or permit.get("actor_id")
+                        else "RESERVED",
+                    },
+                )
+            )
+        for ticket in state.get("released", []):
+            changes.append(("permit/" + ticket, {"state": "RELEASED", "revision": 1}))
+        for offset in range(0, len(changes), self.MAX_OPS):
+            self.commit(changes[offset : offset + self.MAX_OPS])
+        self._put(b"migrated-v1", b"1")
 
     def load(self):
-        """Read a consistent, revision-pinned paginated snapshot."""
-        start = self.prefix
-        end = self.prefix[:-1] + "0"  # '/' + 1; all keys below this prefix.
-        revision = None
         records = {}
-        while True:
-            request = {
-                "key": _b64(start),
-                "range_end": _b64(end),
-                "limit": "256",
-                "sort_order": "ASCEND",
-                "sort_target": "KEY",
-            }
-            if revision is not None:
-                request["revision"] = revision
-            response = self._call("range", request)
-            if revision is None:
-                revision = response["header"]["revision"]
-            for entry in response.get("kvs", []):
-                key = base64.b64decode(entry["key"]).decode()
-                suffix = key[len(self.prefix) :]
-                if suffix not in ("auth", "generation"):
-                    records[suffix] = json.loads(base64.b64decode(entry["value"]))
-            if not response.get("more"):
-                break
-            start = base64.b64decode(response["kvs"][-1]["key"]).decode() + "\0"
-        # Detect takeover during recovery, even if there are no initial writes.
-        self.commit([])
+        for key in _internal_kv_list(self.PREFIX, namespace=self.namespace):
+            raw = self._get(key)
+            if raw is None:
+                raise RuntimeError("Record disappeared during single-writer recovery")
+            records[key[len(self.PREFIX) :].decode()] = json.loads(raw)
         return records
 
     def commit(self, changes):
         if len(changes) > self.MAX_OPS:
-            raise ValueError("Transaction exceeds bounded batch size")
-        operations = []
-        for key, value in changes:
-            if value is None:
-                operations.append({"request_delete_range": {"key": self._key(key)}})
-            else:
-                encoded = json.dumps(value, separators=(",", ":"), sort_keys=True)
-                operations.append(
-                    {"request_put": {"key": self._key(key), "value": _b64(encoded)}}
-                )
-        request = {
-            "compare": [
-                {
-                    "key": self._key("generation"),
-                    "target": "VALUE",
-                    "value": _b64(self.generation),
-                }
-            ],
-            "success": operations,
-        }
-        response = self._call("txn", request)
-        if not response.get("succeeded"):
-            raise FencedError("Controller superseded by a newer generation")
-        self.transactions += 1
-        self.bytes_written += len(json.dumps(request).encode())
+            raise ValueError("Batch exceeds bounded write size")
+        if not changes:
+            return
+        # Persist intent first, then apply idempotent record replacements.
+        # Only this controller reads these keys; it publishes memory after all
+        # writes finish. Any error stops admission until replay on reconstruction.
+        encoded = json.dumps(changes, separators=(",", ":"), sort_keys=True).encode()
+        self._put(b"pending-v2", encoded)
+        self._apply(changes)
+        self._delete(b"pending-v2")
+        self.batches += 1
 
 
 class BoundedWriter:
-    """One blocking I/O worker; bounded requests and atomic batches."""
+    """One blocking I/O worker; bounded requests and redo batches."""
 
     def __init__(self, store):
         self.store = store
