@@ -163,6 +163,20 @@ func (m *Manager) HandleLoginCallback(c *gin.Context) {
 // If the request has a "code" query parameter, it processes the callback;
 // otherwise it redirects to the RAM SSO login page.
 func (m *Manager) HandleLoginRedirect(c *gin.Context) {
+	// In non-aliyun auth modes there is no RAM SSO flow to start.
+	switch CurrentMode() {
+	case ModeNone:
+		c.Redirect(http.StatusFound, "/")
+		return
+	case ModeCustom:
+		if m.cfg.AuthLoginURL != "" {
+			c.Redirect(http.StatusFound, m.cfg.AuthLoginURL)
+		} else {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "custom auth mode: please sign in through your organization's gateway"})
+		}
+		return
+	}
+
 	// If code is present, this is the OAuth callback from RAM
 	if code := c.Query("code"); code != "" {
 		m.HandleLoginCallback(c)
@@ -202,14 +216,23 @@ func (m *Manager) HandleLogout(c *gin.Context) {
 	session.Delete(SessionKeyToken)
 	session.Delete(SessionKeyOAuthState)
 	session.Save()
+	// When auth is disabled there is no login page to go back to.
+	if AuthDisabled() {
+		c.Redirect(http.StatusFound, "/")
+		return
+	}
+	if CurrentMode() == ModeCustom && m.cfg.AuthLoginURL != "" {
+		c.Redirect(http.StatusFound, m.cfg.AuthLoginURL)
+		return
+	}
 	c.Redirect(http.StatusFound, "/login")
 }
 
 // GetCurrentUser returns the logged-in user info from the session.
 func (m *Manager) GetCurrentUser(c *gin.Context) (accountID, userID, loginName, role string, ok bool) {
-	// Dev mode: return a mock admin user
-	if os.Getenv("DISABLE_AUTH") == "true" {
-		return "dev-account", "dev-user", "dev-admin", "admin", true
+	// Auth disabled: every request runs as the built-in admin user.
+	if AuthDisabled() {
+		return NoneModeAdmin, NoneModeUser, NoneModeUser, RoleAdmin, true
 	}
 	session := sessions.Default(c)
 	accountID, _ = session.Get(SessionKeyAccountID).(string)

@@ -1,24 +1,30 @@
 package auth
 
 import (
-	"os"
+	"encoding/json"
+	"net/http"
 	"strings"
 
 	"github.com/AliyunContainerService/data-on-ack/ai-dev-console/console/backend/internal/response"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
+	"github.com/sirupsen/logrus"
 )
 
 // CheckAuth is a middleware that verifies user is authenticated.
 // Paths in publicPrefixes are excluded from auth check.
-// When DISABLE_AUTH env is set to "true", all requests are allowed (dev mode).
-func CheckAuth(publicPrefixes ...string) gin.HandlerFunc {
+//
+// Behavior depends on the configured auth mode (AUTH_MODE / --auth-mode):
+//   - aliyun: require a session established by RAM OAuth2 SSO (or K8s token) login
+//   - none:   allow all requests (built-in admin identity)
+//   - custom: trust identity headers injected by an upstream gateway
+func CheckAuth(m *Manager, publicPrefixes ...string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		path := c.Request.URL.Path
 
-		// Dev mode: skip all auth
-		if os.Getenv("DISABLE_AUTH") == "true" {
-			c.Set("userName", "dev-user")
+		// Auth disabled: everyone is the built-in admin
+		if AuthDisabled() {
+			c.Set("userName", NoneModeUser)
 			c.Set("userRole", RoleAdmin)
 			c.Next()
 			return
@@ -35,6 +41,16 @@ func CheckAuth(publicPrefixes ...string) gin.HandlerFunc {
 		// Skip static assets
 		if isStaticAsset(path) {
 			c.Next()
+			return
+		}
+
+		// Custom mode: identity comes from trusted gateway headers
+		if CurrentMode() == ModeCustom {
+			if m != nil && m.AuthenticateViaHeaders(c) {
+				c.Next()
+				return
+			}
+			m.RejectUnauthenticated(c)
 			return
 		}
 
@@ -60,6 +76,71 @@ func CheckAuth(publicPrefixes ...string) gin.HandlerFunc {
 
 		c.Next()
 	}
+}
+
+// AuthenticateViaHeaders populates the session from trusted identity headers
+// injected by an upstream authenticating gateway (custom auth mode).
+// Role comes from the configured admin user/group lists, falling back to the
+// User CRD apiRoles field; namespace scope comes from the User CRD.
+// Returns false when the user header is absent or empty.
+func (m *Manager) AuthenticateViaHeaders(c *gin.Context) bool {
+	cfg := m.cfg
+	user := strings.TrimSpace(c.GetHeader(cfg.AuthUserHeader))
+	if user == "" {
+		return false
+	}
+
+	normalizedName := normalizeUserID(user)
+
+	role := RoleResearcher
+	if userInList(user, cfg.AuthAdminUsers) || userInList(normalizedName, cfg.AuthAdminUsers) ||
+		groupsIntersect(c.GetHeader(cfg.AuthGroupsHeader), cfg.AuthAdminGroups) {
+		role = RoleAdmin
+	} else if crdRole := m.getUserRoleFromCRD(normalizedName); crdRole != "" {
+		role = crdRole
+	}
+
+	namespaces := m.getUserNamespaces(normalizedName)
+
+	session := sessions.Default(c)
+	session.Set(SessionKeyAccountID, user)
+	session.Set(SessionKeyLoginID, user)
+	session.Set(SessionKeyName, normalizedName)
+	session.Set(SessionKeyLoginName, user)
+	session.Set(SessionKeyRole, role)
+	if len(namespaces) > 0 {
+		nsJSON, _ := json.Marshal(namespaces)
+		session.Set(SessionKeyUserNS, string(nsJSON))
+	} else {
+		session.Delete(SessionKeyUserNS)
+	}
+	if err := session.Save(); err != nil {
+		logrus.Errorf("custom auth: save session: %v", err)
+	}
+
+	c.Set("userName", normalizedName)
+	c.Set("userRole", role)
+	return true
+}
+
+// RejectUnauthenticated handles requests without a trusted identity in custom mode.
+// Browser navigations are redirected to the configured login URL (if any);
+// API requests get a 401 carrying the login URL for the frontend to consume.
+func (m *Manager) RejectUnauthenticated(c *gin.Context) {
+	loginURL := ""
+	if m != nil && m.cfg != nil {
+		loginURL = m.cfg.AuthLoginURL
+	}
+	if loginURL != "" && strings.Contains(c.GetHeader("Accept"), "text/html") {
+		c.Redirect(http.StatusFound, loginURL)
+	} else {
+		c.JSON(http.StatusUnauthorized, response.Result{
+			Code:    10401,
+			Message: "authentication required",
+			Data:    map[string]string{"loginUrl": loginURL},
+		})
+	}
+	c.Abort()
 }
 
 func isStaticAsset(path string) bool {

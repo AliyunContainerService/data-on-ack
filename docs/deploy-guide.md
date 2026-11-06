@@ -45,6 +45,62 @@ nav_order: 1
                     └─────────────────────────────────────┘
 ```
 
+## 认证模式
+
+两个控制台支持三种认证模式，通过 Helm 参数 `auth.mode`（或环境变量 `AUTH_MODE`）选择：
+
+| 模式 | 说明 | 是否需要阿里云 AK/SK |
+|------|------|---------------------|
+| `aliyun`（默认） | 阿里云 RAM OAuth2 SSO 登录，主账号自动为 admin | 是 |
+| `none` | 免登录，所有请求以内置 admin 身份运行，拥有全部权限，部署即可用 | 否 |
+| `custom` | 接入客户自定义用户系统：信任上游网关注入的身份请求头 | 否 |
+
+### 免登录模式（none）
+
+适合 PoC、内网环境或已有外层访问控制的场景：
+
+```bash
+helm install ai-dashboard charts/ack-ai-dashboard -n kube-ai \
+  --set admin-ui.auth.mode=none ...
+
+helm install ai-dev-console charts/ack-ai-dev-console -n kube-ai \
+  --set dev-console.auth.mode=none ...
+```
+
+该模式下可跳过步骤一~三（无需 RAM 授权和 AK/SK Secret），所有访问者均为 admin。
+
+> **注意**：none 模式下任何能访问控制台地址的人都拥有全部权限，仅限内网/PoC 或已有外层访问控制的环境使用。
+
+### 自定义用户系统（custom）
+
+控制台信任上游网关（企业 SSO / API Gateway）完成认证后注入的 HTTP 请求头：
+
+| 配置（Helm `auth.custom.*` / 环境变量） | 默认 | 说明 |
+|------|------|------|
+| `userHeader` / `AUTH_USER_HEADER` | `X-Forwarded-User` | 认证后的用户名（必需） |
+| `groupsHeader` / `AUTH_GROUPS_HEADER` | `X-Forwarded-Groups` | 用户组列表，逗号分隔（可选） |
+| `adminUsers` / `AUTH_ADMIN_USERS` | 空 | 授予 admin 角色的用户名列表（逗号分隔） |
+| `adminGroups` / `AUTH_ADMIN_GROUPS` | 空 | 授予 admin 角色的用户组列表（逗号分隔） |
+| `loginUrl` / `AUTH_LOGIN_URL` | 空 | 未认证浏览器请求的重定向地址（如企业 SSO 登录页） |
+
+接入方职责：网关在转发到控制台之前必须完成认证，注入上述请求头，并**剥离客户端伪造的同名请求头**。开发控制台中，用户的命名空间权限仍由平台 User CRD 决定；未匹配 CRD 且不在 admin 列表中的用户为 researcher 角色。
+
+```bash
+helm install ai-dev-console charts/ack-ai-dev-console -n kube-ai \
+  --set dev-console.auth.mode=custom \
+  --set dev-console.auth.custom.userHeader=X-Forwarded-User \
+  --set dev-console.auth.custom.adminGroups=platform-admins \
+  --set dev-console.auth.custom.loginUrl=https://sso.example.com/login ...
+```
+
+**custom 模式行为说明：**
+
+- K8s Token 登录（`/api/v1/login/token`）在 custom 模式下被禁用，防止绕过企业 IdP
+- 用户角色与命名空间权限每次请求实时查询 User CRD，权限变更立即生效（无会话缓存陈旧期）
+- 未认证请求：浏览器跳转 `loginUrl`（若配置）；API 返回 401 且响应体携带 `loginUrl`，前端拦截器会自动跳转
+- 反向代理路由（Notebook/VSCode/TensorBoard/Ray Dashboard）同样走头认证与命名空间校验，含 WebSocket 通道
+- 控制台启动时会输出 WARN 日志提醒网关剥离伪造头；请确保控制台 Service 不直接对外暴露
+
 ## 步骤一：阿里云 RAM 授权配置
 
 AI 控制台需要调用阿里云 IMS API 管理 OAuth 登录应用，因此需要为集群的 Worker 角色授权。
@@ -157,6 +213,7 @@ helm install ai-dashboard charts/ack-ai-dashboard \
 | `grafana.datasources.datasources\.yaml.datasources[0].url` | 是 | ARMS Prometheus 内网地址（步骤四获取） |
 | `grafana.adminPassword` | 是 | Grafana 管理员密码 |
 | `admin-ui.auth.existingSecret` | 否 | Session 持久化 Secret 名称 |
+| `admin-ui.auth.mode` | 否 | 认证模式：`aliyun`（默认）/ `none`（免登录）/ `custom`（自定义用户系统），见「认证模式」 |
 | `admin-ui.dashboard.intlAccount` | 否 | 国际站账号设为 `"true"` |
 | `admin-ui.dashboard.credentialMode` | 否 | `static`(AK/SK) 或 `rrsa` |
 
@@ -186,6 +243,7 @@ helm install ai-dev-console charts/ack-ai-dev-console \
 |------|------|------|
 | `dev-console.console.ingress.hosts[0].host` | 是 | Ingress 域名，如 `ai-dev.example.com` |
 | `dev-console.auth.existingSecret` | 否 | Session 持久化 Secret 名称 |
+| `dev-console.auth.mode` | 否 | 认证模式：`aliyun`（默认）/ `none`（免登录）/ `custom`（自定义用户系统），见「认证模式」 |
 | `dev-console.console.intlAccount` | 否 | 国际站账号设为 `"true"` |
 | `dev-console.console.credentialMode` | 否 | `static`(AK/SK) 或 `rrsa` |
 

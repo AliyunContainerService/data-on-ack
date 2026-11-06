@@ -65,6 +65,23 @@ func NewManager(cfg *config.AppConfig, kubeClient *k8s.Client, imsClient *ims.Cl
 
 // HandleLoginRedirect redirects the user to RAM OAuth2 authorize endpoint.
 func (m *Manager) HandleLoginRedirect(c *gin.Context) {
+	// In non-aliyun auth modes there is no RAM SSO flow to start.
+	switch CurrentMode() {
+	case ModeNone:
+		c.Redirect(http.StatusFound, "/")
+		return
+	case ModeCustom:
+		if m.cfg.AuthLoginURL != "" {
+			c.Redirect(http.StatusFound, m.cfg.AuthLoginURL)
+		} else {
+			c.JSON(http.StatusBadRequest, response.Result{
+				Code:    response.CodeFailed,
+				Message: "custom auth mode: please sign in through your organization's gateway",
+			})
+		}
+		return
+	}
+
 	if m.oauthApp == nil {
 		response.Failed(c, "OAuth app not initialized")
 		return
@@ -151,6 +168,13 @@ func (m *Manager) HandleLoginCallback(c *gin.Context) {
 
 // HandleTokenLogin authenticates a user with a Kubernetes Bearer Token.
 func (m *Manager) HandleTokenLogin(c *gin.Context) {
+	// In custom auth mode the external identity provider is the source of
+	// truth; K8s token login would bypass it, so it is disabled.
+	if CurrentMode() == ModeCustom {
+		response.Failed(c, "token login is disabled in custom auth mode")
+		return
+	}
+
 	var req struct {
 		Token string `json:"token"`
 	}
@@ -234,15 +258,15 @@ func (m *Manager) HandleLogout(c *gin.Context) {
 
 // HandleGetUserInfo returns current user info from session.
 func (m *Manager) HandleGetUserInfo(c *gin.Context) {
-	// Dev mode: return mock user
-	if os.Getenv("DISABLE_AUTH") == "true" {
+	// Auth disabled: return the built-in admin user
+	if AuthDisabled() {
 		response.OK(c, model.UserInfo{
-			Aid:        "dev",
-			Uid:        "dev",
-			Name:       "dev-admin",
-			LoginName:  "dev-admin",
+			Aid:        NoneModeUser,
+			Uid:        NoneModeUser,
+			Name:       NoneModeUser,
+			LoginName:  NoneModeUser,
 			Role:       RoleAdmin,
-			Namespaces: []string{"default", "default-group", "kube-ai"},
+			Namespaces: NoneModeNamespaces(),
 		})
 		return
 	}

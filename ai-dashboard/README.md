@@ -28,7 +28,7 @@ cd frontend && npm ci && npm run build
 
 ```bash
 # 后端（需 kubeconfig）
-export DISABLE_AUTH=true
+export AUTH_MODE=none
 cd backend && go run ./cmd/server/ --listen-addr=:8080 --disable-oauth
 
 # 前端
@@ -57,7 +57,7 @@ helm install ai-dashboard ../charts/ack-ai-dashboard -n kube-ai \
 | `AK_ACCESS_KEY_SECRET` | 阿里云 AccessKey Secret | - |
 | `SESSION_SECRET` | Cookie 加密密钥 | 随机生成 |
 | `ENABLE_SECURE_COOKIE` | Cookie Secure 标志 | `false` |
-| `DISABLE_AUTH` | 禁用认证（开发模式） | `false` |
+| `AUTH_MODE` | 认证模式：`aliyun`(默认) / `none`(免登录全权限) / `custom`(自定义用户系统，信任网关注入的身份头) | `aliyun` |
 | `FRONTEND_DIR` | 前端静态文件目录 | `./dist` |
 
 ## 技术栈

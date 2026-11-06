@@ -27,11 +27,25 @@ spec:
             {{- toYaml .Values.securityContext | nindent 12 }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          {{- if not .Values.dashboard.createWebApp }}
+          {{- if or (not .Values.dashboard.createWebApp) (ne (.Values.auth.mode | default "aliyun") "aliyun") }}
           args:
             - --disable-oauth
           {{- end }}
           env:
+            - name: AUTH_MODE
+              value: "{{ .Values.auth.mode | default "aliyun" }}"
+            {{- if eq (.Values.auth.mode | default "aliyun") "custom" }}
+            - name: AUTH_USER_HEADER
+              value: "{{ .Values.auth.custom.userHeader }}"
+            - name: AUTH_GROUPS_HEADER
+              value: "{{ .Values.auth.custom.groupsHeader }}"
+            - name: AUTH_ADMIN_USERS
+              value: "{{ .Values.auth.custom.adminUsers }}"
+            - name: AUTH_ADMIN_GROUPS
+              value: "{{ .Values.auth.custom.adminGroups }}"
+            - name: AUTH_LOGIN_URL
+              value: "{{ .Values.auth.custom.loginUrl }}"
+            {{- end }}
             - name: MY_POD_NAME
               valueFrom:
                 fieldRef:

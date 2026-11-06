@@ -106,6 +106,8 @@ kubectl logs -f deploy/nginx-ingress-controller -n kube-system | grep <domain>
 
 ### OAuth 登录失败
 
+> 仅 `aliyun` 认证模式（默认）适用；`none` / `custom` 模式不涉及 RAM OAuth，排查请直接看控制台 Pod 日志中的 `auth mode` 启动行。
+
 1. 确认 RAM 权限策略已授权（IMS 相关 Action）
 2. 确认 AK/SK 有效且未过期
 3. 查看控制台日志中的 IMS 报错信息
