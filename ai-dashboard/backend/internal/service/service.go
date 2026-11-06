@@ -1,6 +1,8 @@
 package service
 
 import (
+	"errors"
+
 	"github.com/AliyunContainerService/data-on-ack/ai-dashboard/backend/internal/aliyun"
 	"github.com/AliyunContainerService/data-on-ack/ai-dashboard/backend/internal/k8s"
 )
@@ -14,6 +16,9 @@ func NewRamService(imsClient *aliyun.IMSClient) *RamService {
 }
 
 func (s *RamService) ListRamUsers() ([]aliyun.RamUser, error) {
+	if s.imsClient == nil {
+		return nil, errors.New("RAM user listing is unavailable: Aliyun credentials are not configured in the current auth mode")
+	}
 	return s.imsClient.ListUsers()
 }
 

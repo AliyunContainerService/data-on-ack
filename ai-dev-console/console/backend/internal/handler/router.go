@@ -56,7 +56,7 @@ func NewRouter(
 	r.POST("/api/v1/login/token", authManager.HandleTokenLogin)
 
 	// --- Auth-protected API routes ---
-	api := r.Group("/api/v1", auth.CheckAuth(
+	api := r.Group("/api/v1", auth.CheckAuth(authManager,
 		"/health", "/api/v1/login", "/api/v1/logout",
 	))
 
@@ -164,21 +164,21 @@ func NewRouter(
 	//   notebook: keep full prefix (Jupyter uses NB_PREFIX=/notebook/{ns}/{name})
 	//   vscode:   strip prefix (code-server serves from /)
 	//   tensorboard: strip prefix (TB serves from /)
-	r.Any("/notebook/*path", proxyAuthCheck, NewServiceProxy(ProxyConfig{
+	r.Any("/notebook/*path", proxyAuthCheck(authManager), NewServiceProxy(ProxyConfig{
 		RoutePrefix: "notebook",
 		Mode:        ProxyModeKeepPrefix,
 	}))
-	r.Any("/vscode/*path", proxyAuthCheck, NewServiceProxy(ProxyConfig{
+	r.Any("/vscode/*path", proxyAuthCheck(authManager), NewServiceProxy(ProxyConfig{
 		RoutePrefix: "vscode",
 		Mode:        ProxyModeStripToRoot,
 	}))
-	r.Any("/tensorboard/*path", proxyAuthCheck, NewServiceProxy(ProxyConfig{
+	r.Any("/tensorboard/*path", proxyAuthCheck(authManager), NewServiceProxy(ProxyConfig{
 		RoutePrefix: "tensorboard",
 		Mode:        ProxyModeStripToRoot,
 		TargetPort:  6006,
 	}))
 	// Ray Dashboard: /ray/{namespace}/{cluster-name}/* → port 8265
-	r.Any("/ray/*path", proxyAuthCheck, NewServiceProxy(ProxyConfig{
+	r.Any("/ray/*path", proxyAuthCheck(authManager), NewServiceProxy(ProxyConfig{
 		RoutePrefix: "ray",
 		Mode:        ProxyModeStripToRoot,
 		TargetPort:  8265,
@@ -221,9 +221,9 @@ func getSessionSecret() []byte {
 }
 
 func getUserNamespaces(c *gin.Context) []string {
-	// Dev mode: return all relevant namespaces
-	if os.Getenv("DISABLE_AUTH") == "true" {
-		return []string{"default", "default-group", "kube-ai"}
+	// Auth disabled: return the configured none-mode namespaces
+	if auth.AuthDisabled() {
+		return auth.NoneModeNamespaces()
 	}
 
 	session := sessions.Default(c)
@@ -244,7 +244,7 @@ func getUserNamespaces(c *gin.Context) []string {
 // isNamespaceAllowed checks if a namespace is in the user's allowed list.
 // Used by Create handlers to validate the target namespace from request body.
 func isNamespaceAllowed(c *gin.Context, ns string) bool {
-	if os.Getenv("DISABLE_AUTH") == "true" {
+	if auth.AuthDisabled() {
 		return true
 	}
 	if auth.GetCurrentRole(c) == auth.RoleAdmin {
@@ -265,63 +265,69 @@ func isNamespaceAllowed(c *gin.Context, ns string) bool {
 // proxyAuthCheck enforces authentication and namespace access for reverse proxy routes.
 // URL pattern: /{prefix}/{namespace}/{name}/...
 // Unauthenticated → 302 /login; authenticated but namespace mismatch → 403.
-// WebSocket upgrade requests are authenticated but skip namespace check.
-func proxyAuthCheck(c *gin.Context) {
-	// Dev mode: skip all auth
-	if os.Getenv("DISABLE_AUTH") == "true" {
-		c.Next()
-		return
-	}
+func proxyAuthCheck(authManager *auth.Manager) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Auth disabled: skip all auth checks
+		if auth.AuthDisabled() {
+			c.Next()
+			return
+		}
 
-	// Check session authentication
-	session := sessions.Default(c)
-	name := session.Get(auth.SessionKeyName)
-	if name == nil || name == "" {
-		c.Redirect(http.StatusFound, "/login")
-		c.Abort()
-		return
-	}
-
-	// Set user context for downstream
-	c.Set("userName", name)
-	c.Set("userRole", session.Get(auth.SessionKeyRole))
-
-	// WebSocket upgrade: authenticate but skip namespace check
-	if strings.EqualFold(c.GetHeader("Upgrade"), "websocket") {
-		c.Next()
-		return
-	}
-
-	// Admin bypasses namespace check
-	if auth.GetCurrentRole(c) == auth.RoleAdmin {
-		c.Next()
-		return
-	}
-
-	// Extract namespace from path: /{prefix}/{namespace}/{name}/...
-	pathParam := c.Param("path")
-	parts := strings.SplitN(strings.TrimPrefix(pathParam, "/"), "/", 3)
-	if len(parts) >= 2 {
-		ns := parts[0]
-		allowed := getUserNamespaces(c)
-		for _, a := range allowed {
-			if a == ns {
-				c.Next()
+		// Custom mode: identity comes from trusted gateway headers
+		if auth.CurrentMode() == auth.ModeCustom {
+			if authManager.AuthenticateViaHeaders(c) {
+				// Identity established from headers; fall through to the
+				// namespace check below using the populated session/context.
+			} else {
+				authManager.RejectUnauthenticated(c)
 				return
 			}
 		}
-		response.FailedWithCode(c, 40300, "access denied: namespace '"+ns+"' is not in your allowed scope")
-		c.Abort()
-		return
-	}
 
-	c.Next()
+		// Check session authentication
+		session := sessions.Default(c)
+		name := session.Get(auth.SessionKeyName)
+		if name == nil || name == "" {
+			c.Redirect(http.StatusFound, "/login")
+			c.Abort()
+			return
+		}
+
+		// Set user context for downstream
+		c.Set("userName", name)
+		c.Set("userRole", session.Get(auth.SessionKeyRole))
+
+		// Admin bypasses namespace check
+		if auth.GetCurrentRole(c) == auth.RoleAdmin {
+			c.Next()
+			return
+		}
+
+		// Extract namespace from path: /{prefix}/{namespace}/{name}/...
+		pathParam := c.Param("path")
+		parts := strings.SplitN(strings.TrimPrefix(pathParam, "/"), "/", 3)
+		if len(parts) >= 2 {
+			ns := parts[0]
+			allowed := getUserNamespaces(c)
+			for _, a := range allowed {
+				if a == ns {
+					c.Next()
+					return
+				}
+			}
+			response.FailedWithCode(c, 40300, "access denied: namespace '"+ns+"' is not in your allowed scope")
+			c.Abort()
+			return
+		}
+
+		c.Next()
+	}
 }
 
 // checkNamespaceAccess verifies the :namespace param is within the user's allowed namespaces.
 // Admin role bypasses the check.
 func checkNamespaceAccess(c *gin.Context) {
-	if os.Getenv("DISABLE_AUTH") == "true" {
+	if auth.AuthDisabled() {
 		c.Next()
 		return
 	}

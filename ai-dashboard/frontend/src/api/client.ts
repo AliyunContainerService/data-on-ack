@@ -18,6 +18,12 @@ client.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401 || error.response?.status === 302) {
+      // In custom auth mode the backend may point us to an external SSO login page.
+      const loginUrl = error.response?.data?.loginUrl
+      if (typeof loginUrl === 'string' && loginUrl) {
+        window.location.href = loginUrl
+        return Promise.reject(error)
+      }
       redirectToLogin()
     }
     return Promise.reject(error)

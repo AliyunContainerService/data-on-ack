@@ -64,6 +64,8 @@ add_head.py
 server
 ai-dev-console/server
 ai-dashboard/server
+# ...but keep the Go source entry points under cmd/server/
+!**/cmd/server/
 
 # Secrets / credentials (never commit)
 *.pem

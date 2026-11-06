@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"os"
 	"strings"
 	"time"
 
@@ -46,8 +45,8 @@ func (h *NodeShellHandler) RegisterRoutes(rg *gin.RouterGroup) {
 
 // adminOnly is a middleware that restricts access to admin-role users only.
 func adminOnly(c *gin.Context) {
-	// Dev mode: skip auth check
-	if os.Getenv("DISABLE_AUTH") == "true" {
+	// Auth disabled: everyone is admin
+	if auth.AuthDisabled() {
 		c.Next()
 		return
 	}

@@ -69,7 +69,7 @@ func (h *UserHandler) GetUserByAliuid(c *gin.Context) {
 }
 
 func (h *UserHandler) UserInfo(c *gin.Context) {
-	_, _, loginName, _, ok := h.authManager.GetCurrentUser(c)
+	_, _, loginName, role, ok := h.authManager.GetCurrentUser(c)
 	if !ok {
 		response.Failed(c, response.CodeUserNotLogin, "user not login")
 		return
@@ -86,6 +86,18 @@ func (h *UserHandler) UserInfo(c *gin.Context) {
 				user = &u
 				break
 			}
+		}
+	}
+
+	// In none/custom auth modes a user may not have a User CRD; return a
+	// synthetic user so the frontend can render the console anyway.
+	if user == nil && auth.CurrentMode() != auth.ModeAliyun {
+		user = &model.User{
+			Spec: model.UserSpec{
+				UserName: loginName,
+				Aliuid:   loginName,
+				ApiRoles: []string{role},
+			},
 		}
 	}
 

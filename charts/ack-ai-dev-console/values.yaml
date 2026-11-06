@@ -95,6 +95,25 @@ dev-console:
 
   # 认证与会话配置
   auth:
+    # 认证模式:
+    #   aliyun (默认) - 阿里云 RAM OAuth2 SSO 登录
+    #   none          - 免登录，所有请求以内置 admin 身份运行，拥有全部权限；无需配置阿里云凭据
+    #   custom        - 接入客户自定义用户系统，信任上游网关注入的身份请求头
+    mode: "aliyun"
+    # custom 模式配置 (mode=custom 时生效)
+    custom:
+      # 上游网关注入的用户名请求头
+      userHeader: "X-Forwarded-User"
+      # 上游网关注入的用户组请求头 (逗号分隔，可选)
+      groupsHeader: "X-Forwarded-Groups"
+      # 授予 admin 角色的用户列表 (逗号分隔)
+      adminUsers: ""
+      # 授予 admin 角色的用户组列表 (逗号分隔)
+      adminGroups: ""
+      # 未认证浏览器请求的重定向地址，如企业 SSO 登录页 (可选)
+      loginUrl: ""
+    # none 模式下列表接口使用的命名空间范围 (逗号分隔)
+    noneNamespaces: "default,default-group,kube-ai"
     # Session 持久化 Secret (推荐)
     # 创建: kubectl create secret generic ai-dev-console-auth --from-literal=sessionSecret=$(openssl rand -hex 32) -n kube-ai
     existingSecret: ""
