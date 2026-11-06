@@ -1,8 +1,11 @@
 <header class="site-header" id="siteHeader">
   <div class="header-inner">
     <a class="brand" href="{{ '/' | relative_url }}" aria-label="{{ site.title }} 首页">
-      <span class="brand-mark"><svg><use href="#i-logo"/></svg></span>
-      <span class="brand-name">Data/AI <em>on</em> ACK</span>
+      <span class="brand-mark"><img src="{{ '/assets/img/ack-logo.png' | relative_url }}" alt="阿里云容器服务 ACK" width="30" height="34"></span>
+      <span class="brand-lockup">
+        <span class="brand-name">Data/AI <em>on</em> ACK</span>
+        <span class="brand-sub">Alibaba Cloud · 容器服务 ACK</span>
+      </span>
     </a>
     <nav class="header-nav" aria-label="主导航">
       <a href="{{ '/' | relative_url }}" {% if page.url == "/" %}aria-current="page"{% endif %}>概览</a>

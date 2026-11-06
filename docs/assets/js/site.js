@@ -81,7 +81,7 @@
   if (canvas && !reduceMotion) {
     var ctx = canvas.getContext("2d");
     var W, H, dpr, blobs, raf = null, t0 = performance.now();
-    var COLORS = [[79, 140, 255], [124, 92, 255], [180, 92, 255], [76, 201, 240]];
+    var COLORS = [[255, 106, 0], [255, 138, 61], [50, 108, 229], [255, 179, 71]];
     function resize() {
       dpr = Math.min(window.devicePixelRatio || 1, 2);
       W = canvas.clientWidth; H = canvas.clientHeight;
@@ -103,13 +103,13 @@
     function frame(now) {
       var t = (now - t0) / 1000;
       ctx.clearRect(0, 0, W, H);
-      ctx.globalCompositeOperation = "lighter";
+      ctx.globalCompositeOperation = "source-over";
       blobs.forEach(function (b) {
         var x = W * (b.ax + b.sx * Math.cos(t * 0.14 + b.p));
         var y = H * (b.ay + b.sy * Math.sin(t * 0.11 + b.p * 1.3));
         var r = Math.max(W, H) * b.r;
         var g = ctx.createRadialGradient(x, y, 0, x, y, r);
-        g.addColorStop(0, "rgba(" + b.c[0] + "," + b.c[1] + "," + b.c[2] + ",0.30)");
+        g.addColorStop(0, "rgba(" + b.c[0] + "," + b.c[1] + "," + b.c[2] + ",0.085)");
         g.addColorStop(1, "rgba(" + b.c[0] + "," + b.c[1] + "," + b.c[2] + ",0)");
         ctx.fillStyle = g;
         ctx.fillRect(x - r, y - r, r * 2, r * 2);

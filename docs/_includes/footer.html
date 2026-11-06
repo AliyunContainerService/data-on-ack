@@ -2,10 +2,19 @@
   <div class="footer-inner">
     <div class="footer-brand">
       <a class="brand" href="{{ '/' | relative_url }}">
-        <span class="brand-mark"><svg><use href="#i-logo"/></svg></span>
+        <span class="brand-mark"><img src="{{ '/assets/img/ack-logo.png' | relative_url }}" alt="阿里云容器服务 ACK" width="30" height="34"></span>
         <span class="brand-name">Data/AI <em>on</em> ACK</span>
       </a>
       <p class="footer-tag">在 Kubernetes 之上，构建完整的云原生 AI 工程链路。</p>
+      <div class="footer-cobrand">
+        <a class="cobrand-item" href="https://www.aliyun.com/" target="_blank" rel="noopener" aria-label="阿里云官网">
+          <img class="cobrand-aliyun" src="{{ '/assets/img/aliyun-logo-cn.png' | relative_url }}" alt="阿里云" width="59" height="14">
+        </a>
+        <a class="cobrand-item" href="https://www.aliyun.com/product/kubernetes" target="_blank" rel="noopener" aria-label="阿里云容器服务 ACK">
+          <img src="{{ '/assets/img/ack-logo.png' | relative_url }}" alt="" width="13" height="15">
+          <span>容器服务 ACK</span>
+        </a>
+      </div>
     </div>
     <nav class="footer-col" aria-label="文档">
       <h4>文档</h4>
@@ -29,6 +38,6 @@
   </div>
   <div class="footer-bar">
     <p>Copyright © 2024-2026 Alibaba Cloud. Distributed under the Apache-2.0 License.</p>
-    <p class="footer-note">Built with Jekyll · Deployed on GitHub Pages</p>
+    <p class="footer-note">由阿里云容器服务（ACK）团队出品</p>
   </div>
 </footer>
