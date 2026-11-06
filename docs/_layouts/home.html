@@ -128,6 +128,86 @@
       </div>
     </div>
 
+    <div class="ray-cluster reveal">
+      <div class="rc-head">
+        <span class="rc-title">demo-ray-cluster · 生产拓扑</span>
+        <span class="rc-chips">
+          <span class="rc-chip"><i class="rc-dot" aria-hidden="true"></i>Running</span>
+          <span class="rc-chip">eRDMA 已启用</span>
+          <span class="rc-chip">cGPU 共享</span>
+        </span>
+      </div>
+      <svg class="dia rc-dia" viewBox="0 0 1000 430" role="group" aria-label="RayCluster 生产拓扑：kubectl 声明式创建，Head Pod 调度 Worker，输出训练、推理与数据能力"
+           xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+        <!-- edges -->
+        <g aria-hidden="true">
+          <path id="rc1" class="dia-edge" data-nodes="r-client r-head" d="M212 204 C246 204, 250 126, 292 126"/>
+          <path id="rc2" class="dia-edge" data-nodes="r-client r-workers" d="M212 204 C252 204, 248 292, 292 292"/>
+          <path id="rc3" class="dia-edge" data-nodes="r-head r-w0" d="M388 174 C388 204, 398 206, 398 242"/>
+          <path id="rc4" class="dia-edge" data-nodes="r-head r-w1" d="M388 174 C388 210, 604 202, 604 242"/>
+          <path id="rc5" class="dia-edge" data-nodes="r-workers r-job" d="M702 250 C752 250, 742 94, 792 92"/>
+          <path id="rc6" class="dia-edge" data-nodes="r-workers r-serve" d="M702 292 C748 292, 748 212, 792 212"/>
+          <path id="rc7" class="dia-edge" data-nodes="r-workers r-data" d="M702 322 C750 322, 748 330, 792 330"/>
+        </g>
+        <g aria-hidden="true" class="dia-pulses">
+          <circle class="dia-pulse" r="5" fill="url(#pulseGrad)"><animateMotion dur="2.4s" begin="0s" repeatCount="indefinite"><mpath xlink:href="#rc1" href="#rc1"/></animateMotion></circle>
+          <circle class="dia-pulse" r="5" fill="url(#pulseGrad)"><animateMotion dur="2.4s" begin="1.2s" repeatCount="indefinite"><mpath xlink:href="#rc2" href="#rc2"/></animateMotion></circle>
+          <circle class="dia-pulse" r="5" fill="url(#pulseGrad)"><animateMotion dur="2s" begin="0.5s" repeatCount="indefinite"><mpath xlink:href="#rc3" href="#rc3"/></animateMotion></circle>
+          <circle class="dia-pulse" r="5" fill="url(#pulseGrad)"><animateMotion dur="2.8s" begin="0.2s" repeatCount="indefinite"><mpath xlink:href="#rc5" href="#rc5"/></animateMotion></circle>
+          <circle class="dia-pulse" r="5" fill="url(#pulseGrad)"><animateMotion dur="2.8s" begin="1.6s" repeatCount="indefinite"><mpath xlink:href="#rc6" href="#rc6"/></animateMotion></circle>
+          <circle class="dia-pulse" r="5" fill="url(#pulseGrad)"><animateMotion dur="2.8s" begin="1s" repeatCount="indefinite"><mpath xlink:href="#rc7" href="#rc7"/></animateMotion></circle>
+        </g>
+
+        <!-- cluster boundary -->
+        <rect class="dia-zone" x="262" y="30" width="472" height="372" rx="20"/>
+        <text class="dia-zone-label" x="286" y="58">RayCluster · kube-ai</text>
+
+        <!-- nodes -->
+        <g class="dia-node" data-node="r-client" tabindex="0" role="button" aria-label="kubectl 客户端" data-desc="kubectl + KubeRay：一条 YAML 声明式创建整个 Ray 集群">
+          <rect x="32" y="158" width="180" height="92" rx="14"/>
+          <text class="dia-title" x="122" y="198" text-anchor="middle">kubectl</text>
+          <text class="dia-sub" x="122" y="222" text-anchor="middle">KubeRay 声明式创建</text>
+        </g>
+        <g class="dia-node" data-node="r-head" tabindex="0" role="button" aria-label="Head Pod" data-desc="Head Pod：GCS 元数据管理 + Ray Dashboard，支持 GCS 容错挂载，生产级高可用">
+          <rect x="292" y="78" width="192" height="96" rx="14"/>
+          <text class="dia-title" x="388" y="112" text-anchor="middle">Head Pod</text>
+          <text class="dia-sub" x="388" y="136" text-anchor="middle">GCS :6379 · Dashboard :8265</text>
+        </g>
+        <g class="dia-node" data-node="r-workers" role="group" aria-label="Worker 组" data-desc="Worker 组：随负载弹性伸缩，cGPU 共享显卡、ElasticQuota 配额兜底">
+          <rect x="292" y="200" width="410" height="168" rx="16" class="dia-group-rect"/>
+          <text class="dia-sub dia-mono" x="310" y="228">workerGroup · gpu-group</text>
+          <g class="dia-node" data-node="r-w0" tabindex="0" role="button" aria-label="Worker 0" data-desc="Worker Pod：任务/ Actor 实际运行处，8× GPU，支持 eRDMA 高性能传输">
+            <rect x="310" y="242" width="182" height="104" rx="12"/>
+            <text class="dia-title dia-mono" x="401" y="276" text-anchor="middle">worker-0</text>
+            <text class="dia-sub" x="401" y="300" text-anchor="middle">8× GPU · cGPU 共享</text>
+            <text class="dia-sub" x="401" y="320" text-anchor="middle">eRDMA RDT</text>
+          </g>
+          <g class="dia-node" data-node="r-w1" tabindex="0" role="button" aria-label="Worker 1" data-desc="Worker Pod：弹性副本，潮汐调度充分利用空闲算力">
+            <rect x="506" y="242" width="182" height="104" rx="12"/>
+            <text class="dia-title dia-mono" x="597" y="276" text-anchor="middle">worker-1</text>
+            <text class="dia-sub" x="597" y="296" text-anchor="middle">8× GPU · 弹性伸缩</text>
+            <text class="dia-sub" x="597" y="320" text-anchor="middle">NIXL on eRDMA</text>
+          </g>
+        </g>
+        <g class="dia-node" data-node="r-job" tabindex="0" role="button" aria-label="Ray Job" data-desc="Ray Job：PyTorch / TF 多机多卡分布式训练，一条命令提交">
+          <rect x="792" y="60" width="180" height="64" rx="14"/>
+          <text class="dia-title" x="882" y="88" text-anchor="middle">Ray Job</text>
+          <text class="dia-sub" x="882" y="108" text-anchor="middle">分布式训练</text>
+        </g>
+        <g class="dia-node" data-node="r-serve" tabindex="0" role="button" aria-label="RayService" data-desc="RayService：模型一键上线为在线推理服务，支持灰度与弹性伸缩">
+          <rect x="792" y="180" width="180" height="64" rx="14"/>
+          <text class="dia-title" x="882" y="208" text-anchor="middle">RayService</text>
+          <text class="dia-sub" x="882" y="228" text-anchor="middle">在线推理</text>
+        </g>
+        <g class="dia-node" data-node="r-data" tabindex="0" role="button" aria-label="Ray Data" data-desc="Ray Data：直连 OSS 高速读取训练数据，与对象溢出（Spilling）配合告别 OOM">
+          <rect x="792" y="298" width="180" height="64" rx="14"/>
+          <text class="dia-title" x="882" y="326" text-anchor="middle">Ray Data</text>
+          <text class="dia-sub" x="882" y="346" text-anchor="middle">OSS 数据</text>
+        </g>
+      </svg>
+      <p class="dia-detail" id="rcDetail" aria-live="polite">悬停或点按节点，查看 RayCluster 各角色的职责</p>
+    </div>
+
     <div class="ray-index reveal">
       <div class="ray-group">
         <p class="ray-group-title">用户指南<span>Getting Started</span></p>
@@ -239,34 +319,81 @@
       <p class="section-lede">所有组件以 Helm Chart 交付，运行在标准 Kubernetes 之上，无厂商锁定。</p>
     </div>
     <div class="arch-panel reveal">
-      <div class="arch-row arch-top">
-        <div class="arch-node arch-user"><svg><use href="#i-gpu"/></svg><span>数据科学家 · 算法工程师 · 管理员</span></div>
-      </div>
-      <div class="arch-connector" aria-hidden="true"></div>
-      <div class="arch-row">
-        <div class="arch-node arch-ingress"><span>Nginx Ingress</span><em>统一入口</em></div>
-      </div>
-      <div class="arch-connector" aria-hidden="true"></div>
-      <div class="arch-row arch-duo">
-        <div class="arch-node arch-console-a">
-          <strong>ai-dashboard</strong><span>运维控制台 :8080</span>
-          <small>用户 / 配额 / 监控 / 成本</small>
-        </div>
-        <div class="arch-node arch-console-b">
-          <strong>ai-dev-console</strong><span>开发控制台 :9090</span>
-          <small>Notebook / 训练 / 推理</small>
-        </div>
-      </div>
-      <div class="arch-connector" aria-hidden="true"></div>
-      <div class="arch-row arch-base">
-        <div class="arch-node arch-k8s"><span>notebook-controller</span></div>
-        <div class="arch-node arch-k8s"><span>commit-agent</span></div>
-        <div class="arch-node arch-k8s"><span>ElasticQuota 调度</span></div>
-        <div class="arch-node arch-k8s"><span>Prometheus + Grafana</span></div>
-      </div>
-      <div class="arch-footer">
-        <span>ACK Pro Cluster · Kubernetes ≥ 1.20</span>
-      </div>
+      <svg class="dia arch-dia" viewBox="0 0 1000 620" role="group" aria-label="平台架构图：用户经 Nginx Ingress 访问双控制台，底层由 ACK Pro 集群承载"
+           xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+        <defs>
+          <radialGradient id="pulseGrad">
+            <stop offset="0%" stop-color="#ff6a00" stop-opacity="0.95"/>
+            <stop offset="100%" stop-color="#ff6a00" stop-opacity="0"/>
+          </radialGradient>
+        </defs>
+
+        <!-- edges -->
+        <g aria-hidden="true">
+          <path id="ae1" class="dia-edge" data-nodes="a-users a-ingress" d="M500 76 V136"/>
+          <path id="ae2" class="dia-edge" data-nodes="a-ingress a-console-a" d="M452 192 C452 226, 296 224, 296 262"/>
+          <path id="ae3" class="dia-edge" data-nodes="a-ingress a-console-b" d="M548 192 C548 226, 704 224, 704 262"/>
+          <path id="ae4" class="dia-edge" data-nodes="a-console-a a-base-1" d="M296 342 C296 388, 147 386, 147 432"/>
+          <path id="ae5" class="dia-edge" data-nodes="a-console-a a-base-2" d="M296 342 C296 386, 392 388, 392 432"/>
+          <path id="ae6" class="dia-edge" data-nodes="a-console-b a-base-3" d="M704 342 C704 386, 608 388, 608 432"/>
+          <path id="ae7" class="dia-edge" data-nodes="a-console-b a-base-4" d="M704 342 C704 388, 853 386, 853 432"/>
+          <path id="ae8" class="dia-edge" data-nodes="a-base-1 a-foundation" d="M147 482 V536"/>
+          <path id="ae9" class="dia-edge" data-nodes="a-base-2 a-foundation" d="M392 482 V536"/>
+          <path id="ae10" class="dia-edge" data-nodes="a-base-3 a-foundation" d="M608 482 V536"/>
+          <path id="ae11" class="dia-edge" data-nodes="a-base-4 a-foundation" d="M853 482 V536"/>
+        </g>
+        <!-- flow pulses -->
+        <g aria-hidden="true" class="dia-pulses">
+          <circle class="dia-pulse" r="5" fill="url(#pulseGrad)"><animateMotion dur="2.2s" begin="0s" repeatCount="indefinite"><mpath xlink:href="#ae1" href="#ae1"/></animateMotion></circle>
+          <circle class="dia-pulse" r="5" fill="url(#pulseGrad)"><animateMotion dur="2.6s" begin="0.7s" repeatCount="indefinite"><mpath xlink:href="#ae2" href="#ae2"/></animateMotion></circle>
+          <circle class="dia-pulse" r="5" fill="url(#pulseGrad)"><animateMotion dur="2.6s" begin="1.5s" repeatCount="indefinite"><mpath xlink:href="#ae3" href="#ae3"/></animateMotion></circle>
+          <circle class="dia-pulse" r="5" fill="url(#pulseGrad)"><animateMotion dur="3s" begin="0.3s" repeatCount="indefinite"><mpath xlink:href="#ae4" href="#ae4"/></animateMotion></circle>
+          <circle class="dia-pulse" r="5" fill="url(#pulseGrad)"><animateMotion dur="3s" begin="1.9s" repeatCount="indefinite"><mpath xlink:href="#ae7" href="#ae7"/></animateMotion></circle>
+          <circle class="dia-pulse" r="5" fill="url(#pulseGrad)"><animateMotion dur="2.4s" begin="1.1s" repeatCount="indefinite"><mpath xlink:href="#ae9" href="#ae9"/></animateMotion></circle>
+        </g>
+
+        <!-- nodes -->
+        <g class="dia-node" data-node="a-users" tabindex="0" role="button" aria-label="平台用户" data-desc="数据科学家、算法工程师与管理员，统一从浏览器访问平台">
+          <rect x="320" y="22" width="360" height="54" rx="14"/>
+          <text class="dia-title" x="500" y="55" text-anchor="middle">数据科学家 · 算法工程师 · 管理员</text>
+        </g>
+        <g class="dia-node" data-node="a-ingress" tabindex="0" role="button" aria-label="Nginx Ingress 统一入口" data-desc="Nginx Ingress：统一流量入口，负责域名路由与 TLS 终止">
+          <rect x="400" y="138" width="200" height="54" rx="14"/>
+          <text class="dia-title" x="500" y="160" text-anchor="middle">Nginx Ingress</text>
+          <text class="dia-sub" x="500" y="180" text-anchor="middle">统一入口</text>
+        </g>
+        <g class="dia-node dia-node-a" data-node="a-console-a" tabindex="0" role="button" aria-label="ai-dashboard 运维控制台" data-desc="ai-dashboard 运维控制台（:8080）：用户与配额治理、GPU 资源全景、监控与成本洞察">
+          <rect x="146" y="262" width="300" height="80" rx="14"/>
+          <text class="dia-title" x="296" y="296" text-anchor="middle">ai-dashboard · 运维控制台</text>
+          <text class="dia-sub" x="296" y="322" text-anchor="middle">用户 / 配额 / 监控 / 成本</text>
+        </g>
+        <g class="dia-node dia-node-b" data-node="a-console-b" tabindex="0" role="button" aria-label="ai-dev-console 开发控制台" data-desc="ai-dev-console 开发控制台（:9090）：Notebook 秒级启动、训练任务编排、模型一键推理">
+          <rect x="554" y="262" width="300" height="80" rx="14"/>
+          <text class="dia-title" x="704" y="296" text-anchor="middle">ai-dev-console · 开发控制台</text>
+          <text class="dia-sub" x="704" y="322" text-anchor="middle">Notebook / 训练 / 推理</text>
+        </g>
+        <g class="dia-node" data-node="a-base-1" tabindex="0" role="button" aria-label="notebook-controller" data-desc="notebook-controller：Notebook 实例的生命周期管理">
+          <rect x="42" y="432" width="210" height="50" rx="12"/>
+          <text class="dia-title dia-mono" x="147" y="462" text-anchor="middle">notebook-controller</text>
+        </g>
+        <g class="dia-node" data-node="a-base-2" tabindex="0" role="button" aria-label="commit-agent" data-desc="commit-agent：Notebook 代码与变更自动同步提交，环境可复现">
+          <rect x="287" y="432" width="210" height="50" rx="12"/>
+          <text class="dia-title dia-mono" x="392" y="462" text-anchor="middle">commit-agent</text>
+        </g>
+        <g class="dia-node" data-node="a-base-3" tabindex="0" role="button" aria-label="ElasticQuota 调度" data-desc="ElasticQuota 调度：多团队弹性配额与 GPU 共享，算力用到极致">
+          <rect x="503" y="432" width="210" height="50" rx="12"/>
+          <text class="dia-title dia-mono" x="608" y="462" text-anchor="middle">ElasticQuota 调度</text>
+        </g>
+        <g class="dia-node" data-node="a-base-4" tabindex="0" role="button" aria-label="Prometheus 与 Grafana" data-desc="Prometheus + Grafana：集群监控指标与成本分析大盘">
+          <rect x="748" y="432" width="210" height="50" rx="12"/>
+          <text class="dia-title dia-mono" x="853" y="462" text-anchor="middle">Prometheus + Grafana</text>
+        </g>
+        <g class="dia-node dia-node-foundation" data-node="a-foundation" tabindex="0" role="button" aria-label="ACK Pro 集群底座" data-desc="ACK Pro 托管集群：企业级 Kubernetes 底座，标准兼容、无厂商锁定">
+          <rect x="42" y="536" width="916" height="48" rx="14"/>
+          <text class="dia-title" x="500" y="566" text-anchor="middle">Alibaba Cloud ACK Pro · Kubernetes ≥ 1.20</text>
+        </g>
+      </svg>
+      <p class="dia-detail" id="archDetail" aria-live="polite">悬停或点按节点，查看每个组件的职责</p>
     </div>
   </section>
 
