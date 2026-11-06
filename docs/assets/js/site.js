@@ -81,7 +81,17 @@
   if (canvas && !reduceMotion) {
     var ctx = canvas.getContext("2d");
     var W, H, dpr, blobs, raf = null, t0 = performance.now();
-    var COLORS = [[79, 140, 255], [124, 92, 255], [180, 92, 255], [76, 201, 240]];
+    var COLORS = [[255, 106, 0], [255, 138, 61], [50, 108, 229], [255, 179, 71]];
+    var mouse = { x: 0, y: 0, tx: 0, ty: 0 };
+    var heroEl = canvas.closest(".hero");
+    if (heroEl && !isCoarse) {
+      heroEl.addEventListener("pointermove", function (e) {
+        var r = heroEl.getBoundingClientRect();
+        mouse.tx = (e.clientX - r.left) / r.width - 0.5;
+        mouse.ty = (e.clientY - r.top) / r.height - 0.5;
+      }, { passive: true });
+      heroEl.addEventListener("pointerleave", function () { mouse.tx = 0; mouse.ty = 0; });
+    }
     function resize() {
       dpr = Math.min(window.devicePixelRatio || 1, 2);
       W = canvas.clientWidth; H = canvas.clientHeight;
@@ -103,13 +113,15 @@
     function frame(now) {
       var t = (now - t0) / 1000;
       ctx.clearRect(0, 0, W, H);
-      ctx.globalCompositeOperation = "lighter";
+      ctx.globalCompositeOperation = "source-over";
+      mouse.x += (mouse.tx - mouse.x) * 0.04;
+      mouse.y += (mouse.ty - mouse.y) * 0.04;
       blobs.forEach(function (b) {
-        var x = W * (b.ax + b.sx * Math.cos(t * 0.14 + b.p));
-        var y = H * (b.ay + b.sy * Math.sin(t * 0.11 + b.p * 1.3));
+        var x = W * (b.ax + mouse.x * 0.05 + b.sx * Math.cos(t * 0.14 + b.p));
+        var y = H * (b.ay + mouse.y * 0.045 + b.sy * Math.sin(t * 0.11 + b.p * 1.3));
         var r = Math.max(W, H) * b.r;
         var g = ctx.createRadialGradient(x, y, 0, x, y, r);
-        g.addColorStop(0, "rgba(" + b.c[0] + "," + b.c[1] + "," + b.c[2] + ",0.30)");
+        g.addColorStop(0, "rgba(" + b.c[0] + "," + b.c[1] + "," + b.c[2] + ",0.085)");
         g.addColorStop(1, "rgba(" + b.c[0] + "," + b.c[1] + "," + b.c[2] + ",0)");
         ctx.fillStyle = g;
         ctx.fillRect(x - r, y - r, r * 2, r * 2);
@@ -160,8 +172,8 @@
         card.style.transform = "";
       });
     });
-    /* Pointer glow for capability cards */
-    $$(".cap-card").forEach(function (card) {
+    /* Pointer glow for interactive cards */
+    $$(".cap-card, .console-card, .doc-card").forEach(function (card) {
       card.addEventListener("pointermove", function (e) {
         var r = card.getBoundingClientRect();
         card.style.setProperty("--mx", (e.clientX - r.left) + "px");
@@ -392,5 +404,93 @@
   });
   if (!/Mac|iPhone|iPad/.test(navigator.platform || "")) {
     var kbd = $("#searchKbd"); if (kbd) kbd.textContent = "Ctrl K";
+  }
+
+  /* ---------- Interactive diagrams (architecture + Ray cluster) ---------- */
+  $$(".dia").forEach(function (svg) {
+    var scope = svg.closest(".arch-panel") || svg.closest(".ray-cluster") || svg.parentElement;
+    var detail = scope ? $(".dia-detail", scope) : null;
+    var nodes = $$(".dia-node", svg);
+    var edges = $$(".dia-edge", svg);
+    var defaultText = detail ? detail.textContent : "";
+    function setActive(id, desc) {
+      nodes.forEach(function (n) { n.classList.toggle("active", n.getAttribute("data-node") === id); });
+      edges.forEach(function (e) {
+        var list = (e.getAttribute("data-nodes") || "").split(" ");
+        e.classList.toggle("active", id ? list.indexOf(id) !== -1 : false);
+      });
+      if (detail) detail.textContent = desc || defaultText;
+    }
+    nodes.forEach(function (n) {
+      var id = n.getAttribute("data-node");
+      var desc = n.getAttribute("data-desc") || "";
+      n.addEventListener("mouseenter", function () { setActive(id, desc); });
+      n.addEventListener("focus", function () { setActive(id, desc); });
+      n.addEventListener("click", function (e) { e.stopPropagation(); setActive(id, desc); });
+      n.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setActive(id, desc); }
+      });
+    });
+    svg.addEventListener("mouseleave", function () { setActive(null); });
+    svg.addEventListener("click", function () { setActive(null); });
+    document.addEventListener("click", function (e) { if (!svg.contains(e.target)) setActive(null); });
+  });
+
+  /* ---------- Terminal line play ---------- */
+  $$(".hero-terminal, .ray-terminal").forEach(function (term) {
+    var code = term.querySelector(".terminal-body code");
+    if (!code || reduceMotion || !("IntersectionObserver" in window)) return;
+    var parts = Array.prototype.slice.call(code.childNodes);
+    var frag = document.createDocumentFragment();
+    var count = 0;
+    var line = null;
+    function newLine() {
+      var s = document.createElement("span");
+      s.className = "t-line";
+      s.style.transitionDelay = Math.min(count * 130, 1430) + "ms";
+      frag.appendChild(s); count++;
+      return s;
+    }
+    line = newLine();
+    parts.forEach(function (n) {
+      if (n.nodeType === 3) {
+        n.textContent.split("\n").forEach(function (p, i) {
+          if (i > 0) line = newLine();
+          if (p) line.appendChild(document.createTextNode(p));
+        });
+      } else {
+        line.appendChild(n);
+      }
+    });
+    var last = frag.lastChild;
+    if (last && !last.textContent.trim() && !last.querySelector("*")) frag.removeChild(last);
+    code.textContent = "";
+    code.appendChild(frag);
+    term.classList.add("js-term-play");
+    var ioT = new IntersectionObserver(function (en) {
+      if (en[0].isIntersecting) { term.classList.add("playing"); ioT.disconnect(); }
+    }, { threshold: 0.3 });
+    ioT.observe(term);
+  });
+
+  /* ---------- Magnetic primary buttons ---------- */
+  if (!reduceMotion && !isCoarse) {
+    $$(".btn-primary").forEach(function (btn) {
+      var mraf = null;
+      btn.addEventListener("pointermove", function (e) {
+        if (mraf) return;
+        mraf = requestAnimationFrame(function () {
+          var r = btn.getBoundingClientRect();
+          var dx = (e.clientX - r.left - r.width / 2) / (r.width / 2);
+          var dy = (e.clientY - r.top - r.height / 2) / (r.height / 2);
+          btn.style.transform = "translate(" + (dx * 4).toFixed(1) + "px," + (dy * 3 - 1).toFixed(1) + "px)";
+          mraf = null;
+        });
+      });
+      btn.addEventListener("pointerleave", function () {
+        if (mraf) { cancelAnimationFrame(mraf); mraf = null; }
+        btn.style.transform = "";
+      });
+    });
   }
 })();
