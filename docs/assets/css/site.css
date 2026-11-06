@@ -643,6 +643,7 @@ body.mobile-nav-open .mobile-nav { display: flex; }
 .nav-top.is-active { color: var(--brand-ink); }
 
 .docs-main { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) 208px; gap: clamp(24px, 3vw, 48px); }
+.docs-main > * { min-width: 0; }
 .doc-article { min-width: 0; max-width: 860px; padding-top: 26px; }
 
 .breadcrumb { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: 13px; color: var(--muted); margin-bottom: 18px; }
@@ -706,6 +707,7 @@ body.mobile-nav-open .mobile-nav { display: flex; }
 .prose a { color: var(--brand-ink); font-weight: 550; background-image: linear-gradient(rgba(255, 106, 0, 0.35), rgba(255, 106, 0, 0.35)); background-size: 100% 1px; background-position: 0 100%; background-repeat: no-repeat; transition: background-size 0.3s, color 0.2s; }
 .prose a:hover { color: var(--brand-deep); background-image: linear-gradient(rgba(255, 106, 0, 0.6), rgba(255, 106, 0, 0.6)); }
 .prose ul, .prose ol { padding-left: 24px; margin: 14px 0; display: grid; gap: 7px; }
+.prose li { min-width: 0; }
 .prose ul { list-style: none; }
 .prose ul li { position: relative; }
 .prose ul li::before { content: ""; position: absolute; left: -18px; top: 0.62em; width: 6px; height: 6px; border-radius: 2px; background: var(--grad); }
@@ -729,7 +731,7 @@ body.mobile-nav-open .mobile-nav { display: flex; }
   background: rgba(255, 106, 0, 0.08); color: var(--brand-ink);
   padding: 2.5px 7px; border-radius: 7px;
   border: 1px solid rgba(255, 106, 0, 0.16);
-  white-space: nowrap;
+  white-space: normal; overflow-wrap: anywhere;
 }
 .prose pre { position: relative; margin: 22px 0; border-radius: var(--r-md); border: 1px solid var(--border-soft); background: #101823 !important; overflow: hidden; box-shadow: var(--shadow-sm); }
 .prose pre code { display: block; padding: 20px 22px; background: none; border: 0; color: #dde6f3; font-size: 13.5px; line-height: 1.8; white-space: pre; overflow-x: auto; }
