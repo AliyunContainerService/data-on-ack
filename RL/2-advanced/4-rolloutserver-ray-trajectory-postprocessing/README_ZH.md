@@ -34,7 +34,7 @@ Harbor CLI → Rollout Server → Sandbox：agent + verifier
 ## 前置条件
 
 - ACK 集群、kubectl、已安装 KubeRay Operator，具备 `RayService` 和 `RayCluster` CRD。
-- 已部署 Rollout Server，支持 `result_hook_url`、`result_hook_path_root` 以及独立轨迹 JSON 导出。
+- 已通过 ACK Helm 中心部署 Rollout Server，支持 `result_hook_url`、`result_hook_path_root` 以及独立轨迹 JSON 导出。
   Harbor CLI 使用包含 `--rollout-server` 的 release；回调功能属于 Rollout Server，不是 CLI 自行发送。
 - 已启用 OSS CSI 或其他可将同一 OSS 前缀挂载给两个服务的方式。
 - 一个 Ray 2.56.1、Python 3.11 镜像，包含 Ray Serve、FastAPI、Pydantic 和 httpx，且集群可拉取。
@@ -49,7 +49,6 @@ Harbor CLI → Rollout Server → Sandbox：agent + verifier
 ```bash
 export TRACE_NAMESPACE=trajectory-demo
 export ROLLOUT_NAMESPACE=kube-rl
-export ROLLOUT_RELEASE=ack-rollout-server
 export ROLLOUT_DEPLOYMENT=ack-rollout-server
 export ROLLOUT_SERVICE=ack-rollout-server
 export RAY_IMAGE='<your-registry>/ray-serve:2.56.1-py311'
@@ -142,9 +141,13 @@ curl -N --fail-with-body http://127.0.0.1:18000/analyze \
 
 ## 步骤 4 —— 配置 Rollout Server 完成回调
 
-使用 chart 提供的顶层 `extraEnv` 配置回调。将以下内容保存为
-`rollout-result-hook.values.yaml`，服务地址中的 `trajectory-demo` 替换为 RayService
-所在的命名空间：
+Rollout Server 的 chart 由 ACK Helm 中心提供，直接在控制台更新已安装应用的 values：
+
+1. 在 ACK 控制台进入目标集群，选择 **应用 > Helm**。
+2. 找到 Rollout Server 的 Helm 应用（本例为 `kube-rl` 命名空间中的
+   `ack-rollout-server`），单击 **更新**。
+3. 保持当前 chart 版本，将以下顶层 `extraEnv` 配置合入现有 values，单击 **确定**。
+   服务地址中的 `trajectory-demo` 替换为 RayService 所在的命名空间。
 
 ```yaml
 extraEnv:
@@ -156,24 +159,15 @@ extraEnv:
     value: "180"
 ```
 
-Helm 会替换整个 `extraEnv` 列表，而不是按变量名追加。如果 release 已有其他
-`extraEnv` 项，应将它们一起保留在此文件中。使用当前 release 相同的 chart 和版本更新，
-不要覆盖已有的归档卷、镜像、模型凭据或其他配置：
+保留现有 `extraEnv` 项及归档卷、镜像、模型凭据等配置；Helm 会替换整个
+`extraEnv` 列表，而不是按变量名追加。详细操作参见
+[ACK Helm Release 更新说明](https://help.aliyun.com/zh/ack/ack-managed-and-ack-dedicated/user-guide/app-marketplace)。
 
-```bash
-export ROLLOUT_CHART='<path-or-OCI-reference-to-rollout-server-chart>'
-helm upgrade "$ROLLOUT_RELEASE" "$ROLLOUT_CHART" \
-  --namespace "$ROLLOUT_NAMESPACE" \
-  --reuse-values \
-  --values rollout-result-hook.values.yaml
-```
-
-`ROLLOUT_RELEASE` 是 Helm release 名称，不一定等于 Deployment 名称。
 single 模式将变量注入服务 Pod；multi 模式也会将它们注入 worker。
-Helm values 不会自动展开 shell 变量，因此文件中的服务地址必须填写实际命名空间。
+values 中的服务地址需要填写实际命名空间，不会自动展开 shell 变量。
 
 如需临时验证，也可以直接修改 Deployment；该方式不会更新 Helm values，
-后续 Helm 升级可能覆盖它。在 multi 模式下应使用上面的 Helm 配置，确保 worker 获得变量。
+后续通过控制台更新应用时可能覆盖它。在 multi 模式下应使用上面的 Helm 配置，确保 worker 获得变量。
 以下命令适用于 single 模式，会滚动更新指定的 Deployment：
 
 ```bash

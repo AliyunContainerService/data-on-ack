@@ -39,7 +39,7 @@ Pod and no GPU; model inference runs in the external Bailian service.
 ## Prerequisites
 
 - ACK, kubectl, and a KubeRay Operator installation with RayService/RayCluster CRDs.
-- A Rollout Server that supports `result_hook_url`, `result_hook_path_root`, and
+- A Rollout Server installed through the ACK Helm center that supports `result_hook_url`, `result_hook_path_root`, and
   standalone trajectory JSON exports. Use a Harbor release with `--rollout-server`.
   The callback is a server feature, not an extra HTTP call made by Harbor CLI.
 - OSS CSI or an equivalent mount that exposes the same OSS prefix to both services.
@@ -56,7 +56,6 @@ Run the commands below there. Adjust names as needed, keeping the mount mapping 
 ```bash
 export TRACE_NAMESPACE=trajectory-demo
 export ROLLOUT_NAMESPACE=kube-rl
-export ROLLOUT_RELEASE=ack-rollout-server
 export ROLLOUT_DEPLOYMENT=ack-rollout-server
 export ROLLOUT_SERVICE=ack-rollout-server
 export RAY_IMAGE='<your-registry>/ray-serve:2.56.1-py311'
@@ -145,9 +144,15 @@ The request's `success=false` labels the original trial, not this analysis reque
 
 ## Step 4 — Configure the completion callback
 
-Use the chart's top-level `extraEnv` field. Save the following as
-`rollout-result-hook.values.yaml`, replacing `trajectory-demo` with the namespace
-that contains your RayService:
+The chart is provided by the ACK Helm center. Update the installed application's
+values directly in the console:
+
+1. Open the target cluster in the ACK console and select **Applications > Helm**.
+2. Find the Rollout Server release (`ack-rollout-server` in namespace `kube-rl`
+   in this example) and click **Update**.
+3. Keep the current chart version, merge the top-level `extraEnv` entries below
+   into the existing values, and confirm the update. Replace `trajectory-demo`
+   in the service URL with the namespace containing your RayService.
 
 ```yaml
 extraEnv:
@@ -159,26 +164,17 @@ extraEnv:
     value: "180"
 ```
 
-Helm replaces the entire `extraEnv` list rather than merging entries by name.
-Keep any existing entries in this file as well. Upgrade with the same chart and
-version as the current release, preserving archive volumes, image settings,
-model credentials, and other configuration:
+Preserve existing `extraEnv` entries, archive volumes, image settings, model
+credentials, and other configuration. Helm replaces the entire `extraEnv` list
+rather than merging entries by name. See
+[Update Helm releases in ACK](https://help.aliyun.com/en/ack/ack-managed-and-ack-dedicated/user-guide/app-marketplace).
 
-```bash
-export ROLLOUT_CHART='<path-or-OCI-reference-to-rollout-server-chart>'
-helm upgrade "$ROLLOUT_RELEASE" "$ROLLOUT_CHART" \
-  --namespace "$ROLLOUT_NAMESPACE" \
-  --reuse-values \
-  --values rollout-result-hook.values.yaml
-```
-
-`ROLLOUT_RELEASE` is the Helm release name, which can differ from the Deployment
-name. The chart injects these variables into the service Pod in single mode and
-also into workers in multi mode. Helm values do not expand shell variables;
-write the actual namespace in the service URL.
+The chart injects these variables into the service Pod in single mode and also
+into workers in multi mode. Write the actual namespace in the values; shell
+variables are not expanded there.
 
 For a temporary single-mode check, you can instead modify the Deployment below.
-This does not update Helm values and a later Helm upgrade can overwrite it. Use
+This does not update Helm values and a later console update can overwrite it. Use
 the Helm configuration above for multi mode so workers receive the variables.
 
 ```bash
