@@ -19,6 +19,7 @@ covered in the run guide. Each guide ships an English `README.md` and a Chinese 
 | # | Guide | Problem it solves |
 |---|-------|-------------------|
 | 3 | [Manage trajectories with RolloutServer](2-advanced/3-rolloutserver-trajectory-management/README.md) | Deploy a rollout control plane: run trials with fault tolerance/quota, persist trajectories, serve RL training data |
+| 5 | [Run Rollout Server and sandboxes on ACS](2-advanced/5-rolloutserver-on-acs/README.md) | Helm configuration for deploying in an ACS cluster, borrowing ACS compute from ACK for sandboxes, and using ACS Agent Sandbox warm pools |
 
 More advanced topics (image caching, P2P-accelerated environment setup) are planned.
 
