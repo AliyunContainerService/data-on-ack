@@ -19,6 +19,7 @@ covered in the run guide. Each guide ships an English `README.md` and a Chinese 
 | # | Guide | Problem it solves |
 |---|-------|-------------------|
 | 3 | [Manage trajectories with RolloutServer](2-advanced/3-rolloutserver-trajectory-management/README.md) | Deploy a rollout control plane: run trials with fault tolerance/quota, persist trajectories, serve RL training data |
+| 4 | [Post-process trajectories with Rollout Server and RayCluster](2-advanced/4-rolloutserver-ray-trajectory-postprocessing/README.md) | Connect completion callbacks to Ray Serve, analyze trajectories with Bailian, and persist analysis to OSS |
 
 More advanced topics (image caching, P2P-accelerated environment setup) are planned.
 

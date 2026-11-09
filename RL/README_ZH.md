@@ -18,6 +18,7 @@ rollout 管控面。示例采用 **slime + harbor** 技术栈（见
 | # | 指南 | 解决的问题 |
 |---|------|-----------|
 | 3 | [用 RolloutServer 管理轨迹](2-advanced/3-rolloutserver-trajectory-management/README_ZH.md) | 部署 rollout 管控面：带容错/配额地运行 trial、持久化轨迹、提供 RL 训练数据 |
+| 4 | [用 Rollout Server 和 RayCluster 协作处理轨迹](2-advanced/4-rolloutserver-ray-trajectory-postprocessing/README_ZH.md) | 将完成回调接入 Ray Serve，调用百炼分析轨迹，并把分析结果写入 OSS |
 
 更多进阶主题（镜像缓存、P2P 加速环境 setup）规划中。
 
