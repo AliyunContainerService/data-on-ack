@@ -56,6 +56,7 @@ Run the commands below there. Adjust names as needed, keeping the mount mapping 
 ```bash
 export TRACE_NAMESPACE=trajectory-demo
 export ROLLOUT_NAMESPACE=kube-rl
+export ROLLOUT_RELEASE=ack-rollout-server
 export ROLLOUT_DEPLOYMENT=ack-rollout-server
 export ROLLOUT_SERVICE=ack-rollout-server
 export RAY_IMAGE='<your-registry>/ray-serve:2.56.1-py311'
@@ -144,9 +145,41 @@ The request's `success=false` labels the original trial, not this analysis reque
 
 ## Step 4 — Configure the completion callback
 
-Use the in-cluster Serve address. The command below rolls out the specified
-Deployment; managed installations can set the same environment in Helm values.
-Keep the existing archive volume configuration.
+Use the chart's top-level `extraEnv` field. Save the following as
+`rollout-result-hook.values.yaml`, replacing `trajectory-demo` with the namespace
+that contains your RayService:
+
+```yaml
+extraEnv:
+  - name: KUBE_RL_RESULT_HOOK_URL
+    value: http://trace-analysis-serve-svc.trajectory-demo.svc.cluster.local:8000/analyze
+  - name: KUBE_RL_RESULT_HOOK_PATH_ROOT
+    value: /mnt/trace-input
+  - name: KUBE_RL_RESULT_HOOK_TIMEOUT_SEC
+    value: "180"
+```
+
+Helm replaces the entire `extraEnv` list rather than merging entries by name.
+Keep any existing entries in this file as well. Upgrade with the same chart and
+version as the current release, preserving archive volumes, image settings,
+model credentials, and other configuration:
+
+```bash
+export ROLLOUT_CHART='<path-or-OCI-reference-to-rollout-server-chart>'
+helm upgrade "$ROLLOUT_RELEASE" "$ROLLOUT_CHART" \
+  --namespace "$ROLLOUT_NAMESPACE" \
+  --reuse-values \
+  --values rollout-result-hook.values.yaml
+```
+
+`ROLLOUT_RELEASE` is the Helm release name, which can differ from the Deployment
+name. The chart injects these variables into the service Pod in single mode and
+also into workers in multi mode. Helm values do not expand shell variables;
+write the actual namespace in the service URL.
+
+For a temporary single-mode check, you can instead modify the Deployment below.
+This does not update Helm values and a later Helm upgrade can overwrite it. Use
+the Helm configuration above for multi mode so workers receive the variables.
 
 ```bash
 kubectl -n "$ROLLOUT_NAMESPACE" set env deployment/"$ROLLOUT_DEPLOYMENT" \

@@ -49,6 +49,7 @@ Harbor CLI → Rollout Server → Sandbox：agent + verifier
 ```bash
 export TRACE_NAMESPACE=trajectory-demo
 export ROLLOUT_NAMESPACE=kube-rl
+export ROLLOUT_RELEASE=ack-rollout-server
 export ROLLOUT_DEPLOYMENT=ack-rollout-server
 export ROLLOUT_SERVICE=ack-rollout-server
 export RAY_IMAGE='<your-registry>/ray-serve:2.56.1-py311'
@@ -141,8 +142,39 @@ curl -N --fail-with-body http://127.0.0.1:18000/analyze \
 
 ## 步骤 4 —— 配置 Rollout Server 完成回调
 
-使用上一节对应的集群内部服务地址。以下命令会滚动更新指定的 Rollout Server Deployment；
-正式部署可将相同环境变量合入其 Helm values。不要覆盖已有的归档卷配置。
+使用 chart 提供的顶层 `extraEnv` 配置回调。将以下内容保存为
+`rollout-result-hook.values.yaml`，服务地址中的 `trajectory-demo` 替换为 RayService
+所在的命名空间：
+
+```yaml
+extraEnv:
+  - name: KUBE_RL_RESULT_HOOK_URL
+    value: http://trace-analysis-serve-svc.trajectory-demo.svc.cluster.local:8000/analyze
+  - name: KUBE_RL_RESULT_HOOK_PATH_ROOT
+    value: /mnt/trace-input
+  - name: KUBE_RL_RESULT_HOOK_TIMEOUT_SEC
+    value: "180"
+```
+
+Helm 会替换整个 `extraEnv` 列表，而不是按变量名追加。如果 release 已有其他
+`extraEnv` 项，应将它们一起保留在此文件中。使用当前 release 相同的 chart 和版本更新，
+不要覆盖已有的归档卷、镜像、模型凭据或其他配置：
+
+```bash
+export ROLLOUT_CHART='<path-or-OCI-reference-to-rollout-server-chart>'
+helm upgrade "$ROLLOUT_RELEASE" "$ROLLOUT_CHART" \
+  --namespace "$ROLLOUT_NAMESPACE" \
+  --reuse-values \
+  --values rollout-result-hook.values.yaml
+```
+
+`ROLLOUT_RELEASE` 是 Helm release 名称，不一定等于 Deployment 名称。
+single 模式将变量注入服务 Pod；multi 模式也会将它们注入 worker。
+Helm values 不会自动展开 shell 变量，因此文件中的服务地址必须填写实际命名空间。
+
+如需临时验证，也可以直接修改 Deployment；该方式不会更新 Helm values，
+后续 Helm 升级可能覆盖它。在 multi 模式下应使用上面的 Helm 配置，确保 worker 获得变量。
+以下命令适用于 single 模式，会滚动更新指定的 Deployment：
 
 ```bash
 kubectl -n "$ROLLOUT_NAMESPACE" set env deployment/"$ROLLOUT_DEPLOYMENT" \
