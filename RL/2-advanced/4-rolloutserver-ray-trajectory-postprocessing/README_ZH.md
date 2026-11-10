@@ -155,8 +155,8 @@ extraEnv:
     value: http://trace-analysis-serve-svc.trajectory-demo.svc.cluster.local:8000/analyze
   - name: KUBE_RL_RESULT_HOOK_PATH_ROOT
     value: /mnt/trace-input
-  - name: KUBE_RL_RESULT_HOOK_TIMEOUT_SEC
-    value: "180"
+config:
+  result_hook_timeout_sec: 180
 ```
 
 保留现有 `extraEnv` 项及归档卷、镜像、模型凭据等配置；Helm 会替换整个
@@ -166,15 +166,19 @@ extraEnv:
 single 模式将变量注入服务 Pod；multi 模式也会将它们注入 worker。
 values 中的服务地址需要填写实际命名空间，不会自动展开 shell 变量。
 
+回调超时不是环境变量：挂载配置文件的部署不会读取 `KUBE_RL_RESULT_HOOK_TIMEOUT`。
+chart 0.8.0 起提供 `config.result_hook_timeout_sec`（必须大于 0，否则渲染报错），
+服务端从 ConfigMap 读取它。流式分析耗时较长，180 秒适用于本例。
+
 如需临时验证，也可以直接修改 Deployment；该方式不会更新 Helm values，
 后续通过控制台更新应用时可能覆盖它。在 multi 模式下应使用上面的 Helm 配置，确保 worker 获得变量。
-以下命令适用于 single 模式，会滚动更新指定的 Deployment：
+以下命令适用于 single 模式，会滚动更新指定的 Deployment。它只覆盖回调地址和路径根；
+回调超时只能通过上面的 `config.result_hook_timeout_sec` 设置：
 
 ```bash
 kubectl -n "$ROLLOUT_NAMESPACE" set env deployment/"$ROLLOUT_DEPLOYMENT" \
   KUBE_RL_RESULT_HOOK_URL="http://trace-analysis-serve-svc.${TRACE_NAMESPACE}.svc.cluster.local:8000/analyze" \
-  KUBE_RL_RESULT_HOOK_PATH_ROOT=/mnt/trace-input \
-  KUBE_RL_RESULT_HOOK_TIMEOUT_SEC=180
+  KUBE_RL_RESULT_HOOK_PATH_ROOT=/mnt/trace-input
 
 kubectl -n "$ROLLOUT_NAMESPACE" rollout status deployment/"$ROLLOUT_DEPLOYMENT"
 ```

@@ -160,8 +160,8 @@ extraEnv:
     value: http://trace-analysis-serve-svc.trajectory-demo.svc.cluster.local:8000/analyze
   - name: KUBE_RL_RESULT_HOOK_PATH_ROOT
     value: /mnt/trace-input
-  - name: KUBE_RL_RESULT_HOOK_TIMEOUT_SEC
-    value: "180"
+config:
+  result_hook_timeout_sec: 180
 ```
 
 Preserve existing `extraEnv` entries, archive volumes, image settings, model
@@ -173,15 +173,22 @@ The chart injects these variables into the service Pod in single mode and also
 into workers in multi mode. Write the actual namespace in the values; shell
 variables are not expanded there.
 
+The callback timeout is not an environment variable: deployments that mount a
+config file do not read `KUBE_RL_RESULT_HOOK_TIMEOUT`. Chart 0.8.0 and later
+expose `config.result_hook_timeout_sec` (must be greater than 0, otherwise
+rendering fails), which the server reads from its ConfigMap. Streaming analysis
+takes a while; 180 seconds fits this example.
+
 For a temporary single-mode check, you can instead modify the Deployment below.
 This does not update Helm values and a later console update can overwrite it. Use
 the Helm configuration above for multi mode so workers receive the variables.
+The command below only overrides the callback URL and path root; the timeout can
+only be set through `config.result_hook_timeout_sec` above.
 
 ```bash
 kubectl -n "$ROLLOUT_NAMESPACE" set env deployment/"$ROLLOUT_DEPLOYMENT" \
   KUBE_RL_RESULT_HOOK_URL="http://trace-analysis-serve-svc.${TRACE_NAMESPACE}.svc.cluster.local:8000/analyze" \
-  KUBE_RL_RESULT_HOOK_PATH_ROOT=/mnt/trace-input \
-  KUBE_RL_RESULT_HOOK_TIMEOUT_SEC=180
+  KUBE_RL_RESULT_HOOK_PATH_ROOT=/mnt/trace-input
 kubectl -n "$ROLLOUT_NAMESPACE" rollout status deployment/"$ROLLOUT_DEPLOYMENT"
 ```
 
