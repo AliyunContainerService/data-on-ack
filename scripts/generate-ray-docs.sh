@@ -7,6 +7,11 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SRC="$ROOT/ray"
 DST="$ROOT/docs/ray"
 
+# standalone guide dir -> nav_order under the Ray top-level page
+TOP_LEVEL_GUIDES=(
+  "0-choose-raycluster-or-rayjob|0"
+)
+
 # category dir -> (nav title, nav_order under the Ray top-level page)
 CATEGORIES=(
   "1-user-guide|Ray 用户指南|1"
@@ -114,6 +119,31 @@ EOF
 }
 
 rm -rf "$DST"
+
+for entry in "${TOP_LEVEL_GUIDES[@]}"; do
+  guide_dir="${entry%%|*}"
+  guide_order="${entry##*|}"
+  src_guide="$SRC/$guide_dir"
+  zh_file="$src_guide/README_ZH.md"
+  [[ -f "$zh_file" ]] || continue
+
+  guide_title="$(page_title "$zh_file" "$guide_dir")"
+  [[ -n "$guide_title" ]] || continue
+
+  mkdir -p "$DST/$guide_dir"
+  rel_base="${src_guide#"$ROOT"/}"
+  cat > "$DST/$guide_dir/index.md" <<EOF
+---
+title: "$guide_title"
+layout: default
+parent: "Ray"
+nav_order: $guide_order
+---
+
+$(cat "$zh_file" | escape_liquid | rewrite_links "$rel_base")
+EOF
+  echo "generated: docs/ray/$guide_dir/index.md"
+done
 
 for entry in "${CATEGORIES[@]}"; do
   cat_dir="${entry%%|*}"
