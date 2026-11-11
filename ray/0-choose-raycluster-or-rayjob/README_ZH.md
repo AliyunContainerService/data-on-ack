@@ -199,5 +199,5 @@ flowchart LR
 
 ## 后续步骤
 
-- [部署并使用基础 RayCluster](../1-set-up-a-basic-raycluster/README_ZH.md)
-- [运行基础 Ray Job](../2-run-a-basic-ray-job/README_ZH.md)
+- [部署并使用基础 RayCluster](../1-user-guide/1-set-up-a-basic-raycluster/README_ZH.md)
+- [运行基础 Ray Job](../1-user-guide/2-run-a-basic-ray-job/README_ZH.md)
