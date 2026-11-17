@@ -209,6 +209,7 @@
     });
   });
   $$(".prose pre").forEach(function (pre) {
+    if (pre.closest(".language-mermaid") || pre.querySelector("code.language-mermaid") || pre.classList.contains("mermaid")) return;
     if (pre.querySelector(".code-copy-btn")) return;
     var btn = document.createElement("button");
     btn.type = "button"; btn.className = "code-copy-btn"; btn.setAttribute("aria-label", "复制代码");
