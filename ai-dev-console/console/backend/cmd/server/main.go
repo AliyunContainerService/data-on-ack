@@ -74,7 +74,6 @@ func main() {
 	datasetService := service.NewDatasetService(kubeClient, tenants)
 	modelService := service.NewModelService(kubeClient, tenants)
 	metricsService := service.NewMetricsService(kubeClient, tenants)
-	experimentService := service.NewExperimentService(kubeClient, tenants)
 
 	// Graceful shutdown
 	c := make(chan os.Signal, 1)
@@ -88,7 +87,7 @@ func main() {
 	}()
 
 	// Router
-	r := handler.NewRouter(config.Get(), authManager, notebookService, trainingService, servingService, datasetService, modelService, metricsService, experimentService)
+	r := handler.NewRouter(config.Get(), authManager, notebookService, trainingService, servingService, datasetService, modelService, metricsService)
 
 	addr := config.Get().ListenAddr
 	logrus.Infof("ai-dev-console listening on %s", addr)

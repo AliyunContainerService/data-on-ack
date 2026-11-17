@@ -30,7 +30,6 @@ func NewRouter(
 	datasetService *service.DatasetService,
 	modelService *service.ModelService,
 	metricsService *service.MetricsService,
-	experimentService *service.ExperimentService,
 ) *gin.Engine {
 	gin.SetMode(cfg.GinMode)
 	r := gin.New()
@@ -63,6 +62,24 @@ func NewRouter(
 	// User info
 	api.GET("/user/info", authManager.HandleGetUserInfo)
 
+	// Image registry rewrites: operators can remap the canonical AC2 image
+	// addresses baked into the frontend to a registry the cluster can pull
+	// from (offline / cross-region). Configured via IMAGE_REWRITES env.
+	api.GET("/config/images", func(c *gin.Context) {
+		type imageRewrite struct {
+			From string `json:"from"`
+			To   string `json:"to"`
+		}
+		rewrites := []imageRewrite{}
+		if raw := config.Get().ImageRewrites; raw != "" {
+			if err := json.Unmarshal([]byte(raw), &rewrites); err != nil {
+				logrus.Warnf("invalid IMAGE_REWRITES JSON, ignoring: %v", err)
+				rewrites = []imageRewrite{}
+			}
+		}
+		response.OK(c, rewrites)
+	})
+
 	// Notebooks (namespace-scoped operations require access check)
 	nbHandler := &NotebookHandler{svc: notebookService}
 	api.GET("/notebooks", nbHandler.List)
@@ -92,12 +109,6 @@ func NewRouter(
 	api.GET("/metrics/available", metricsHandler.AvailableMetrics)
 
 	// Experiments
-	expHandler := &ExperimentHandler{svc: experimentService}
-	api.GET("/experiments", expHandler.List)
-	api.GET("/experiments/:name", expHandler.Get)
-	api.POST("/experiments", expHandler.Create)
-	api.POST("/experiments/:name/runs", expHandler.AddRun)
-	api.DELETE("/experiments/:name", expHandler.Delete)
 
 	// Cluster capabilities detection
 	api.GET("/capabilities", func(c *gin.Context) {
@@ -189,6 +200,8 @@ func NewRouter(
 	if _, err := os.Stat(distDir); err == nil {
 		r.Static("/assets", filepath.Join(distDir, "assets"))
 		r.StaticFile("/favicon.ico", filepath.Join(distDir, "favicon.ico"))
+		r.StaticFile("/favicon.png", filepath.Join(distDir, "favicon.png"))
+		r.StaticFile("/favicon.svg", filepath.Join(distDir, "favicon.svg"))
 		r.StaticFile("/vite.svg", filepath.Join(distDir, "vite.svg"))
 
 		indexFile := filepath.Join(distDir, "index.html")

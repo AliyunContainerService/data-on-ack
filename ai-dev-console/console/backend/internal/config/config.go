@@ -37,6 +37,10 @@ type AppConfig struct {
 	AdminUID       string
 	// Frontend
 	FrontendDir string
+	// ImageRewrites is a JSON array of {"from","to"} prefix rules used to
+	// remap canonical AC2 image addresses to a registry reachable from the
+	// cluster (e.g. offline / cross-region clusters pulling from a local ACR).
+	ImageRewrites string
 }
 
 var cfg *AppConfig
@@ -83,6 +87,7 @@ func Parse() {
 		IsCreateWebApp:  !disableOAuth && resolvedAuthMode == "aliyun",
 		AdminUID:        getEnvDefault("CONSOLE_ADMINUID", adminUID),
 		FrontendDir:     getEnvDefault("FRONTEND_DIR", "./dist"),
+		ImageRewrites:   os.Getenv("IMAGE_REWRITES"),
 	}
 }
 

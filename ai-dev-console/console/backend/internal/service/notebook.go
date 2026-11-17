@@ -43,7 +43,9 @@ func (s *NotebookService) List(namespaces []string) ([]model.NotebookInfo, error
 			continue
 		}
 		for _, item := range list.Items {
-			results = append(results, parseNotebook(item))
+			nb := parseNotebook(item)
+			s.enrichStatusDetail(&nb)
+			results = append(results, nb)
 		}
 	}
 	return results, nil
@@ -57,6 +59,7 @@ func (s *NotebookService) Get(name, namespace string) (*model.NotebookInfo, erro
 		return nil, err
 	}
 	nb := parseNotebook(*obj)
+	s.enrichStatusDetail(&nb)
 	return &nb, nil
 }
 
@@ -319,6 +322,17 @@ func buildNotebookCRD(spec *model.NotebookSpec) *unstructured.Unstructured {
 		"image":     spec.Image,
 		"resources": resources,
 	}
+	if spec.Command != "" {
+		container["command"] = []interface{}{"sh", "-c", spec.Command}
+	}
+	if spec.Port > 0 {
+		container["ports"] = []interface{}{
+			map[string]interface{}{
+				"name":          "notebook-port",
+				"containerPort": spec.Port,
+			},
+		}
+	}
 	if len(envVars) > 0 {
 		container["env"] = envVars
 	}
@@ -354,6 +368,9 @@ func buildNotebookCRD(spec *model.NotebookSpec) *unstructured.Unstructured {
 			"metadata": map[string]interface{}{
 				"name":      spec.Name,
 				"namespace": spec.Namespace,
+				"labels": map[string]interface{}{
+					"notebook-type": spec.Type,
+				},
 			},
 			"spec": map[string]interface{}{
 				"template": map[string]interface{}{
@@ -376,7 +393,7 @@ func parseNotebook(obj unstructured.Unstructured) model.NotebookInfo {
 	if _, stopped := annotations["kubeflow-resource-stopped"]; stopped {
 		info.Status = "Stopped"
 	} else {
-		info.Status = getNotebookStatus(obj)
+		info.Status, info.StatusDetail = getNotebookStatus(obj)
 	}
 
 	// Parse spec for image/resources
@@ -430,12 +447,13 @@ func parseNotebook(obj unstructured.Unstructured) model.NotebookInfo {
 	return info
 }
 
-func getNotebookStatus(obj unstructured.Unstructured) string {
+func getNotebookStatus(obj unstructured.Unstructured) (string, string) {
 	status, _ := obj.Object["status"].(map[string]interface{})
 	if status == nil {
-		return "Pending"
+		return "Pending", ""
 	}
 	conditions, _ := status["conditions"].([]interface{})
+	detail := ""
 	for _, cond := range conditions {
 		condMap, _ := cond.(map[string]interface{})
 		if condMap == nil {
@@ -443,15 +461,47 @@ func getNotebookStatus(obj unstructured.Unstructured) string {
 		}
 		condType, _ := condMap["type"].(string)
 		condStatus, _ := condMap["status"].(string)
+		reason, _ := condMap["reason"].(string)
+		message, _ := condMap["message"].(string)
+		if detail == "" && (reason != "" || message != "") {
+			detail = strings.TrimSpace(reason + ": " + message)
+		}
 		if condType == "Ready" && condStatus == "True" {
-			return "Running"
+			return "Running", ""
+		}
+		if condType == "Waiting" {
+			switch reason {
+			case "CrashLoopBackOff", "Error", "ImagePullBackOff", "ErrImagePull", "CreateContainerConfigError":
+				return "Failed", detail
+			}
 		}
 	}
 	readyReplicas, _ := status["readyReplicas"].(int64)
 	if readyReplicas > 0 {
-		return "Running"
+		return "Running", ""
 	}
-	return "Pending"
+	return "Pending", detail
+}
+
+// enrichStatusDetail fills in the latest pod event message when the CR
+// conditions carry no detail (e.g. image pull progress while Starting).
+func (s *NotebookService) enrichStatusDetail(info *model.NotebookInfo) {
+	if info.StatusDetail != "" || info.Status == "Running" || info.Status == "Stopped" {
+		return
+	}
+	events, err := s.adminClient.Typed().CoreV1().Events(info.Namespace).List(context.TODO(), metav1.ListOptions{
+		FieldSelector: "involvedObject.name=" + info.Name + "-0",
+	})
+	if err != nil || len(events.Items) == 0 {
+		return
+	}
+	latest := events.Items[0]
+	for _, e := range events.Items {
+		if e.LastTimestamp.After(latest.LastTimestamp.Time) {
+			latest = e
+		}
+	}
+	info.StatusDetail = strings.TrimSpace(latest.Reason + ": " + latest.Message)
 }
 
 func formatDuration(d time.Duration) string {
