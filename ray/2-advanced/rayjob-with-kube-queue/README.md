@@ -2,7 +2,7 @@
 
 English | [简体中文](README_ZH.md)
 
-Use **ack-kube-queue** to admit RayJobs against team quotas before KubeRay creates their RayClusters. This guide provides a CPU-only example: hold a job with a small quota, increase the quota, and verify the result after admission. No GPU, custom image, model, or persistent volume is required.
+Use **ack-kube-queue** to admit RayJobs against team quotas before KubeRay creates their RayClusters. Start with a CPU example that needs no GPU, custom image, or persistent volume, then explore two teams sharing eight GPUs through resource borrowing, reclamation, and Head protection.
 
 ## How it works
 
@@ -16,6 +16,22 @@ Use **ack-kube-queue** to admit RayJobs against team quotas before KubeRay creat
 This guide uses ACK kube-queue resources: `Queue`, `QueueUnit`, and `ElasticQuotaTree`. It does not use Kubernetes Kueue's `ClusterQueue`, `LocalQueue`, or `kueue.x-k8s.io/queue-name` label. Namespace bindings select the quota queue.
 
 Each RayJob creates its own cluster through `rayClusterSpec`. The example does not use `clusterSelector` to target an existing cluster, whose resources have already been allocated before job submission.
+
+### How the queue and scheduler cooperate
+
+A submitted job passes through these stages. Components cooperate through resource state in the Kubernetes API:
+
+| Stage | Object and decision | What to observe |
+| --- | --- | --- |
+| 1. Enqueue | kube-queue creates a QueueUnit for a RayJob with `suspend: true` and orders it according to its Queue policy. | QueueUnit and job order in the Queue. |
+| 2. Admit | kube-queue checks admission conditions, including quota, then sets `suspend: false`. The default quota check concerns `max`; configured AdmissionChecks add further conditions. | `spec.suspend`, QueueUnit messages, and admission status. |
+| 3. Create resources | KubeRay observes the resumed RayJob, creates the RayCluster, and submits the job once the cluster is ready. | RayCluster, Head/Worker Pods, and submitter Job. |
+| 4. Schedule Pods | ACK scheduler checks node capacity, affinity, taints, and quotas. With the appropriate policy enabled, it can reclaim resources borrowed by other quota groups. | Pod `PodScheduled` conditions and scheduling events. |
+| 5. Execute | Ray places tasks, actors, and placement groups on the running Head/Workers. | Ray task state, logical resources, and application logs. |
+
+**Admission permits the job to proceed to scheduling.** It does not select nodes or reserve a particular physical GPU. An admitted job can still have Pending Pods because node capacity or topology does not fit. Conversely, if a RayJob is suspended and has no Pods, the scheduler has no Pod on whose behalf to preempt. See [queue admission checks](https://help.aliyun.com/en/ack/ack-managed-and-ack-dedicated/user-guide/add-custom-admission-checks-to-ack-kube-queue) and [Capacity Scheduling](https://help.aliyun.com/en/ack/ack-managed-and-ack-dedicated/user-guide/use-capacity-scheduling/).
+
+Whole-job admission also does not provide Gang Scheduling. If a workload needs a minimum group of Pods to start together, configure and validate gang behavior separately. The shared-GPU example below assumes batch work can make progress independently and recover from Worker replacement.
 
 ## Prerequisites
 
@@ -141,6 +157,147 @@ total: 55
 ```
 
 `jobStatus: SUCCEEDED` indicates that computation finished, and `jobDeploymentStatus` should eventually become `Complete`. Job completion and cluster deletion are separate observations. The example retains the RayCluster for 300 seconds before cleanup; it continues to consume resources during that interval. Collect logs before cleanup, and persist logs, models, and data outputs for production workloads. Here, `ttlSecondsAfterFinished` controls the delay before RayCluster cleanup; it does not imply that the RayJob object will necessarily be deleted after that interval. See the [RayJob lifecycle documentation](https://docs.ray.io/en/latest/cluster/kubernetes/getting-started/rayjob-quick-start.html).
+
+## Advanced case: guaranteed jobs and elastic batch processing share eight GPUs
+
+### Requirements and quotas
+
+Assume a pool provides **32 CPUs, 64 GiB memory, and 8 GPUs** for application workloads, with sufficient CPU, memory, and suitable node placement for the jobs below. All names and quantities are illustrative:
+
+| Team | Namespace | GPU min / max | Pod policy |
+| --- | --- | --- | --- |
+| A: guaranteed jobs | `ray-guaranteed` | 2 / 2 | Protect both Head and Workers from quota preemption and assign higher Pod priority. |
+| B: elastic batch | `ray-batch` | 6 / 8 | Protect the Head; allow lower-priority Workers to be preempted. |
+
+When A is idle, B can borrow its unused guarantee and run up to eight single-GPU Workers. When A submits a two-GPU job, the intended behavior is to reclaim the two borrowed GPUs while preserving B's six-GPU guarantee. `min` is a reclaimable guarantee, not a requirement to leave GPUs idle. Setting `min=max` alone does not make Pods non-preemptible.
+
+[multi-team-quota.yaml](multi-team-quota.yaml) supplies the full quota tree. A has equal `min` and `max` for CPU, memory, and GPUs. B has a `min` of 12 CPUs, 24 GiB, and 6 GPUs, and a `max` of 24 CPUs, 48 GiB, and 8 GPUs. Child guarantees sum to no more than the root guarantee for every resource. Child maxima can overlap; this does not allow 2 + 8 GPUs to run simultaneously.
+
+This advanced configuration is a separate environment and must not be installed alongside the earlier demo tree. If a tree already exists, merge the two leaves into its hierarchy and size ancestor quotas for actual capacity. In a test cluster without an existing tree:
+
+```bash
+kubectl create namespace ray-guaranteed
+kubectl create namespace ray-batch
+kubectl apply -f multi-team-quota.yaml
+kubectl apply -f priority-classes.yaml
+kubectl get queue -n kube-queue -o yaml
+```
+
+Both leaves set `attributes.kube-queue/queue-policy: Block` for strict priority. While the leading job waits for resources, later lower-priority jobs cannot borrow the resources it is waiting for in that quota. This can cause head-of-line blocking, including for small jobs. The attribute controls its queue; it does not enable cross-team preemption. See [queue policies](https://help.aliyun.com/en/ack/ack-managed-and-ack-dedicated/user-guide/configure-the-queue-policy-for-ack-kube-queue).
+
+### Configure queue priority and Pod priority separately
+
+| Setting | Location | Scope |
+| --- | --- | --- |
+| `scheduling.x-k8s.io/priority: "9"` | RayJob `metadata.annotations` | Job ordering within one Queue. Each team has its own queue here; A's 9 versus B's 3 does not define cross-queue preemption. |
+| `priorityClassName` | Head/Worker Pod template `spec` | Pod priority used by the scheduler for scheduling and preemption decisions. |
+| `quota.scheduling.alibabacloud.com/preemptible: "false"` | Head/Worker Pod template `metadata.labels` | Protection from ACK quota preemption. Aggregate requests of all protected Pods in a quota group must fit within its `min`. |
+
+[priority-classes.yaml](priority-classes.yaml) creates two cluster-scoped PriorityClasses: `ray-protected=10000` and `ray-batch-worker=1000`. Neither becomes the cluster default. Check that these names are unused before creating them. Higher Pod priority alone does not guarantee immunity from preemption. `preemptionPolicy: Never` prevents a Pod from preempting others; it does not protect that Pod from being preempted.
+
+Merge the following fragments into **complete application RayJob manifests**; do not apply these fragments directly. Preserve images, entrypoints, containers, resource requests, and volumes. Labels must be on Pod templates: placing them only on the RayJob's top-level metadata does not automatically protect Pods.
+
+```yaml
+# Team A: merge into the complete RayJob manifest.
+metadata:
+  name: guaranteed-job
+  namespace: ray-guaranteed
+  annotations:
+    scheduling.x-k8s.io/priority: "9"
+spec:
+  suspend: true
+  shutdownAfterJobFinishes: true
+  rayClusterSpec:
+    enableInTreeAutoscaling: false
+    headGroupSpec:
+      template:
+        metadata:
+          labels:
+            quota.scheduling.alibabacloud.com/preemptible: "false"
+        spec:
+          priorityClassName: ray-protected
+    workerGroupSpecs:
+      - groupName: gpu-worker
+        replicas: 2
+        minReplicas: 2
+        maxReplicas: 2
+        template:
+          metadata:
+            labels:
+              quota.scheduling.alibabacloud.com/preemptible: "false"
+          spec:
+            priorityClassName: ray-protected
+```
+
+```yaml
+# Team B: merge into the complete RayJob manifest.
+metadata:
+  name: batch-job
+  namespace: ray-batch
+  annotations:
+    scheduling.x-k8s.io/priority: "3"
+spec:
+  suspend: true
+  shutdownAfterJobFinishes: true
+  rayClusterSpec:
+    enableInTreeAutoscaling: false
+    headGroupSpec:
+      template:
+        metadata:
+          labels:
+            quota.scheduling.alibabacloud.com/preemptible: "false"
+        spec:
+          priorityClassName: ray-protected
+    workerGroupSpecs:
+      - groupName: gpu-worker
+        replicas: 8
+        minReplicas: 8
+        maxReplicas: 8
+        template:
+          metadata:
+            labels:
+              quota.scheduling.alibabacloud.com/preemptible: "true"
+          spec:
+            priorityClassName: ray-batch-worker
+```
+
+For resource accounting, each Head requests 1 CPU, 2 GiB, and no GPU; each Worker requests 2 CPUs, 4 GiB, and one GPU, with both GPU `requests` and `limits` set to 1. A's Head and two Workers total **5 CPUs, 10 GiB, and 2 GPUs**, all within A's `min`. B's Head and eight Workers total **17 CPUs, 34 GiB, and 8 GPUs**, within B's `max`. Protecting only B's Head consumes 1 CPU and 2 GiB of its guarantee. Include submitters, sidecars, and other concurrent workloads in the relevant actual resource budgets.
+
+**Do not mark all of B's Workers non-preemptible.** Their eight-GPU protected request would exceed B's six-GPU `min`, defeating the intended borrowing and reclamation behavior. The restriction applies to aggregate usage in the quota group across CPU, memory, and GPUs, not to each Pod individually. See [non-preemptible Pod quota limits](https://help.aliyun.com/en/ack/ack-managed-and-ack-dedicated/user-guide/configure-elastic-quota-lendlimit).
+
+### Reclamation and acceptance criteria
+
+Before testing, have the administrator verify that ACK scheduler has Capacity Scheduling enabled and configure `preemptionAlgorithm: ElasticQuota` following the [preemption guide](https://help.aliyun.com/en/ack/ack-managed-and-ack-dedicated/user-guide/enable-preemptive-scheduling). Installing kube-queue or increasing job priority alone does not enable these reclamation rules. This is a cluster-wide scheduler setting to validate in a test environment; the earlier CPU example does not require changing it.
+
+With **B running before A submits**, no other workloads, and one GPU requested per Worker, the target progression is:
+
+| Stage | A's GPU usage | B's GPU usage | Explanation |
+| --- | --- | --- | --- |
+| A idle; B admitted and running | 0 | 8 | B uses its six-GPU guarantee and borrows A's two idle GPUs. |
+| A submitted and admitted | Pending scheduling | 8 | KubeRay creates A's Pods, giving the scheduler pending objects to act on. |
+| Quota preemption and scheduling complete | 2 | 6 | The scheduler reclaims two single-GPU Workers above B's guarantee; B's Head remains. |
+| A finishes and releases resources | 0 | Up to 8 | B's replacement Workers can schedule when capacity becomes available again. |
+
+These are scheduling targets, not unconditional immediate outcomes. ElasticQuota preemption requires A's pending demand to be within its guarantee, B to have reclaimable usage above its guarantee, and the resulting node capacity to fit A's Pods. Reclamation should not push B below its guarantee. B's remaining Head and six Workers request 13 CPUs, 26 GiB, and 6 GPUs, satisfying its `min` in every dimension. Pod resource granularity, affinity, and node layout can prevent reclamation from succeeding.
+
+Use these commands to inspect the transition; follow each team's Pods in separate terminals if needed:
+
+```bash
+kubectl get queueunit -n ray-guaranteed -o yaml
+kubectl get queueunit -n ray-batch -o yaml
+kubectl get rayjob guaranteed-job -n ray-guaranteed \
+  -o jsonpath='{.spec.suspend}{"\n"}'
+kubectl get pods -n ray-guaranteed -o wide
+kubectl get pods -n ray-batch -o wide
+kubectl get events -n ray-guaranteed --sort-by=.metadata.creationTimestamp
+kubectl get events -n ray-batch --sort-by=.metadata.creationTimestamp
+```
+
+First verify that A has been admitted. Then inspect A's scheduling events, B's Worker deletion/recreation events, and whether B's Head UID stays unchanged. If A still has `suspend: true`, inspect QueueUnit quota, head-of-line blocking, or AdmissionCheck messages first. The scheduler cannot preempt for Pods that have not been created; do not manually resume the job to hide an admission problem.
+
+B's `replicas: 8` remains its desired count; preemption does not automatically change it to six. KubeRay may replace evicted Workers, leaving replacement Pods Pending while resources are unavailable. Head protection only reduces disruption from quota preemption: actors, training state, or the whole RayJob can still fail when Workers disappear. Batch work needs retries, idempotent output, or checkpoint recovery. Fixed-world-size distributed training cannot assume it will continue when eight Workers drop to six. If adding Gang Scheduling, obey the priority constraints within a PodGroup rather than copying this example's differing Head/Worker priorities unchanged.
+
+After validation, remove the two application RayJobs and their application resources, then remove the example quota leaves and namespaces. Delete the entire quota tree or PriorityClasses only if they are dedicated to this example and have no other users.
 
 ## Troubleshooting
 

@@ -2,7 +2,7 @@
 
 [English](README.md) | 简体中文
 
-多个团队同时提交 RayJob 时，可以使用 ACK 的 **ack-kube-queue**，先按团队配额排队，再由 KubeRay 创建任务所需的 RayCluster。本文提供一个只使用 CPU 的完整示例：主动限制配额使任务等待，随后提高配额，观察任务执行并验证计算结果。示例不需要 GPU、业务镜像、模型或存储卷。
+多个团队同时提交 RayJob 时，可以使用 ACK 的 **ack-kube-queue**，先按团队配额排队，再由 KubeRay 创建任务所需的 RayCluster。本文先用不依赖 GPU、业务镜像或存储卷的 CPU 示例验证排队，再用两个团队共享 8 GPU 的案例说明资源借用、回收和 Head 保护。
 
 ## 工作原理
 
@@ -16,6 +16,22 @@
 本文使用 ACK 的 kube-queue，资源为 `Queue`、`QueueUnit` 和 `ElasticQuotaTree`，不使用 Kubernetes Kueue 的 `ClusterQueue`、`LocalQueue` 或 `kueue.x-k8s.io/queue-name` 标签。队列关联来自命名空间与配额叶子节点的绑定。
 
 本例让每个 RayJob 通过 `rayClusterSpec` 创建独立集群；不使用 `clusterSelector` 向已有集群提交。后者的集群资源在任务提交前就已分配，不适用本文的集群创建前排队流程。
+
+### 队列与 scheduler 如何配合
+
+一次任务提交依次经过以下阶段，各组件通过 Kubernetes API 中的资源状态协作：
+
+| 阶段 | 处理对象与决策 | 观察点 |
+| --- | --- | --- |
+| 1. 入队 | kube-queue 为 `suspend: true` 的 RayJob 创建 QueueUnit，按所属 Queue 的策略排序。 | QueueUnit、Queue 中的任务顺序。 |
+| 2. 准入 | kube-queue 检查配额等出队条件，满足后更新 RayJob 为 `suspend: false`。默认配额检查关注 `max`，配置 AdmissionCheck 后还需通过额外检查。 | `spec.suspend`、QueueUnit 的消息和准入状态。 |
+| 3. 创建资源 | KubeRay 观察到解除挂起，创建 RayCluster，并在集群就绪后提交任务。 | RayCluster、Head/Worker Pod、提交器 Job。 |
+| 4. 调度 Pod | ACK scheduler 检查节点资源、亲和性、污点和配额约束；启用相应策略时，可回收其他配额组借用的资源。 | Pod 的 `PodScheduled` 条件和调度事件。 |
+| 5. 执行计算 | Ray 在已启动的 Head/Worker 上分配 task、actor 和 placement group。 | Ray 任务状态、逻辑资源和业务日志。 |
+
+**出队只意味着允许进入后续调度流程。** 队列不替代节点选择，也不因出队而预留某块物理 GPU；任务可能已经出队，但 Pod 仍因节点资源或拓扑不匹配而 Pending。反过来，若 RayJob 仍挂起且尚无 Pod，scheduler 无法为这个任务执行 Pod 抢占。参见 [队列准入检查](https://help.aliyun.com/zh/ack/ack-managed-and-ack-dedicated/user-guide/add-custom-admission-checks-to-ack-kube-queue)与 [Capacity Scheduling](https://help.aliyun.com/zh/ack/ack-managed-and-ack-dedicated/user-guide/use-capacity-scheduling/)。
+
+队列整体准入也不等于 Gang Scheduling：若业务要求一组 Pod 满足最小成员数后才能启动，还需单独配置并验证 Gang 策略。下面的共享 GPU 案例使用可以独立推进、允许 Worker 重建的批处理任务。
 
 ## 前提条件
 
@@ -141,6 +157,147 @@ total: 55
 ```
 
 `jobStatus: SUCCEEDED` 表示计算完成，`jobDeploymentStatus` 最终应为 `Complete`；任务完成与集群资源删除是不同的观察点。本例给 RayCluster 保留 300 秒再清理，期间仍会占用资源。请在清理前收集所需日志；生产任务应将日志、模型和数据输出持久化。`ttlSecondsAfterFinished` 在此控制 RayCluster 的清理等待时间，不应将它理解为 RayJob 对象必然在该时间后删除，详见 [RayJob 生命周期说明](https://docs.ray.io/en/latest/cluster/kubernetes/getting-started/rayjob-quick-start.html)。
+
+## 进阶案例：保障任务与弹性批处理共享 8 GPU
+
+### 目标与配额设计
+
+假设一个资源池可供业务使用的容量为 **32 CPU、64 GiB、8 GPU**，且 CPU、内存和节点布局足以容纳以下任务。两个团队的诉求如下，名称和数值均为演示用途：
+
+| 团队 | 命名空间 | GPU min / max | Pod 策略 |
+| --- | --- | --- | --- |
+| A：保障任务 | `ray-guaranteed` | 2 / 2 | Head 和 Worker 均受配额抢占保护，使用较高 Pod 优先级。 |
+| B：弹性批处理 | `ray-batch` | 6 / 8 | Head 受保护；Worker 可被抢占，使用较低 Pod 优先级。 |
+
+A 的保障资源闲置时，B 可以借用，最多运行 8 个单 GPU Worker。A 提交 2 GPU 任务后，希望通过调度器收回借出的 2 GPU，B 保留 6 GPU 的保障容量。`min` 是可回收的保障额度，并不表示对应 GPU 必须空置；`min=max` 也不会单独使 Pod 获得不可抢占属性。
+
+[multi-team-quota.yaml](multi-team-quota.yaml) 给出了完整配额树。A 的 CPU、内存、GPU 都设置为 `min=max`；B 的 `min` 为 12 CPU、24 GiB、6 GPU，`max` 为 24 CPU、48 GiB、8 GPU。各维度子节点 `min` 之和均不超过根节点 `min`；子节点 `max` 可以重叠，不能因此认为 2 + 8 GPU 可以同时运行。
+
+这是独立的进阶环境配置，不能与前面的演示树同时创建。已有树时，只把两个叶子合并到现有层级，并按实际容量调整祖先配额。无现有配额树的测试集群可执行：
+
+```bash
+kubectl create namespace ray-guaranteed
+kubectl create namespace ray-batch
+kubectl apply -f multi-team-quota.yaml
+kubectl apply -f priority-classes.yaml
+kubectl get queue -n kube-queue -o yaml
+```
+
+两个叶子均通过 `attributes.kube-queue/queue-policy: Block` 设置严格优先级：队头任务等待资源时，后面的低优先级任务不能继续借用该配额中它正在等待的资源。代价是可能产生队头阻塞，短小任务也需等待。该属性只控制目标队列，不是跨团队抢占开关，详见 [队列策略说明](https://help.aliyun.com/zh/ack/ack-managed-and-ack-dedicated/user-guide/configure-the-queue-policy-for-ack-kube-queue)。
+
+### 分别设置队列优先级和 Pod 优先级
+
+| 设置 | 位置 | 生效范围 |
+| --- | --- | --- |
+| `scheduling.x-k8s.io/priority: "9"` | RayJob 的 `metadata.annotations` | 同一个 Queue 内的任务排序；本例每个团队单独一个队列，不能用 A 的 9 与 B 的 3 推导跨队列抢占。 |
+| `priorityClassName` | Head/Worker 的 Pod template `spec` | scheduler 使用的 Pod 优先级，参与调度与抢占判断。 |
+| `quota.scheduling.alibabacloud.com/preemptible: "false"` | Head/Worker 的 Pod template `metadata.labels` | ACK 配额抢占保护；该配额组内所有受保护 Pod 的资源请求总量必须落在 `min` 内。 |
+
+[priority-classes.yaml](priority-classes.yaml) 创建两个集群级 PriorityClass：`ray-protected=10000` 和 `ray-batch-worker=1000`，均不设为集群默认值。创建前确认名称未被其他业务使用。较高的 PriorityClass 本身不是不可抢占保证；`preemptionPolicy: Never` 表示该 Pod 不主动抢占别人，也不是保护该 Pod 不被抢占的开关。
+
+下面是要合并进**完整业务 RayJob**的配置片段，不能单独 `kubectl apply`。保留原有镜像、入口、容器、资源请求和卷配置；标签必须落在 Pod template 上，仅贴到 RayJob 顶层不会自动保护 Pod。
+
+```yaml
+# Team A: merge into the complete RayJob manifest.
+metadata:
+  name: guaranteed-job
+  namespace: ray-guaranteed
+  annotations:
+    scheduling.x-k8s.io/priority: "9"
+spec:
+  suspend: true
+  shutdownAfterJobFinishes: true
+  rayClusterSpec:
+    enableInTreeAutoscaling: false
+    headGroupSpec:
+      template:
+        metadata:
+          labels:
+            quota.scheduling.alibabacloud.com/preemptible: "false"
+        spec:
+          priorityClassName: ray-protected
+    workerGroupSpecs:
+      - groupName: gpu-worker
+        replicas: 2
+        minReplicas: 2
+        maxReplicas: 2
+        template:
+          metadata:
+            labels:
+              quota.scheduling.alibabacloud.com/preemptible: "false"
+          spec:
+            priorityClassName: ray-protected
+```
+
+```yaml
+# Team B: merge into the complete RayJob manifest.
+metadata:
+  name: batch-job
+  namespace: ray-batch
+  annotations:
+    scheduling.x-k8s.io/priority: "3"
+spec:
+  suspend: true
+  shutdownAfterJobFinishes: true
+  rayClusterSpec:
+    enableInTreeAutoscaling: false
+    headGroupSpec:
+      template:
+        metadata:
+          labels:
+            quota.scheduling.alibabacloud.com/preemptible: "false"
+        spec:
+          priorityClassName: ray-protected
+    workerGroupSpecs:
+      - groupName: gpu-worker
+        replicas: 8
+        minReplicas: 8
+        maxReplicas: 8
+        template:
+          metadata:
+            labels:
+              quota.scheduling.alibabacloud.com/preemptible: "true"
+          spec:
+            priorityClassName: ray-batch-worker
+```
+
+为便于核算，两类任务的 Head 均请求 1 CPU、2 GiB、0 GPU，每个 Worker 请求 2 CPU、4 GiB、1 GPU；GPU 的 `requests` 与 `limits` 都设为 1。A 的 Head + 2 Worker 合计 **5 CPU、10 GiB、2 GPU**，全部在 A 的 `min` 内。B 的 Head + 8 Worker 合计 **17 CPU、34 GiB、8 GPU**，不超过 B 的 `max`；只保护 Head 时，受保护请求为 1 CPU、2 GiB，落在 B 的 `min` 内。提交器、Sidecar 和其他并发任务也需要计入相应的实际资源预算。
+
+**不要把 B 的全部 Worker 都标为不可抢占。** 其 8 GPU 受保护请求会超过 B 的 6 GPU `min`，无法实现预期的借用与回收。这里的限制按配额组聚合，并且同时检查 CPU、内存和 GPU，不是“每个 Pod 小于 min 即可”。参见 [不可抢占 Pod 的配额限制](https://help.aliyun.com/zh/ack/ack-managed-and-ack-dedicated/user-guide/configure-elastic-quota-lendlimit)。
+
+### 回收如何发生，如何验收
+
+执行前，由管理员确认 ACK scheduler 已启用 Capacity Scheduling，并按 [抢占配置指南](https://help.aliyun.com/zh/ack/ack-managed-and-ack-dedicated/user-guide/enable-preemptive-scheduling/)将 `preemptionAlgorithm` 配置为 `ElasticQuota`。仅安装 kube-queue 或提高任务优先级不会开启这套回收规则。该设置影响集群调度，应在测试环境验证；本文不要求修改全局参数来运行前面的 CPU 示例。
+
+在 **B 先运行、A 后提交**、没有其他负载、Worker 每个只申请 1 GPU 的条件下，目标状态如下：
+
+| 阶段 | A 使用 GPU | B 使用 GPU | 解释 |
+| --- | --- | --- | --- |
+| A 空闲，B 已获准并运行 | 0 | 8 | B 使用自身 6 GPU 保障，并借用 A 闲置的 2 GPU。 |
+| A 提交并通过队列准入 | 待调度 | 8 | KubeRay 创建 A 的 Pod；此时才有 scheduler 可以处理的待调度对象。 |
+| 配额抢占与调度完成 | 2 | 6 | scheduler 回收 B 超过保障的 2 个单 GPU Worker；B Head 保留。 |
+| A 结束且资源释放 | 0 | 最多 8 | B 的替补 Worker 在资源可用后重新调度，恢复弹性使用。 |
+
+这是调度目标，不是无条件的即时结果。ElasticQuota 抢占要求 A 的待调度资源处于其保障范围内，B 有超过保障且可被回收的资源，并且驱逐后的节点能容纳 A；不应为满足 A 而把 B 压到保障以下。上述 B 回收后保留 Head + 6 Worker，即 13 CPU、26 GiB、6 GPU，仍满足 B 各维度的 `min`。Pod 资源粒度、亲和性和节点布局不合适时，回收可能无法完成。
+
+观察命令如下，可分别在两个终端跟踪 Pod：
+
+```bash
+kubectl get queueunit -n ray-guaranteed -o yaml
+kubectl get queueunit -n ray-batch -o yaml
+kubectl get rayjob guaranteed-job -n ray-guaranteed \
+  -o jsonpath='{.spec.suspend}{"\n"}'
+kubectl get pods -n ray-guaranteed -o wide
+kubectl get pods -n ray-batch -o wide
+kubectl get events -n ray-guaranteed --sort-by=.metadata.creationTimestamp
+kubectl get events -n ray-batch --sort-by=.metadata.creationTimestamp
+```
+
+先确认 A 已出队，再检查 A 的调度事件、B Worker 的删除/重建事件，以及 B Head 的 UID 是否保持不变。若 A 仍为 `suspend: true`，先查 QueueUnit 中的配额、队头阻塞或 AdmissionCheck 原因；此时不能期待 scheduler 抢占来启动尚未创建的 Pod，也不要手动取消挂起掩盖准入问题。
+
+B 的 `replicas: 8` 仍是期望副本数，抢占不会自动把它改成 6。KubeRay 可能补建被回收的 Worker，新增 Pod 在资源不足时保持 Pending。保护 Head 只降低控制面被配额抢占打断的风险，不保证 Worker 上的 actor、训练状态或整个 RayJob 不失败；批处理需支持重试、幂等输出或 checkpoint 恢复。固定 world size 的分布式训练不能直接套用该“8 降到 6 继续运行”的假设。若额外启用 Gang Scheduling，还需遵守同一 PodGroup 的优先级约束，不能直接照搬本例 Head/Worker 的不同优先级。
+
+验证后先清理两个业务 RayJob 及其业务资源，再移除本例新增的配额叶子和命名空间。仅在配额树与 PriorityClass 均为本例独占、且没有其他使用者时，才删除相应整份资源清单。
 
 ## 常见问题
 
