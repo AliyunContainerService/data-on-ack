@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { loadImageRewrites, rewriteImage, ImageRewrite } from '../api/config';
 import {
   Card, Table, Button, Tag, Space, Modal, Form, Input, InputNumber,
   Select, AutoComplete, message, Popconfirm, Typography, Row, Col, Badge, Segmented,
@@ -13,9 +14,8 @@ import {
   listTrainingJobs, createTrainingJob, deleteTrainingJob,
   listTrainingJobPods, getTrainingJobLogs, getCapabilities,
   getTrainingJobEvents, getTrainingJobYAML, getTrainingJobMetrics,
-  listExperiments, addExperimentRun,
   TrainingJobInfo, TrainingJobSpec, PodInfo, EventInfo,
-  GPUMetricsResponse, ExperimentInfo,
+  GPUMetricsResponse,
 } from '../api/training';
 import PageHeader from '../components/PageHeader';
 
@@ -38,11 +38,23 @@ const Training: React.FC = () => {
   const [trainingMode, setTrainingMode] = useState<string>('single');
   const [selectedKind, setSelectedKind] = useState<string>('PyTorchJob');
 
+  const [imageRewrites, setImageRewrites] = useState<ImageRewrite[]>([]);
+  useEffect(() => { loadImageRewrites().then(setImageRewrites); }, []);
+
+  // Canonical training images: AC2 container images (amd64, public registry).
+  // https://help.aliyun.com/zh/alinux/ac2-container-image-list
+  const trainingImageOptions = [
+    { label: 'PyTorch 2.4 + CUDA 12.1 (AC2)', value: 'ac2-registry.cn-hangzhou.cr.aliyuncs.com/ac2/pytorch:2.4.0-cuda12.1.1-py310-alinux3.2104' },
+    { label: 'PyTorch 2.5.1 + CUDA 12.1 (AC2)', value: 'ac2-registry.cn-hangzhou.cr.aliyuncs.com/ac2/pytorch:2.5.1.6-cuda12.1.1-py310-alinux3.2104' },
+    { label: 'PyTorch 2.2 + CUDA 12.1 (AC2)', value: 'ac2-registry.cn-hangzhou.cr.aliyuncs.com/ac2/pytorch:2.2.0.1-3.2304-cu121' },
+    { label: 'PyTorch 2.3 CPU (AC2)', value: 'ac2-registry.cn-hangzhou.cr.aliyuncs.com/ac2/pytorch:2.3.0.3-alinux3.2304-enhanced' },
+    { label: 'JupyterLab + PyTorch 2.1.2 GPU (AC2)', value: 'ac2-registry.cn-hangzhou.cr.aliyuncs.com/ac2/jupyter-pytorch-cuda:4.0.5-3.2304-2.1.2cu121' },
+  ].map((o) => ({ ...o, value: rewriteImage(o.value, imageRewrites) }));
+
   // Cluster capabilities
   const [raySupport, setRaySupport] = useState(false);
 
   // Experiments list for linking
-  const [experiments, setExperiments] = useState<ExperimentInfo[]>([]);
 
   // Detail drawer state
   const [detailOpen, setDetailOpen] = useState(false);
@@ -81,7 +93,6 @@ const Training: React.FC = () => {
   useEffect(() => {
     fetchData();
     getCapabilities().then((caps) => setRaySupport(caps.raySupport)).catch(() => {});
-    listExperiments().then((exps) => setExperiments(exps || [])).catch(() => {});
   }, []);
 
   const handleViewLogs = async (record: TrainingJobInfo) => {
@@ -213,25 +224,15 @@ const Training: React.FC = () => {
         spec.env = envObj;
       }
 
-      // Parse data mounts
-      if (values.dataPvc && values.dataMountPath) {
-        spec.dataSources = [{ name: values.dataPvc, mountPath: values.dataMountPath }];
+      // Parse data mounts (multiple volumes supported)
+      const mounts = ((values.dataMounts as Array<{ pvc?: string; mountPath?: string }>) || [])
+        .filter((m) => m && m.pvc && m.mountPath);
+      if (mounts.length > 0) {
+        spec.dataSources = mounts.map((m) => ({ name: m.pvc as string, mountPath: m.mountPath as string }));
       }
 
       setSubmitting(true);
       await createTrainingJob(spec);
-
-      // Link to experiment if selected
-      if (values.experiment) {
-        try {
-          await addExperimentRun(values.experiment, {
-            jobName: spec.name,
-            jobKind: spec.kind,
-            params: spec.env || {},
-            status: 'Pending',
-          }, spec.namespace);
-        } catch { /* non-blocking */ }
-      }
 
       message.success(t('common.success'));
       setCreateOpen(false);
@@ -253,7 +254,7 @@ const Training: React.FC = () => {
       // Extract container info from the CRD spec
       let image = '', command = '', envStr = '', workerCpu = '4', workerMemory = '16Gi', workerGpu = record.gpu;
       let workerCount = 1;
-      let dataPvc = '', dataMountPath = '';
+      const dataMounts: Array<{ pvc: string; mountPath: string }> = [];
       
       // Navigate replica specs to find the container
       const replicaKeys = ['pytorchReplicaSpecs', 'tfReplicaSpecs', 'mpiReplicaSpecs'];
@@ -261,8 +262,14 @@ const Training: React.FC = () => {
         const replicaSpecs = spec?.[key] as Record<string, unknown> | undefined;
         if (!replicaSpecs) continue;
         const worker = (replicaSpecs.Worker || replicaSpecs.worker) as Record<string, unknown> | undefined;
+        if (key === 'pytorchReplicaSpecs') {
+          const master = (replicaSpecs.Master || replicaSpecs.master) as Record<string, unknown> | undefined;
+          workerCount = ((master?.replicas as number) || 0) + ((worker?.replicas as number) || 0);
+          if (workerCount < 1) workerCount = 1;
+        } else if (worker && worker.replicas) {
+          workerCount = worker.replicas as number;
+        }
         if (!worker) continue;
-        if (worker.replicas) workerCount = worker.replicas as number;
         const template = worker.template as Record<string, unknown> | undefined;
         const podSpec = template?.spec as Record<string, unknown> | undefined;
         const containers = podSpec?.containers as Array<Record<string, unknown>> | undefined;
@@ -291,9 +298,7 @@ const Training: React.FC = () => {
             for (const vm of vms) {
               const vol = vols.find(v => v.name === vm.name);
               if (vol?.persistentVolumeClaim) {
-                dataPvc = vol.persistentVolumeClaim.claimName;
-                dataMountPath = vm.mountPath;
-                break;
+                dataMounts.push({ pvc: vol.persistentVolumeClaim.claimName, mountPath: vm.mountPath });
               }
             }
           }
@@ -314,8 +319,7 @@ const Training: React.FC = () => {
         workerMemory,
         workerGpu,
         envVars: envStr,
-        dataPvc,
-        dataMountPath,
+        dataMounts: dataMounts.length ? dataMounts : [{ pvc: '', mountPath: '/data' }],
       });
     } catch {
       // Fallback: minimal pre-fill
@@ -831,11 +835,6 @@ const Training: React.FC = () => {
                 </Form.Item>
               </Col>
             </Row>
-            {experiments.length > 0 && (
-              <Form.Item name="experiment" label={t('experiment.linkToTraining')} tooltip="Optionally link this training job to an experiment for tracking and comparison.">
-                <Select allowClear placeholder={t('experiment.linkToTraining')} options={experiments.map((e) => ({ label: `${e.name} (${e.runCount} runs)`, value: e.name }))} />
-              </Form.Item>
-            )}
           </div>
 
           {/* Image & Command */}
@@ -845,16 +844,7 @@ const Training: React.FC = () => {
               <AutoComplete
                 placeholder={t('training.form.image.placeholder')}
                 style={{ width: '100%' }}
-                options={[
-                  { label: 'PyTorch 2.3 + CUDA 12.1 (ACK)', value: 'registry.cn-hangzhou.aliyuncs.com/acs/pytorch:2.3-gpu-cuda12.1' },
-                  { label: 'PyTorch 2.1 + CUDA 12.1 (ACK)', value: 'registry.cn-hangzhou.aliyuncs.com/acs/pytorch:2.1-gpu-cuda12.1' },
-                  { label: 'PyTorch 2.1 + CUDA 11.8 (ACK)', value: 'registry.cn-hangzhou.aliyuncs.com/acs/pytorch:2.1-gpu-cuda11.8' },
-                  { label: 'DeepSpeed + PyTorch 2.3', value: 'registry.cn-hangzhou.aliyuncs.com/acs/deepspeed:0.14-pytorch2.3-cuda12.1' },
-                  { label: 'Megatron-LM (NVIDIA)', value: 'nvcr.io/nvidia/pytorch:24.01-py3' },
-                  { label: 'Ray 2.10 + PyTorch (KubeRay)', value: 'rayproject/ray-ml:2.10.0-py310-gpu' },
-                  { label: 'TensorFlow 2.15 GPU', value: 'tensorflow/tensorflow:2.15.0-gpu' },
-                  { label: 'HuggingFace TRL (LLM fine-tuning)', value: 'huggingface/trl-latest-gpu:latest' },
-                ]}
+                options={trainingImageOptions}
                 filterOption={(input, option) => (option?.label as string || '').toLowerCase().includes(input.toLowerCase()) || (option?.value as string || '').includes(input)}
               />
             </Form.Item>
@@ -968,18 +958,37 @@ const Training: React.FC = () => {
             label: <Text strong style={{ fontSize: 13 }}>{t('training.form.dataMounts')}</Text>,
             children: (
               <div>
-                <Row gutter={16}>
-                  <Col span={12}>
-                    <Form.Item name="dataPvc" label="PVC Name">
-                      <Input placeholder="my-dataset-pvc" />
-                    </Form.Item>
-                  </Col>
-                  <Col span={12}>
-                    <Form.Item name="dataMountPath" label="Mount Path" initialValue="/data">
-                      <Input placeholder="/data" />
-                    </Form.Item>
-                  </Col>
-                </Row>
+                <Form.List name="dataMounts" initialValue={[{ pvc: '', mountPath: '/data' }]}>
+                  {(fields, { add, remove }) => (
+                    <div style={{ marginBottom: 16 }}>
+                      <Row gutter={12} style={{ marginBottom: 6 }}>
+                        <Col span={11}><Text type="secondary" style={{ fontSize: 12 }}>{t('training.form.pvcName')}</Text></Col>
+                        <Col span={11}><Text type="secondary" style={{ fontSize: 12 }}>{t('training.form.mountPath')}</Text></Col>
+                        <Col span={2} />
+                      </Row>
+                      {fields.map(({ key, name, ...rest }) => (
+                        <Row gutter={12} key={key} align="middle" style={{ marginBottom: 8 }}>
+                          <Col span={11}>
+                            <Form.Item {...rest} name={[name, 'pvc']} noStyle>
+                              <Input placeholder="my-dataset-pvc" />
+                            </Form.Item>
+                          </Col>
+                          <Col span={11}>
+                            <Form.Item {...rest} name={[name, 'mountPath']} noStyle rules={[{ required: true, message: t('training.form.mountPath') }]}>
+                              <Input placeholder="/data" />
+                            </Form.Item>
+                          </Col>
+                          <Col span={2} style={{ textAlign: 'center' }}>
+                            <Button type="text" size="small" icon={<DeleteOutlined style={{ color: 'var(--text-3)' }} />} onClick={() => remove(name)} aria-label={t('training.form.removeMount')} />
+                          </Col>
+                        </Row>
+                      ))}
+                      <Button type="dashed" size="small" block icon={<PlusOutlined />} onClick={() => add({ pvc: '', mountPath: '' })}>
+                        {t('training.form.addMount')}
+                      </Button>
+                    </div>
+                  )}
+                </Form.List>
                 <Form.Item name="shmSize" label="/dev/shm Size" initialValue="64Gi" tooltip="Shared memory for PyTorch DataLoader workers">
                   <Select options={[
                     { label: '16 GiB', value: '16Gi' },

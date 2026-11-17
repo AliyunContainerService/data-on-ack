@@ -121,6 +121,8 @@ export function deleteServing(namespace: string, name: string): Promise<unknown>
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
+  /** Full endpoint response kept for display only; stripped from requests. */
+  raw?: unknown;
 }
 
 export interface ChatRequest {

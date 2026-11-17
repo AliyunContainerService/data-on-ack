@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { loadImageRewrites, rewriteImage, ImageRewrite } from '../api/config';
 import {
   Card, Table, Button, Tag, Space, Modal, Form, Input, InputNumber,
   Select, message, Typography, Row, Col, Segmented, Tooltip, Badge, Steps,
@@ -69,10 +70,13 @@ const Notebooks: React.FC = () => {
 
   useEffect(() => { fetchData(); }, []);
 
+  const [imageRewrites, setImageRewrites] = useState<ImageRewrite[]>([]);
+  useEffect(() => { loadImageRewrites().then(setImageRewrites); }, []);
+
   const handleTemplateSelect = (template: NotebookTemplate) => {
     setSelectedTemplate(template);
     form.setFieldsValue({
-      image: template.image,
+      image: rewriteImage(template.image, imageRewrites),
       cpu: template.cpu,
       memory: template.memory,
       gpu: template.gpu,
@@ -99,12 +103,15 @@ const Notebooks: React.FC = () => {
       const spec: NotebookSpec = {
         name: values.name,
         namespace: values.namespace || 'default',
-        image: values.image || selectedTemplate?.image || '',
+        image: values.image || (selectedTemplate ? rewriteImage(selectedTemplate.image, imageRewrites) : ''),
         cpu: values.cpu || '4',
         memory: values.memory || '16Gi',
         gpu: values.gpu ?? 0,
         gpuType: selectedTemplate?.gpuType,
         storage: values.storage || '50Gi',
+        port: selectedTemplate?.port,
+        type: selectedTemplate?.type,
+        command: selectedTemplate?.command,
         env: selectedTemplate?.env,
       };
       await createNotebook(spec);
@@ -208,13 +215,15 @@ const Notebooks: React.FC = () => {
       dataIndex: 'status',
       key: 'status',
       width: 120,
-      render: (status: string) => {
+      render: (status: string, record: NotebookInfo) => {
         const cfg = statusConfig[status] || { color: 'default', label: status };
         return (
-          <Badge
-            status={status === 'Running' ? 'processing' : status === 'Pending' ? 'warning' : status === 'Failed' ? 'error' : 'default'}
-            text={cfg.label}
-          />
+          <Tooltip title={record.statusDetail || undefined}>
+            <Badge
+              status={status === 'Running' ? 'processing' : status === 'Pending' ? 'warning' : status === 'Failed' ? 'error' : 'default'}
+              text={cfg.label}
+            />
+          </Tooltip>
         );
       },
     },
@@ -313,10 +322,12 @@ const Notebooks: React.FC = () => {
             <Space direction="vertical" size={8} style={{ width: '100%' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Text strong>{nb.name}</Text>
-                <Badge
-                  status={nb.status === 'Running' ? 'processing' : nb.status === 'Pending' ? 'warning' : 'default'}
-                  text={nb.status}
-                />
+                <Tooltip title={nb.statusDetail || undefined}>
+                  <Badge
+                    status={nb.status === 'Running' ? 'processing' : nb.status === 'Pending' ? 'warning' : nb.status === 'Failed' ? 'error' : 'default'}
+                    text={nb.status}
+                  />
+                </Tooltip>
               </div>
               <Space size={4} wrap>
                 {nb.cpu && <Tag color="blue" style={{ fontSize: 11 }}>{nb.cpu} CPU</Tag>}
