@@ -16,6 +16,7 @@ import {
   SettingOutlined,
   DollarOutlined,
   DeploymentUnitOutlined,
+  DownOutlined,
 } from '@ant-design/icons'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -99,7 +100,9 @@ export default function MainLayout() {
       label: (
         <div style={{ padding: '4px 2px' }}>
           <div style={{ fontWeight: 600, color: 'var(--text-1)' }}>{user?.userName || 'admin'}</div>
-          <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{t('header.role')}</div>
+          <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>
+            {user?.apiRoles?.includes('admin') ? t('header.roleAdmin') : t('header.roleResearcher')}
+          </div>
         </div>
       ),
       disabled: true,
@@ -218,24 +221,24 @@ export default function MainLayout() {
             </Dropdown>
             <Dropdown menu={{ items: userItems }} placement="bottomRight" trigger={['click']}>
               <div
-                className="pressable"
+                className="pressable user-menu-trigger"
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 9,
+                  gap: 8,
                   cursor: 'pointer',
-                  padding: '5px 10px 5px 6px',
-                  borderRadius: 999,
-                  border: '1px solid var(--border-2)',
-                  background: 'var(--bg-surface)',
+                  padding: '4px 8px',
+                  borderRadius: 10,
+                  transition: 'background 0.2s',
                 }}
               >
                 <Avatar
-                  size={26}
+                  size={28}
                   style={{
-                    background: 'linear-gradient(135deg, #0071e3, #5856d6)',
-                    fontSize: 12,
+                    background: '#0071e3',
+                    fontSize: 13,
                     fontWeight: 600,
+                    flexShrink: 0,
                   }}
                 >
                   {user?.userName?.[0]?.toUpperCase() || 'A'}
@@ -245,6 +248,7 @@ export default function MainLayout() {
                     {user?.userName || 'admin'}
                   </span>
                 )}
+                <DownOutlined style={{ fontSize: 10, color: 'var(--text-3)' }} />
               </div>
             </Dropdown>
           </Space>

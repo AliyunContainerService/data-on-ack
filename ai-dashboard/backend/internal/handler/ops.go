@@ -13,6 +13,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
@@ -324,6 +325,22 @@ func (h *OpsHandler) ListWorkloads(c *gin.Context) {
 	if err == nil {
 		for _, mpi := range mpis.Items {
 			workloads = append(workloads, parseWorkload(mpi, "MPIJob"))
+		}
+	}
+
+	// Serving workloads (Deployments created by the dev-console serving API,
+	// labeled app.kubernetes.io/component=serving).
+	deps, err := h.kubeClient.Typed().AppsV1().Deployments("").List(context.TODO(), metav1.ListOptions{
+		LabelSelector: "app.kubernetes.io/component=serving",
+		Limit:         workloadListLimit,
+	})
+	if err == nil {
+		for _, dep := range deps.Items {
+			u, convErr := runtime.DefaultUnstructuredConverter.ToUnstructured(&dep)
+			if convErr != nil {
+				continue
+			}
+			workloads = append(workloads, parseWorkload(unstructured.Unstructured{Object: u}, "Serving"))
 		}
 	}
 

@@ -1,11 +1,13 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
 	"github.com/AliyunContainerService/data-on-ack/ai-dashboard/backend/internal/k8s"
 	"github.com/AliyunContainerService/data-on-ack/ai-dashboard/backend/internal/model"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
@@ -51,6 +53,64 @@ func (s *QuotaService) CreateQuotaTree(tree *model.ElasticQuotaTree) error {
 	return s.crdClient.CreateOrReplace(eqTreeGVR, eqTreeNamespace, tree)
 }
 
+// InitDefaultTree bootstraps a default ElasticQuotaTree when none exists:
+// root capped at cluster allocatable, one child per user namespace. This
+// gives fresh clusters a working quota tree without manual CR creation.
+func (s *QuotaService) InitDefaultTree() (*model.ElasticQuotaTree, error) {
+	trees, err := s.ListQuotaTrees()
+	if err != nil {
+		return nil, err
+	}
+	if len(trees) > 0 {
+		return nil, fmt.Errorf("quota tree already exists")
+	}
+	nodes, err := s.kubeClient.Typed().CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list nodes: %w", err)
+	}
+	var cpuMilli, memBytes, gpu int64
+	for _, n := range nodes.Items {
+		if n.Spec.Unschedulable {
+			continue
+		}
+		cpuMilli += n.Status.Allocatable.Cpu().MilliValue()
+		memBytes += n.Status.Allocatable.Memory().Value()
+		if q, ok := n.Status.Allocatable["nvidia.com/gpu"]; ok {
+			gpu += q.Value()
+		}
+	}
+	rootMax := map[string]string{
+		"cpu":    fmt.Sprintf("%d", (cpuMilli+999)/1000),
+		"memory": fmt.Sprintf("%dGi", (memBytes+(1<<30)-1)/(1<<30)),
+	}
+	if gpu > 0 {
+		rootMax["nvidia.com/gpu"] = fmt.Sprintf("%d", gpu)
+	}
+	root := &model.ElasticQuotaNode{Name: "root", Max: rootMax}
+	nsList, err := s.kubeClient.Typed().CoreV1().Namespaces().List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list namespaces: %w", err)
+	}
+	skip := map[string]bool{"kube-system": true, "kube-public": true, "kube-node-lease": true}
+	for _, ns := range nsList.Items {
+		if skip[ns.Name] {
+			continue
+		}
+		root.Children = append(root.Children, &model.ElasticQuotaNode{
+			Name: ns.Name, Namespaces: []string{ns.Name}, Max: rootMax,
+		})
+	}
+	tree := &model.ElasticQuotaTree{}
+	tree.Kind = "ElasticQuotaTree"
+	tree.APIVersion = "scheduling.sigs.k8s.io/v1beta1"
+	tree.Name = "elasticquotatree"
+	tree.Spec.Root = root
+	if err := s.CreateQuotaTree(tree); err != nil {
+		return nil, err
+	}
+	return tree, nil
+}
+
 // AddNode adds a child node under the specified parent path in the tree.
 func (s *QuotaService) AddNode(treeName, parentPath string, node *model.ElasticQuotaNode) error {
 	tree, err := s.GetQuotaTree(treeName)
@@ -66,7 +126,12 @@ func (s *QuotaService) AddNode(treeName, parentPath string, node *model.ElasticQ
 		return fmt.Errorf("parent node %s not found", parentPath)
 	}
 
-	fullName := buildNodeName(parentPath, node.Name)
+	// Callers may pass either a short name or an already-qualified path;
+	// avoid double-prefixing (root.root.x) in the latter case.
+	fullName := node.Name
+	if !strings.HasPrefix(fullName, parentPath+".") {
+		fullName = buildNodeName(parentPath, node.Name)
+	}
 	node.Name = fullName
 	parent.Children = append(parent.Children, node)
 

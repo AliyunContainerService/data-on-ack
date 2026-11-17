@@ -79,7 +79,20 @@ func (d *CRDClient) CreateOrReplace(gvr schema.GroupVersionResource, namespace s
 	}
 	if errors.IsNotFound(err) {
 		_, err = d.client.dynamic.Resource(gvr).Namespace(namespace).Create(context.TODO(), u, metav1.CreateOptions{})
+		return err
 	}
+	// Update rejected (e.g. a fresh object without resourceVersion): fetch
+	// the live object and retry with its resourceVersion, or create it.
+	existing, getErr := d.client.dynamic.Resource(gvr).Namespace(namespace).Get(context.TODO(), u.GetName(), metav1.GetOptions{})
+	if getErr != nil {
+		if errors.IsNotFound(getErr) {
+			_, err = d.client.dynamic.Resource(gvr).Namespace(namespace).Create(context.TODO(), u, metav1.CreateOptions{})
+			return err
+		}
+		return getErr
+	}
+	u.SetResourceVersion(existing.GetResourceVersion())
+	_, err = d.client.dynamic.Resource(gvr).Namespace(namespace).Update(context.TODO(), u, metav1.UpdateOptions{})
 	return err
 }
 

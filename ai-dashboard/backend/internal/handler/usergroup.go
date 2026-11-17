@@ -62,6 +62,8 @@ func (h *UserGroupHandler) Create(c *gin.Context) {
 		DefaultRoles:        req.DefaultRoles,
 		DefaultClusterRoles: req.DefaultClusterRoles,
 	}
+	ug.Kind = "UserGroup"
+	ug.APIVersion = "data.kubeai.alibabacloud.com/v1"
 	if err := h.userGroupService.CreateUserGroup(ug); err != nil {
 		response.Failed(c, response.CodeGroupError, "create user group failed: "+err.Error())
 		return
@@ -83,6 +85,8 @@ func (h *UserGroupHandler) Update(c *gin.Context) {
 		DefaultRoles:        req.DefaultRoles,
 		DefaultClusterRoles: req.DefaultClusterRoles,
 	}
+	ug.Kind = "UserGroup"
+	ug.APIVersion = "data.kubeai.alibabacloud.com/v1"
 	if err := h.userGroupService.CreateUserGroup(ug); err != nil {
 		response.Failed(c, response.CodeGroupError, "update user group failed: "+err.Error())
 		return

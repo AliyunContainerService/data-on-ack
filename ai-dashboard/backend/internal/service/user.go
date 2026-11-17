@@ -146,6 +146,24 @@ func (s *UserService) UpdateUser(user *model.User) error {
 	}
 	user.Spec.UserId = userID
 
+	// Resolve the ServiceAccount name: update requests may omit it, which
+	// would otherwise produce empty subject names in role bindings.
+	saConfig := user.Spec.K8sServiceAccount
+	if saConfig == nil {
+		saConfig = &model.K8sServiceAccount{Namespace: UserNamespace}
+		user.Spec.K8sServiceAccount = saConfig
+	}
+	if saConfig.Namespace == "" {
+		saConfig.Namespace = UserNamespace
+	}
+	if saConfig.Name == "" {
+		if found.Spec.K8sServiceAccount != nil && found.Spec.K8sServiceAccount.Name != "" {
+			saConfig.Name = found.Spec.K8sServiceAccount.Name
+		} else {
+			saConfig.Name = genSAName(user.Spec.UserName, userID)
+		}
+	}
+
 	applyApiRoles(&user.Spec)
 	if err := s.updateRoleBindings(user, found); err != nil {
 		return fmt.Errorf("update role bindings: %w", err)
