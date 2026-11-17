@@ -38,6 +38,9 @@ type NotebookSpec struct {
 	GPU       int               `json:"gpu"`
 	GPUType   string            `json:"gpuType,omitempty"`
 	Storage   string            `json:"storage,omitempty"`
+	Port      int               `json:"port,omitempty"`
+	Type      string            `json:"type,omitempty"`    // "vscode" or "" (jupyter)
+	Command   string            `json:"command,omitempty"` // override container command
 	Env       map[string]string `json:"env,omitempty"`
 }
 
@@ -46,6 +49,7 @@ type NotebookInfo struct {
 	Namespace string `json:"namespace"`
 	Image     string `json:"image"`
 	Status    string `json:"status"` // Running, Stopped, Pending, Failed
+	StatusDetail string `json:"statusDetail,omitempty"` // condition/event message for hover detail
 	CPU       string `json:"cpu"`
 	Memory    string `json:"memory"`
 	GPU       string `json:"gpu"`

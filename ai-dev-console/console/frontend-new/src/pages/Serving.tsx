@@ -4,6 +4,7 @@ import {
   Card, Table, Button, Tag, Space, Modal, Form, Input, InputNumber,
   Select, message, Popconfirm, Typography, Row, Col, Badge, Alert,
   Segmented, Switch, Divider, Drawer, Spin, Slider, Tabs,
+  Collapse,
 } from 'antd';
 import { PlusOutlined, DeleteOutlined, ReloadOutlined, ApiOutlined, ThunderboltOutlined, RocketOutlined, SendOutlined, FileTextOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
@@ -140,7 +141,7 @@ const Serving: React.FC = () => {
 
     try {
       const result = await testServingEndpoint(testService.namespace, testService.name, {
-        messages: updatedMessages,
+        messages: updatedMessages.map(({ role, content }) => ({ role, content })),
         temperature,
         max_tokens: maxTokens,
       });
@@ -155,10 +156,10 @@ const Serving: React.FC = () => {
       } else {
         assistantContent = JSON.stringify(result, null, 2);
       }
-      setChatMessages([...updatedMessages, { role: 'assistant', content: assistantContent }]);
+      setChatMessages([...updatedMessages, { role: 'assistant', content: assistantContent, raw: result }]);
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : 'Request failed';
-      setChatMessages([...updatedMessages, { role: 'assistant', content: `Error: ${errMsg}` }]);
+      setChatMessages([...updatedMessages, { role: 'assistant', content: `Error: ${errMsg}`, raw: { error: errMsg } }]);
     } finally {
       setChatLoading(false);
     }
@@ -384,6 +385,8 @@ const Serving: React.FC = () => {
               <div key={idx} style={{
                 marginBottom: 12,
                 display: 'flex',
+                flexDirection: 'column',
+                alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start',
                 justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start',
               }}>
                 <div style={{
@@ -399,6 +402,22 @@ const Serving: React.FC = () => {
                 }}>
                   {msg.content}
                 </div>
+                {msg.role === 'assistant' && msg.raw !== undefined && (
+                  <Collapse
+                    ghost
+                    size="small"
+                    style={{ maxWidth: '80%', marginTop: 4, background: '#fafafa', borderRadius: 8 }}
+                    items={[{
+                      key: 'raw',
+                      label: <Text type="secondary" style={{ fontSize: 11 }}>{t('serving.rawResponse')}</Text>,
+                      children: (
+                        <pre style={{ fontSize: 11, margin: 0, maxHeight: 260, overflow: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                          {JSON.stringify(msg.raw, null, 2)}
+                        </pre>
+                      ),
+                    }]}
+                  />
+                )}
               </div>
             ))}
             {chatLoading && (
@@ -418,12 +437,6 @@ const Serving: React.FC = () => {
                 onChange={(e) => setChatInput(e.target.value)}
                 placeholder="Type a message..."
                 autoSize={{ minRows: 1, maxRows: 4 }}
-                onPressEnter={(e) => {
-                  if (!e.shiftKey) {
-                    e.preventDefault();
-                    handleSendMessage();
-                  }
-                }}
                 style={{ borderRadius: '10px 0 0 10px' }}
               />
               <Button
@@ -434,6 +447,9 @@ const Serving: React.FC = () => {
                 style={{ borderRadius: '0 10px 10px 0', height: 'auto' }}
               />
             </Space.Compact>
+            <div style={{ marginTop: 6 }}>
+              <Text type="secondary" style={{ fontSize: 11 }}>{t('serving.sendHint')}</Text>
+            </div>
           </div>
         </div>
       </Drawer>

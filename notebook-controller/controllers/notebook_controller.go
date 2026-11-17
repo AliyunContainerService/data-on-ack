@@ -300,6 +300,12 @@ func getNextCondition(cs corev1.ContainerState) v1beta1.NotebookCondition {
 
 func setPrefixEnvVar(instance *v1beta1.Notebook, container *corev1.Container) {
 	prefix := "/notebook/" + instance.Namespace + "/" + instance.Name
+	// VS Code notebooks are proxied under /vscode/{ns}/{name}/ (prefix
+	// stripped by the console), so code-server must generate URLs with
+	// that base path instead of the Jupyter /notebook/ prefix.
+	if instance.Labels["notebook-type"] == "vscode" {
+		prefix = "/vscode/" + instance.Namespace + "/" + instance.Name
+	}
 
 	for _, envVar := range container.Env {
 		if envVar.Name == PrefixEnvVar {

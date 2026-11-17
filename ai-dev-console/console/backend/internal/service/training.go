@@ -154,7 +154,14 @@ func (s *TrainingService) Delete(name, namespace, kind, userName string) error {
 	if err != nil {
 		return err
 	}
-	return client.Resource(gvr).Namespace(namespace).Delete(context.TODO(), name, metav1.DeleteOptions{})
+	if err := client.Resource(gvr).Namespace(namespace).Delete(context.TODO(), name, metav1.DeleteOptions{}); err != nil {
+		return err
+	}
+	// Best-effort cleanup of the training script ConfigMap so the same job
+	// name can be resubmitted later.
+	cmGVR := k8s.CRDGVR("configmaps")
+	_ = client.Resource(cmGVR).Namespace(namespace).Delete(context.TODO(), name+"-script", metav1.DeleteOptions{})
+	return nil
 }
 
 // ListPods returns pods belonging to a training job (matched by job-name label).
@@ -372,13 +379,13 @@ func buildTrainingJobCRD(spec *model.TrainingJobSpec) *unstructured.Unstructured
 	// Build volume mounts for data sources
 	var volumeMounts []interface{}
 	var volumes []interface{}
-	for _, ds := range spec.DataSources {
+	for i, ds := range spec.DataSources {
 		volumeMounts = append(volumeMounts, map[string]interface{}{
-			"name":      ds.Name,
+			"name":      fmt.Sprintf("data-%d", i),
 			"mountPath": ds.MountPath,
 		})
 		volumes = append(volumes, map[string]interface{}{
-			"name": ds.Name,
+			"name": fmt.Sprintf("data-%d", i),
 			"persistentVolumeClaim": map[string]interface{}{
 				"claimName": ds.Name,
 			},
@@ -420,13 +427,15 @@ func buildTrainingJobCRD(spec *model.TrainingJobSpec) *unstructured.Unstructured
 	// Determine command: if script provided, run script; otherwise use command directly
 	var containerCommand []interface{}
 	if spec.Script != "" {
-		containerCommand = []interface{}{"sh", "-c", "chmod +x /scripts/train.sh && /scripts/train.sh"}
+		// The script ConfigMap is mounted readOnly with defaultMode 0755,
+		// so it is already executable; chmod would fail on the RO mount.
+		containerCommand = []interface{}{"sh", "-c", "/scripts/train.sh"}
 	} else {
 		containerCommand = []interface{}{"sh", "-c", spec.Command}
 	}
 
 	container := map[string]interface{}{
-		"name":      "training",
+		"name":      defaultContainerName(spec.Kind),
 		"image":     spec.Image,
 		"command":   containerCommand,
 		"resources": workerResources,
@@ -461,6 +470,24 @@ func buildTrainingJobCRD(spec *model.TrainingJobSpec) *unstructured.Unstructured
 		"Worker": workerReplica,
 	}
 
+	// The ACK pytorch-operator follows the kubeflow v1 convention and
+	// requires a Master ReplicaSpec. Run one Master and scale Workers to
+	// workerCount-1 (single-node jobs run entirely on the Master).
+	if spec.Kind == "PyTorchJob" {
+		replicaSpecs["Master"] = map[string]interface{}{
+			"replicas":      int32(1),
+			"restartPolicy": "Never",
+			"template": map[string]interface{}{
+				"spec": podSpec,
+			},
+		}
+		workers := spec.WorkerCount - 1
+		if workers < 0 {
+			workers = 0
+		}
+		workerReplica["replicas"] = workers
+	}
+
 	// Add PS for TFJob
 	if spec.Kind == "TFJob" && spec.PSCount > 0 {
 		psResources := map[string]interface{}{
@@ -474,7 +501,7 @@ func buildTrainingJobCRD(spec *model.TrainingJobSpec) *unstructured.Unstructured
 			},
 		}
 		psContainer := map[string]interface{}{
-			"name":      "training",
+			"name":      defaultContainerName(spec.Kind),
 			"image":     spec.Image,
 			"command":   []interface{}{"sh", "-c", spec.Command},
 			"resources": psResources,
@@ -493,7 +520,7 @@ func buildTrainingJobCRD(spec *model.TrainingJobSpec) *unstructured.Unstructured
 	// For MPIJob, use Launcher + Worker
 	if spec.Kind == "MPIJob" {
 		launcherContainer := map[string]interface{}{
-			"name":    "training",
+			"name":    defaultContainerName(spec.Kind),
 			"image":   spec.Image,
 			"command": []interface{}{"sh", "-c", spec.Command},
 			"resources": map[string]interface{}{
@@ -856,13 +883,13 @@ func buildRayJobCRD(spec *model.TrainingJobSpec) *unstructured.Unstructured {
 	// Build volume mounts for data sources
 	var volumeMounts []interface{}
 	var volumes []interface{}
-	for _, ds := range spec.DataSources {
+	for i, ds := range spec.DataSources {
 		volumeMounts = append(volumeMounts, map[string]interface{}{
-			"name":      ds.Name,
+			"name":      fmt.Sprintf("data-%d", i),
 			"mountPath": ds.MountPath,
 		})
 		volumes = append(volumes, map[string]interface{}{
-			"name": ds.Name,
+			"name": fmt.Sprintf("data-%d", i),
 			"persistentVolumeClaim": map[string]interface{}{
 				"claimName": ds.Name,
 			},
@@ -1146,5 +1173,21 @@ func kindToResource(kind string) string {
 		return "rayjobs"
 	default:
 		return ""
+	}
+}
+
+// defaultContainerName returns the container name the kubeflow training
+// operators require for each job kind (they validate its presence in the
+// replica pod template, e.g. "pytorch" for PyTorchJob Worker).
+func defaultContainerName(kind string) string {
+	switch kind {
+	case "PyTorchJob":
+		return "pytorch"
+	case "TFJob":
+		return "tensorflow"
+	case "MPIJob":
+		return "mpi"
+	default:
+		return "training"
 	}
 }

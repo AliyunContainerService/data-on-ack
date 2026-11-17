@@ -5,6 +5,7 @@ export interface NotebookInfo {
   namespace: string;
   image: string;
   status: string;
+  statusDetail?: string;
   cpu: string;
   memory: string;
   gpu: string;
@@ -21,6 +22,9 @@ export interface NotebookSpec {
   gpu: number;
   gpuType?: string;
   storage?: string;
+  port?: number;
+  type?: string;
+  command?: string;
   env?: Record<string, string>;
 }
 
@@ -37,16 +41,27 @@ export interface NotebookTemplate {
   gpuType?: string;
   storage: string;
   tags: string[];
+  port?: number;
+  type?: string;
+  command?: string;
   env?: Record<string, string>;
 }
+
+/**
+ * Canonical development images: Alibaba Cloud Linux AC2 container images,
+ * designed for the ACK AI suite. Public registry, amd64.
+ * https://help.aliyun.com/zh/alinux/ac2-container-image-list
+ * Offline / cross-region clusters remap this prefix via IMAGE_REWRITES.
+ */
+export const AC2_REGISTRY = 'ac2-registry.cn-hangzhou.cr.aliyuncs.com/ac2/';
 
 export const NOTEBOOK_TEMPLATES: NotebookTemplate[] = [
   {
     id: 'pytorch-gpu',
     name: 'PyTorch 2.x GPU',
-    description: 'PyTorch 2.x with CUDA 12.1, Jupyter, common ML libraries pre-installed',
+    description: 'AC2 JupyterLab + PyTorch 2.1.2 + CUDA 12.1, common ML libraries pre-installed',
     icon: 'fire',
-    image: 'registry.cn-hangzhou.aliyuncs.com/acs/jupyter-pytorch:2.1-gpu-cuda12.1',
+    image: AC2_REGISTRY + 'jupyter-pytorch-cuda:4.0.5-3.2304-2.1.2cu121',
     cpu: '4',
     memory: '16Gi',
     gpu: 1,
@@ -55,24 +70,43 @@ export const NOTEBOOK_TEMPLATES: NotebookTemplate[] = [
     env: { JUPYTER_ENABLE_LAB: 'yes' },
   },
   {
-    id: 'tensorflow-gpu',
-    name: 'TensorFlow 2.x GPU',
-    description: 'TensorFlow 2.x with CUDA, Keras, TensorBoard pre-installed',
-    icon: 'experiment',
-    image: 'registry.cn-hangzhou.aliyuncs.com/acs/jupyter-tensorflow:2.14-gpu-cuda12.1',
+    id: 'vscode-cpu',
+    name: 'VS Code (CPU)',
+    description: 'AC2 code-server IDE for code development and debugging',
+    icon: 'code',
+    image: AC2_REGISTRY + 'vscode:4.22.1-3.2304',
+    cpu: '2',
+    memory: '8Gi',
+    gpu: 0,
+    storage: '20Gi',
+    tags: ['CPU', 'VS Code', 'IDE'],
+    port: 8080,
+    type: 'vscode',
+    // code-server serves relative asset URLs, so it works behind the
+    // console's prefix-stripping /vscode proxy without any base-path flag.
+    command: 'code-server --bind-addr 0.0.0.0:8080 --auth none --disable-telemetry --disable-update-check',
+  },
+  {
+    id: 'vscode-gpu',
+    name: 'VS Code GPU',
+    description: 'AC2 code-server IDE with CUDA 12.1 devel toolchain',
+    icon: 'code',
+    image: AC2_REGISTRY + 'vscode:4.22.1-3.2304-cu12.1.1-devel',
     cpu: '4',
     memory: '16Gi',
     gpu: 1,
     storage: '50Gi',
-    tags: ['GPU', 'TensorFlow', 'CUDA 12.1'],
-    env: { JUPYTER_ENABLE_LAB: 'yes' },
+    tags: ['GPU', 'VS Code', 'CUDA 12.1'],
+    port: 8080,
+    type: 'vscode',
+    command: 'code-server --bind-addr 0.0.0.0:8080 --auth none --disable-telemetry --disable-update-check',
   },
   {
     id: 'llm-dev',
     name: 'LLM Development',
-    description: 'Transformers, PEFT, DeepSpeed, vLLM, bitsandbytes for LLM development',
+    description: 'AC2 PyTorch GPU base; pip install Transformers / PEFT / DeepSpeed / vLLM as needed',
     icon: 'robot',
-    image: 'registry.cn-hangzhou.aliyuncs.com/acs/jupyter-llm:latest',
+    image: AC2_REGISTRY + 'jupyter-pytorch-cuda:4.0.5-3.2304-2.1.2cu121',
     cpu: '8',
     memory: '32Gi',
     gpu: 1,
@@ -84,9 +118,9 @@ export const NOTEBOOK_TEMPLATES: NotebookTemplate[] = [
   {
     id: 'scipy-cpu',
     name: 'Data Science (CPU)',
-    description: 'SciPy, Pandas, Scikit-learn, Matplotlib for data analysis',
+    description: 'AC2 JupyterLab with SciPy, Pandas, Scikit-learn, Matplotlib for data analysis',
     icon: 'barChart',
-    image: 'registry.cn-hangzhou.aliyuncs.com/acs/jupyter-scipy:latest',
+    image: AC2_REGISTRY + 'jupyter:4.0.5-3.2304',
     cpu: '2',
     memory: '8Gi',
     gpu: 0,
@@ -97,9 +131,9 @@ export const NOTEBOOK_TEMPLATES: NotebookTemplate[] = [
   {
     id: 'multimodal',
     name: 'Multimodal AI',
-    description: 'Diffusers, Qwen-VL, CLIP, Stable Diffusion for vision-language tasks',
+    description: 'AC2 PyTorch GPU base; pip install Diffusers / CLIP for vision-language tasks',
     icon: 'picture',
-    image: 'registry.cn-hangzhou.aliyuncs.com/acs/jupyter-multimodal:latest',
+    image: AC2_REGISTRY + 'jupyter-pytorch-cuda:4.0.5-3.2304-2.1.2cu121',
     cpu: '8',
     memory: '32Gi',
     gpu: 1,
@@ -110,9 +144,9 @@ export const NOTEBOOK_TEMPLATES: NotebookTemplate[] = [
   {
     id: 'rag-dev',
     name: 'RAG Development',
-    description: 'LangChain, LlamaIndex, vector databases, embedding models for RAG pipelines',
+    description: 'AC2 Jupyter CPU base; pip install LangChain / LlamaIndex for RAG pipelines',
     icon: 'database',
-    image: 'registry.cn-hangzhou.aliyuncs.com/acs/jupyter-rag:latest',
+    image: AC2_REGISTRY + 'jupyter:4.0.5-3.2304',
     cpu: '4',
     memory: '16Gi',
     gpu: 0,

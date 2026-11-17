@@ -83,6 +83,12 @@ func NewRouter(
 		if _, err := os.Stat(filepath.Join(distDir, "favicon.ico")); err == nil {
 			r.StaticFile("/favicon.ico", filepath.Join(distDir, "favicon.ico"))
 		}
+		if _, err := os.Stat(filepath.Join(distDir, "favicon.png")); err == nil {
+			r.StaticFile("/favicon.png", filepath.Join(distDir, "favicon.png"))
+		}
+		if _, err := os.Stat(filepath.Join(distDir, "favicon.svg")); err == nil {
+			r.StaticFile("/favicon.svg", filepath.Join(distDir, "favicon.svg"))
+		}
 		if _, err := os.Stat(filepath.Join(distDir, "vite.svg")); err == nil {
 			r.StaticFile("/vite.svg", filepath.Join(distDir, "vite.svg"))
 		}

@@ -19,7 +19,18 @@ func (h *QuotaHandler) RegisterRoutes(rg *gin.RouterGroup) {
 	// Quota tree management is a cluster-admin capability.
 	rg.GET("/group/list", adminOnly, h.List)
 	rg.POST("/group/create", adminOnly, h.Create)
+	rg.POST("/group/init", adminOnly, h.Init)
 	rg.PUT("/group/update", adminOnly, h.Update)
+}
+
+// Init bootstraps a default quota tree on clusters that have none.
+func (h *QuotaHandler) Init(c *gin.Context) {
+	tree, err := h.quotaService.InitDefaultTree()
+	if err != nil {
+		response.Failed(c, response.CodeQuotaError, "init quota tree failed: "+err.Error())
+		return
+	}
+	response.OK(c, tree)
 }
 
 func (h *QuotaHandler) List(c *gin.Context) {

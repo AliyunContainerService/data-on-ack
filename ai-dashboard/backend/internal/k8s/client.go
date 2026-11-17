@@ -194,12 +194,18 @@ func (c *Client) createRoleBinding(saName, saNamespace string, rb RoleBinding, i
 	if err == nil {
 		return nil
 	}
+	// A namespace-scoped binding may reference either a Role in that
+	// namespace or a ClusterRole (the common case for platform roles).
+	roleRefKind := "ClusterRole"
+	if _, rerr := c.typed.RbacV1().Roles(ns).Get(context.TODO(), rb.RoleName, metav1.GetOptions{}); rerr == nil {
+		roleRefKind = "Role"
+	}
 	roleBinding := &rbacv1.RoleBinding{
 		ObjectMeta: metav1.ObjectMeta{Name: name},
 		Subjects: []rbacv1.Subject{{
 			Kind: "ServiceAccount", Name: saName, Namespace: saNamespace,
 		}},
-		RoleRef: rbacv1.RoleRef{Kind: "Role", Name: rb.RoleName},
+		RoleRef: rbacv1.RoleRef{Kind: roleRefKind, Name: rb.RoleName},
 	}
 	_, err = c.typed.RbacV1().RoleBindings(ns).Create(context.TODO(), roleBinding, metav1.CreateOptions{})
 	return err

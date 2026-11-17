@@ -9,12 +9,11 @@ import {
   CloudServerOutlined,
   AppstoreOutlined,
   DatabaseOutlined,
-  ExperimentOutlined,
-  SlidersOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   TranslationOutlined,
   LogoutOutlined,
+  DownOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useUserStore } from '../store/user';
@@ -80,8 +79,6 @@ const MainLayout: React.FC = () => {
         { key: '/', icon: <DashboardOutlined />, label: t('menu.dashboard') },
         { key: '/notebooks', icon: <CodeOutlined />, label: t('menu.notebooks') },
         { key: '/training', icon: <ThunderboltOutlined />, label: t('menu.training') },
-        { key: '/experiments', icon: <ExperimentOutlined />, label: t('menu.experiments') },
-        { key: '/finetune', icon: <SlidersOutlined />, label: t('menu.finetune') },
         { key: '/serving', icon: <CloudServerOutlined />, label: t('menu.serving') },
       ],
     },
@@ -115,7 +112,9 @@ const MainLayout: React.FC = () => {
       label: (
         <div style={{ padding: '4px 2px' }}>
           <div style={{ fontWeight: 600, color: 'var(--text-1)' }}>{user.loginName || user.name}</div>
-          <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{t('header.role')}</div>
+          <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>
+            {user.role === 'admin' ? t('header.roleAdmin') : t('header.roleResearcher')}
+          </div>
         </div>
       ),
       disabled: true,
@@ -234,24 +233,24 @@ const MainLayout: React.FC = () => {
             </Tooltip>
             <Dropdown menu={{ items: userMenuItems }} placement="bottomRight" trigger={['click']}>
               <div
-                className="pressable"
+                className="pressable user-menu-trigger"
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 9,
+                  gap: 8,
                   cursor: 'pointer',
-                  padding: '5px 10px 5px 6px',
-                  borderRadius: 999,
-                  border: '1px solid var(--border-2)',
-                  background: 'var(--bg-surface)',
+                  padding: '4px 8px',
+                  borderRadius: 10,
+                  transition: 'background 0.2s',
                 }}
               >
                 <Avatar
-                  size={26}
+                  size={28}
                   style={{
-                    background: 'linear-gradient(135deg, #6366f1, #a855f7)',
-                    fontSize: 12,
+                    background: '#4f46e5',
+                    fontSize: 13,
                     fontWeight: 600,
+                    flexShrink: 0,
                   }}
                 >
                   {(user.loginName || user.name || 'A')[0].toUpperCase()}
@@ -261,6 +260,7 @@ const MainLayout: React.FC = () => {
                     {user.loginName || user.name}
                   </span>
                 )}
+                <DownOutlined style={{ fontSize: 10, color: 'var(--text-3)' }} />
               </div>
             </Dropdown>
           </Space>

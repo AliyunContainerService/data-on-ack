@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Tree, Button, Space, Modal, Form, Input, InputNumber, Select, Card, Row, Col, message, Popconfirm, Empty, Spin, Segmented, Tag, Progress, Typography } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, ReloadOutlined, ApartmentOutlined, FolderOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
-import { fetchQuotaTrees, updateQuotaTree, type QuotaTree, type QuotaNode } from '@/api/quota'
+import { fetchQuotaTrees, updateQuotaTree, initQuotaTree, type QuotaTree, type QuotaNode } from '@/api/quota'
 import { get, getErrorMessage } from '@/api/client'
 import PageHeader from '@/components/PageHeader'
 import type { DataNode } from 'antd/es/tree'
@@ -53,6 +53,14 @@ export default function QuotaTreePage() {
   }, [])
 
   useEffect(() => { loadTrees(); loadNamespaces() }, [loadTrees, loadNamespaces])
+
+  const handleInitTree = async () => {
+    try {
+      await initQuotaTree()
+      message.success(t('quota.initSuccess'))
+      loadTrees()
+    } catch (err) { message.error(getErrorMessage(err)) }
+  }
 
   const buildTreeData = (node: QuotaNode, depth = 0): DataNode => ({
     key: node.name,
@@ -334,7 +342,11 @@ export default function QuotaTreePage() {
                   style={{ fontSize: 13 }}
                 />
               ) : (
-                <Empty description={t('common.noData')} />
+                <Empty description={t('quota.initDesc')}>
+                  <Button type="primary" icon={<PlusOutlined />} onClick={handleInitTree}>
+                    {t('quota.initTree')}
+                  </Button>
+                </Empty>
               )}
             </Card>
           </Col>

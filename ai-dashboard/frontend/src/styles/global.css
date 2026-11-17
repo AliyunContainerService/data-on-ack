@@ -254,6 +254,10 @@ body {
   transform: scale(0.97);
 }
 
+.user-menu-trigger:hover {
+  background: rgba(0, 0, 0, 0.045);
+}
+
 /* Glass surface (headers, overlays) */
 .glass {
   background: rgba(255, 255, 255, 0.72);
