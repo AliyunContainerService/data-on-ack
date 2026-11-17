@@ -1,0 +1,27 @@
+{{- /*
+In "none" auth mode, surface the built-in admin in user management. The
+matching ServiceAccount/token/ClusterRoleBinding are provisioned by the
+ack-ai-dev-console chart (admin-user.yaml); this record is display metadata.
+*/ -}}
+{{- if eq (.Values.auth.mode | default "none") "none" }}
+apiVersion: data.kubeai.alibabacloud.com/v1
+kind: User
+metadata:
+  name: admin
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "admin-ui.labels" . | nindent 4 }}
+spec:
+  userName: admin
+  userId: admin
+  aliuid: "admin"
+  apiRoles:
+    - admin
+  deletable: false
+  k8sServiceAccount:
+    name: admin
+    namespace: {{ .Release.Namespace }}
+    clusterRoleBindings:
+      - name: admin-cluster-admin
+        roleName: cluster-admin
+{{- end }}

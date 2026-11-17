@@ -3,7 +3,7 @@
 
 grafana:
   image:
-    repository: registry-cn-beijing.ack.aliyuncs.com/acs/grafana
+    repository: registry-cn-hangzhou.ack.aliyuncs.com/acs/grafana
     tag: 7.3.5
   # [REQUIRED] Grafana 管理员密码
   adminUser: admin
@@ -14,10 +14,10 @@ grafana:
       datasources:
       - name: KubeAICluster
         type: prometheus
-        # [REQUIRED] ARMS Prometheus 内网地址
-        # 格式: http://cn-<region>-intranet.arms.aliyuncs.com:9090/api/v1/prometheus/<ARMS实例ID>/<主账号UID>/<集群ID>/<region>
-        # 获取方式: ACK 控制台 > 集群 > 运维管理 > Prometheus监控 > 设置 > HTTP API 地址(内网)
-        url: ""
+        # 默认指向 chart 内置的集群内 Prometheus（prometheus.enabled=true）。
+        # 如需改用 ARMS Prometheus，设 prometheus.enabled=false 并将 url 改为
+        # ARMS 内网地址: http://cn-<region>-intranet.arms.aliyuncs.com:9090/api/v1/prometheus/<实例ID>/<UID>/<集群ID>/<region>
+        url: "http://prometheus-server.kube-ai:9090"
         access: proxy
         isDefault: true
   dashboardProviders:
@@ -34,7 +34,7 @@ grafana:
           path: /var/lib/grafana/dashboards/default
 
   downloadDashboardsImage:
-    repository: registry-cn-beijing.ack.aliyuncs.com/acs/curl
+    repository: registry-cn-hangzhou.ack.aliyuncs.com/acs/curl
     tag: 7.80.0
 
   dashboards:
@@ -74,9 +74,9 @@ grafana:
 
 admin-ui:
   image:
-    repository: registry-cn-hangzhou.ack.aliyuncs.com/dev/ai-dashboard
-    tag: "v3.2.0"
-    pullPolicy: Always
+    repository: registry-cn-hangzhou.ack.aliyuncs.com/acs/ai-dashboard
+    tag: "v3.3.0"
+    pullPolicy: IfNotPresent
   resources:
     limits:
       cpu: 1000m
@@ -112,10 +112,12 @@ admin-ui:
   # 认证与会话配置
   auth:
     # 认证模式:
-    #   aliyun (默认) - 阿里云 RAM OAuth2 SSO 登录
-    #   none          - 免登录，所有请求以内置 admin 身份运行，拥有全部权限；无需配置阿里云凭据
+    #   none (默认)   - 免登录，所有请求以内置 admin 身份运行，拥有全部权限；无需配置阿里云凭据，开箱即用
+    #   aliyun        - 阿里云 RAM OAuth2 SSO 登录（生产推荐，需 AK/SK 与 IMS 权限）
     #   custom        - 接入客户自定义用户系统，信任上游网关注入的身份请求头
-    mode: "aliyun"
+    # ⚠️ none 模式下任何能访问控制台地址的人都拥有全部权限，仅限内网/PoC 或已有外层访问控制的环境；
+    #    生产环境请改用 aliyun 或 custom，或为入口配置访问控制。
+    mode: "none"
     # custom 模式配置 (mode=custom 时生效)
     custom:
       # 上游网关注入的用户名请求头
@@ -145,3 +147,40 @@ admin-ui:
       oidcTokenFile: "/var/run/secrets/tokens/oidc-token"
       # RAM 角色 ARN (rrsa 模式必填)，如 acs:ram::<UID>:role/<role-name>
       roleArn: ""
+  # 集群内 Prometheus（默认启用）：采集 arena-exporter / gpu-exporter 指标，
+  # 供 Grafana 监控面板使用，无需依赖 ARMS。如改用 ARMS，设 enabled=false 并
+  # 修改上方 grafana.datasources 的 url。
+  prometheus:
+    enabled: true
+    image:
+      repository: registry-cn-hangzhou.ack.aliyuncs.com/acs/prometheus
+      tag: v2.54.1-9090eb1-aliyun
+      pullPolicy: IfNotPresent
+    retention: 7d
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        cpu: "2"
+        memory: 2Gi
+  # 平台设置播种：首次安装时写入 kubeai-platform-config（默认开发镜像等）。
+  # 已存在该 ConfigMap 时不覆盖（保留用户在控制台修改的设置）。
+  platformConfig:
+    enabled: true
+    cullingEnabled: true
+    cullingIdleTime: 1440
+    cullingCheckPeriod: 1
+    # 默认开发镜像（AC2 公共镜像，专为 ACK AI 套件设计）
+    defaultImages: |-
+      ac2-registry.cn-hangzhou.cr.aliyuncs.com/ac2/jupyter:4.0.5-3.2304
+      ac2-registry.cn-hangzhou.cr.aliyuncs.com/ac2/jupyter-pytorch-cuda:4.0.5-3.2304-2.1.2cu121
+      ac2-registry.cn-hangzhou.cr.aliyuncs.com/ac2/vscode:4.22.1-3.2304
+    # Notebook 镜像提交目标仓库（留空则由用户在控制台配置）
+    commitRegistry: ""
+  # 首次安装/升级时，若集群没有任何默认 StorageClass，则将
+  # alicloud-disk-topology-alltype 标记为默认（Notebook 工作空间 PVC 依赖默认 SC）。
+  # 不会覆盖客户已有的默认 StorageClass。
+  ensureDefaultStorageClass: true
+  # ensure-default-StorageClass hook 使用的镜像（alpine 3.24-update + Go 1.27.4 编译的 kubectl）
+  ensureDefaultStorageClassImage: registry-cn-hangzhou.ack.aliyuncs.com/acs/kubeai-tools:v1.2.0

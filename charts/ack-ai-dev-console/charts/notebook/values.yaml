@@ -5,9 +5,9 @@
 replicaCount: 1
 
 image:
-  repository: registry-cn-beijing.ack.aliyuncs.com/acs/notebook-controller
-  pullPolicy: Always
-  tag: v1.0.0-b6ff096-aliyun
+  repository: registry-cn-hangzhou.ack.aliyuncs.com/acs/notebook-controller
+  pullPolicy: IfNotPresent
+  tag: v1.1.0
 
 imagePullSecrets: []
 nameOverride: ""

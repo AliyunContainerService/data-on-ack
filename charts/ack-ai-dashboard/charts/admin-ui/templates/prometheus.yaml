@@ -1,0 +1,144 @@
+{{- /*
+In-cluster Prometheus for the Grafana monitoring panels. Scrapes the
+arena-exporter (arena_* metrics) and ARMS gpu-exporter (nvidia_gpu_* metrics)
+already running in the cluster, so monitoring works without ARMS Prometheus.
+Disable with prometheus.enabled=false and point grafana.datasources at ARMS.
+*/ -}}
+{{- if .Values.prometheus.enabled }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "admin-ui.labels" . | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kubeai-prometheus
+  labels:
+    {{- include "admin-ui.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: [services, endpoints, pods, nodes]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kubeai-prometheus
+  labels:
+    {{- include "admin-ui.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kubeai-prometheus
+subjects:
+  - kind: ServiceAccount
+    name: prometheus
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "admin-ui.labels" . | nindent 4 }}
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      scrape_timeout: 10s
+    scrape_configs:
+    - job_name: arena-exporter
+      kubernetes_sd_configs:
+      - role: endpoints
+        namespaces:
+          names: [{{ .Release.Namespace }}]
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_service_name]
+        regex: arena-exporter
+        action: keep
+      - source_labels: [__meta_kubernetes_endpoint_port_name]
+        regex: http-metrics
+        action: keep
+    - job_name: gpu-exporter
+      kubernetes_sd_configs:
+      - role: endpoints
+        namespaces:
+          names: [arms-prom]
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_service_name]
+        regex: node-gpu-exporter
+        action: keep
+      - source_labels: [__meta_kubernetes_endpoint_port_name]
+        regex: http-metrics
+        action: keep
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus-server
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: prometheus-server
+    {{- include "admin-ui.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus-server
+  template:
+    metadata:
+      labels:
+        app: prometheus-server
+    spec:
+      serviceAccountName: prometheus
+      securityContext:
+        fsGroup: 65534
+      containers:
+        - name: prometheus
+          image: "{{ .Values.prometheus.image.repository }}:{{ .Values.prometheus.image.tag }}"
+          imagePullPolicy: {{ .Values.prometheus.image.pullPolicy }}
+          args:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.path=/prometheus
+            - --storage.tsdb.retention.time={{ .Values.prometheus.retention }}
+            - --web.enable-lifecycle
+          ports:
+            - containerPort: 9090
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: 9090
+            initialDelaySeconds: 5
+          resources:
+            {{- toYaml .Values.prometheus.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus
+            - name: data
+              mountPath: /prometheus
+      volumes:
+        - name: config
+          configMap:
+            name: prometheus-config
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus-server
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "admin-ui.labels" . | nindent 4 }}
+spec:
+  selector:
+    app: prometheus-server
+  ports:
+    - port: 9090
+      targetPort: 9090
+{{- end }}

@@ -1,9 +1,12 @@
 replicaCount: 1
 
 image:
-  repository: registry-cn-hangzhou.ack.aliyuncs.com/dev/ai-dashboard
-  tag: "v3.2.0"
-  pullPolicy: Always
+  repository: registry-cn-hangzhou.ack.aliyuncs.com/acs/ai-dashboard
+  tag: "v3.3.0"
+  pullPolicy: IfNotPresent
+
+# Image used by the ensure-default-StorageClass hook (alpine + kubectl built with Go 1.27.4).
+ensureDefaultStorageClassImage: registry-cn-hangzhou.ack.aliyuncs.com/acs/kubeai-tools:v1.2.0
 
 imagePullSecrets: []
 nameOverride: ""
