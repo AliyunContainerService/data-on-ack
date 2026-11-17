@@ -1,20 +1,20 @@
-# 在 ACK 上使用 ack-kube-queue 管理 VLA 任务
+# 使用 ACK Koord Queue 管理 VLA 任务
 
 [English](./README_KUBE_QUEUE.md) | 简体中文
 
-本文以第一视角视频转 LeRobot 数据集的 VLA 数据处理任务为例，介绍如何在 ACK 集群中使用 ack-kube-queue 对 RayJob 排队、按配额放行并查看执行结果。VLA 算子、模型、镜像和 OSS 挂载的准备方法沿用 [VLA 管线指南](https://github.com/AliyunContainerService/data-on-ack/blob/main/ray/3-e2e-examples/vla-pipeline-on-ack/README_ZH.md)。本文重点说明任务队列的接入过程。
+本文以第一视角视频转 LeRobot 数据集的 VLA 数据处理任务为例，介绍如何在 ACK 集群中使用 ACK Koord Queue（原名 ack-kube-queue）对 RayJob 排队、按配额放行并查看执行结果。VLA 算子、模型、镜像和 OSS 挂载的准备方法沿用 [VLA 管线指南](https://github.com/AliyunContainerService/data-on-ack/blob/main/ray/3-e2e-examples/vla-pipeline-on-ack/README_ZH.md)。本文重点说明任务队列的接入过程。
 
 ## 整体流程
 
 1. 准备 ACK 集群、GPU 节点、VLA 镜像、模型和数据。
-2. 在 ACK 控制台的云原生 AI 套件页面安装 ack-kube-queue，并启用 RayJob 排队功能。
+2. 在 ACK 控制台的云原生 AI 套件页面安装 ACK Koord Queue，并启用 RayJob 排队功能。
 3. 为 VLA 命名空间配置 ElasticQuotaTree 叶子配额。
 4. 以 `spec.suspend: true` 提交 RayJob，观察任务进入队列。
 5. 提高可用配额，观察任务出队并执行，最后检查 LeRobot 产物。
 
 ## 前置条件
 
-- 已创建支持 ack-kube-queue 的 ACK 集群，已安装托管 KubeRay Operator，并配置可访问集群的 `kubectl`。集群类型和版本要求以 [ack-kube-queue 组件说明](https://help.aliyun.com/zh/ack/cloud-native-ai-suite/product-overview/ack-kube-queue)为准。
+- 已创建支持 ACK Koord Queue 的 ACK 集群，已安装托管 KubeRay Operator，并配置可访问集群的 `kubectl`。集群类型和版本要求以 [ACK Koord Queue 组件说明](https://help.aliyun.com/zh/ack/cloud-native-ai-suite/product-overview/ack-kube-queue)为准。
 - 集群有至少一台可调度的 GPU 节点，并有足够的 CPU 和内存运行 Ray Head。示例 RayJob 请求合计 **8 CPU、32 GiB 内存、1 GPU**；实际节点还需给系统组件留出余量。
 - 已按照 [VLA 管线指南](https://github.com/AliyunContainerService/data-on-ack/blob/main/ray/3-e2e-examples/vla-pipeline-on-ack/README_ZH.md)准备输入视频、MoGe、HaWoR、MANO 等模型，以及包含 Ray、Data-Juicer 和 VLA 依赖的镜像。镜像中的 Data-Juicer 版本须与业务脚本要求一致。
 - 已准备所有 Ray Pod 均可读取的输入和代码 PVC，以及可写入的输出 PVC。输入和输出应使用不同的 OSS 前缀。私有镜像的拉取凭据应创建在 VLA 任务命名空间中；不要将 AccessKey 或令牌写入 RayJob YAML。
@@ -22,12 +22,12 @@
 
 以下示例使用 `vla-demo` 命名空间。请将镜像和 PVC 名称替换为实际值。若集群已有 ElasticQuotaTree，应在现有树中增加叶子配额，不要创建第二棵树；ACK 集群目前仅支持 `kube-system` 中的一棵 ElasticQuotaTree。
 
-## 步骤 1 —— 在 ACK 控制台安装 ack-kube-queue
+## 步骤 1 —— 在 ACK 控制台安装 ACK Koord Queue
 
 1. 登录 [容器服务管理控制台](https://cs.console.aliyun.com/)，在左侧导航栏选择**集群列表**，进入目标集群。
 2. 在集群左侧导航栏选择**应用 → 云原生 AI 套件**。
-3. 若尚未部署云原生 AI 套件，在部署页面勾选 **Kube-Queue** 并完成部署；若已部署套件，在组件列表中找到 **ack-kube-queue**，单击**部署**。具体界面步骤参见 [使用任务队列 ack-kube-queue 管理 AI/ML 工作负载](https://help.aliyun.com/zh/ack/ack-managed-and-ack-dedicated/user-guide/use-ack-kube-queue-to-manage-job-queues)。
-4. 在组件参数配置中启用 **RayJob** 排队功能。ack-kube-queue 默认仅开启原生 Job 排队；如果组件已安装，可通过该页面修改组件参数以启用 RayJob。
+3. 若尚未部署云原生 AI 套件，在部署页面勾选 **Kube-Queue** 并完成部署；若已部署套件，在组件列表中找到 **ACK Koord Queue**，单击**部署**。具体界面步骤参见 [使用任务队列 ACK Koord Queue 管理 AI/ML 工作负载](https://help.aliyun.com/zh/ack/ack-managed-and-ack-dedicated/user-guide/use-ack-kube-queue-to-manage-job-queues)。
+4. 在组件参数配置中启用 **RayJob** 排队功能。ACK Koord Queue 默认仅开启原生 Job 排队；如果组件已安装，可通过该页面修改组件参数以启用 RayJob。
 
 安装完成后，确认页面中的组件状态为**已部署**，并检查集群中的工作负载和 CRD：
 
@@ -81,7 +81,7 @@ kubectl get elasticquotatree -n kube-system
 kubectl get queue -A
 ```
 
-ack-kube-queue 会依据 ElasticQuotaTree 的叶子节点创建队列，并将该命名空间中的 RayJob 路由到对应队列。详见 [ElasticQuotaTree 与任务队列说明](https://help.aliyun.com/en/ack/ack-managed-and-ack-dedicated/user-guide/improve-resource-utilization-with-elasticquotatree-and-task-queues)。
+ACK Koord Queue 会依据 ElasticQuotaTree 的叶子节点创建队列，并将该命名空间中的 RayJob 路由到对应队列。详见 [ElasticQuotaTree 与任务队列说明](https://help.aliyun.com/en/ack/ack-managed-and-ack-dedicated/user-guide/improve-resource-utilization-with-elasticquotatree-and-task-queues)。
 
 ## 步骤 3 —— 提交 VLA RayJob
 
@@ -196,7 +196,7 @@ kubectl get rayjob vla-egodex-demo -n vla-demo -w
 kubectl get pods -n vla-demo -o wide
 ```
 
-预期 QueueUnit 转为 `Dequeued`，ack-kube-queue 将 RayJob 的 `spec.suspend` 改为 `false`，KubeRay 随后创建 Ray Head、GPU Worker 和提交器 Pod。RayJob 最终应显示 `jobDeploymentStatus: Complete` 与 `jobStatus: SUCCEEDED`。如果集群只有一台 8 CPU GPU 节点，应通过 `headGroupSpec.template.spec.nodeSelector` 或节点亲和性将 Ray Head 放到 CPU 节点，为 GPU Worker 留足 CPU。
+预期 QueueUnit 转为 `Dequeued`，ACK Koord Queue 将 RayJob 的 `spec.suspend` 改为 `false`，KubeRay 随后创建 Ray Head、GPU Worker 和提交器 Pod。RayJob 最终应显示 `jobDeploymentStatus: Complete` 与 `jobStatus: SUCCEEDED`。如果集群只有一台 8 CPU GPU 节点，应通过 `headGroupSpec.template.spec.nodeSelector` 或节点亲和性将 Ray Head 放到 CPU 节点，为 GPU Worker 留足 CPU。
 
 ## 步骤 5 —— 查看日志和产物
 
@@ -221,5 +221,5 @@ kubectl logs -n vla-demo job/vla-egodex-demo --tail=100
 ## 参考资料
 
 - [VLA 管线 Demo](https://github.com/AliyunContainerService/data-on-ack/blob/main/ray/3-e2e-examples/vla-pipeline-on-ack/README_ZH.md)
-- [使用 ack-kube-queue 管理 AI/ML 工作负载](https://help.aliyun.com/zh/ack/ack-managed-and-ack-dedicated/user-guide/use-ack-kube-queue-to-manage-job-queues)
+- [使用 ACK Koord Queue 管理 AI/ML 工作负载](https://help.aliyun.com/zh/ack/ack-managed-and-ack-dedicated/user-guide/use-ack-kube-queue-to-manage-job-queues)
 - [ElasticQuotaTree](https://help.aliyun.com/zh/ack/ack-managed-and-ack-dedicated/user-guide/elasticquotatree)

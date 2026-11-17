@@ -1,8 +1,8 @@
-# 在 ACK 上使用 kube-queue 为 RayJob 排队
+# 使用 ACK Koord Queue 为 RayJob 排队
 
 [English](README.md) | 简体中文
 
-多个团队同时提交 RayJob 时，可以使用 ACK 的 **ack-kube-queue**，先按团队配额排队，再由 KubeRay 创建任务所需的 RayCluster。下文将依次说明和演示：
+多个团队同时提交 RayJob 时，可以使用 **ACK Koord Queue（原名 ack-kube-queue）**，先按团队配额排队，再由 KubeRay 创建任务所需的 RayCluster。下文将依次说明和演示：
 
 - **组件如何配合**：区分队列准入、scheduler 的 Pod 调度与 Ray 的任务执行。
 - **基础排队流程**：用 CPU RayJob 演示配额不足时等待、提高配额后放行，以及结果检查和资源清理，无需 GPU、业务镜像或存储卷。
@@ -13,11 +13,11 @@
 | 组件 | 职责 |
 | --- | --- |
 | ElasticQuotaTree | 为团队定义资源配额，通过叶子节点关联任务命名空间。`min` 表示最低保障，`max` 表示使用上限。 |
-| ack-kube-queue | 根据配额树创建 Queue，为挂起的 RayJob 创建 QueueUnit，满足出队条件后将 `spec.suspend` 改为 `false`。 |
+| ACK Koord Queue | 根据配额树创建 Queue，为挂起的 RayJob 创建 QueueUnit，满足出队条件后将 `spec.suspend` 改为 `false`。 |
 | KubeRay Operator | 观察 RayJob，创建 RayCluster 和提交器 Job，跟踪执行状态并清理集群。 |
 | ACK 调度器 | 为已经创建的 Pod 选择实际节点。配额允许出队不代表节点一定能容纳 Pod。 |
 
-本文使用 ACK 的 kube-queue，资源为 `Queue`、`QueueUnit` 和 `ElasticQuotaTree`，不使用 Kubernetes Kueue 的 `ClusterQueue`、`LocalQueue` 或 `kueue.x-k8s.io/queue-name` 标签。队列关联来自命名空间与配额叶子节点的绑定。
+本文使用 ACK Koord Queue，资源为 `Queue`、`QueueUnit` 和 `ElasticQuotaTree`，不使用 Kubernetes Kueue 的 `ClusterQueue`、`LocalQueue` 或 `kueue.x-k8s.io/queue-name` 标签。队列关联来自命名空间与配额叶子节点的绑定。
 
 本例让每个 RayJob 通过 `rayClusterSpec` 创建独立集群；不使用 `clusterSelector` 向已有集群提交。后者的集群资源在任务提交前就已分配，不适用本文的集群创建前排队流程。
 
@@ -27,8 +27,8 @@
 
 | 阶段 | 处理对象与决策 | 观察点 |
 | --- | --- | --- |
-| 1. 入队 | kube-queue 为 `suspend: true` 的 RayJob 创建 QueueUnit，按所属 Queue 的策略排序。 | QueueUnit、Queue 中的任务顺序。 |
-| 2. 准入 | kube-queue 检查配额等出队条件，满足后更新 RayJob 为 `suspend: false`。默认配额检查关注 `max`，配置 AdmissionCheck 后还需通过额外检查。 | `spec.suspend`、QueueUnit 的消息和准入状态。 |
+| 1. 入队 | ACK Koord Queue 为 `suspend: true` 的 RayJob 创建 QueueUnit，按所属 Queue 的策略排序。 | QueueUnit、Queue 中的任务顺序。 |
+| 2. 准入 | ACK Koord Queue 检查配额等出队条件，满足后更新 RayJob 为 `suspend: false`。默认配额检查关注 `max`，配置 AdmissionCheck 后还需通过额外检查。 | `spec.suspend`、QueueUnit 的消息和准入状态。 |
 | 3. 创建资源 | KubeRay 观察到解除挂起，创建 RayCluster，并在集群就绪后提交任务。 | RayCluster、Head/Worker Pod、提交器 Job。 |
 | 4. 调度 Pod | ACK scheduler 检查节点资源、亲和性、污点和配额约束；启用相应策略时，可回收其他配额组借用的资源。 | Pod 的 `PodScheduled` 条件和调度事件。 |
 | 5. 执行计算 | Ray 在已启动的 Head/Worker 上分配 task、actor 和 placement group。 | Ray 任务状态、逻辑资源和业务日志。 |
@@ -40,7 +40,7 @@
 ## 前提条件
 
 - ACK Pro 或 ACK 灵骏集群，Kubernetes 1.24 或以上，已安装 KubeRay Operator。组件适用范围以 [ACK RayJob 调度文档](https://help.aliyun.com/zh/ack/cloud-native-ai-suite/use-cases/how-to-automate-ray-job-execution-in-ack-cluster)为准。
-- ack-kube-queue v1.21.4 或以上，并启用 RayJob 扩展。配额能力按 [ElasticQuotaTree 与任务队列配置指南](https://help.aliyun.com/zh/ack/ack-managed-and-ack-dedicated/user-guide/improve-resource-utilization-with-elasticquotatree-and-task-queues)准备，包括 ack-koordinator。
+- ACK Koord Queue v1.21.4 或以上，并启用 RayJob 扩展。配额能力按 [ElasticQuotaTree 与任务队列配置指南](https://help.aliyun.com/zh/ack/ack-managed-and-ack-dedicated/user-guide/improve-resource-utilization-with-elasticquotatree-and-task-queues)准备，包括 ack-koordinator。
 - 已配置 `kubectl`，具有创建命名空间、配额树、ConfigMap 和 RayJob 的权限。
 - 节点有足够资源运行 Head、Worker 和提交器，并为系统组件留有余量。Head 和 Worker 合计请求 **2 CPU、4 GiB 内存**；提交器额外请求 **100m CPU、512 MiB 内存**。
 - 节点能拉取 `rayproject/ray:2.48.0`。若需镜像加速，将清单中的三个镜像地址统一替换为自己的 ACR 镜像；保持 `rayVersion` 与镜像中的 Ray 版本一致。私有镜像的拉取凭据需在任务命名空间中配置。
@@ -49,9 +49,9 @@
 
 ## 1. 安装组件并启用 RayJob 扩展
 
-在 [ACK 控制台](https://cs.console.aliyun.com/)进入目标集群，通过**应用 → 云原生 AI 套件**安装 ack-kube-queue。完整安装流程参见 [使用任务队列 ack-kube-queue 管理 AI/ML 工作负载](https://help.aliyun.com/zh/ack/ack-managed-and-ack-dedicated/user-guide/use-ack-kube-queue-to-manage-job-queues)。
+在 [ACK 控制台](https://cs.console.aliyun.com/)进入目标集群，通过**应用 → 云原生 AI 套件**安装 ACK Koord Queue。完整安装流程参见 [使用任务队列 ACK Koord Queue 管理 AI/ML 工作负载](https://help.aliyun.com/zh/ack/ack-managed-and-ack-dedicated/user-guide/use-ack-kube-queue-to-manage-job-queues)。
 
-默认只开启原生 Job 排队。进入**应用 → Helm**，更新 ack-kube-queue，保留原有参数并将以下配置设为 `true`：
+默认只开启原生 Job 排队。进入**应用 → Helm**，更新 ACK Koord Queue 对应的 Helm 应用，保留原有参数并将以下配置设为 `true`：
 
 ```yaml
 extension:
@@ -139,7 +139,7 @@ kubectl get queueunit -n ray-queue-demo
 kubectl get rayjob,raycluster,pods -n ray-queue-demo
 ```
 
-使用已有配额树时，在原树中调整演示叶子及必要的父节点配额，不要应用随附的独立配额树。等待 ack-kube-queue 自行将 `suspend` 改为 `false`，不要手动取消挂起来绕过排队。
+使用已有配额树时，在原树中调整演示叶子及必要的父节点配额，不要应用随附的独立配额树。等待 ACK Koord Queue 自行将 `suspend` 改为 `false`，不要手动取消挂起来绕过排队。
 
 出队后，KubeRay 创建 Head、Worker 和提交器，任务开始执行。若再次应用含 `suspend: true` 的 RayJob 清单，会重新请求挂起，可能导致已创建的集群被删除；因此本步骤只更新配额文件。
 
@@ -271,7 +271,7 @@ spec:
 
 ### 回收如何发生，如何验收
 
-执行前，由管理员确认 ACK scheduler 已启用 Capacity Scheduling，并按 [抢占配置指南](https://help.aliyun.com/zh/ack/ack-managed-and-ack-dedicated/user-guide/enable-preemptive-scheduling/)将 `preemptionAlgorithm` 配置为 `ElasticQuota`。仅安装 kube-queue 或提高任务优先级不会开启这套回收规则。该设置影响集群调度，应在测试环境验证；本文不要求修改全局参数来运行前面的 CPU 示例。
+执行前，由管理员确认 ACK scheduler 已启用 Capacity Scheduling，并按 [抢占配置指南](https://help.aliyun.com/zh/ack/ack-managed-and-ack-dedicated/user-guide/enable-preemptive-scheduling/)将 `preemptionAlgorithm` 配置为 `ElasticQuota`。仅安装 ACK Koord Queue 或提高任务优先级不会开启这套回收规则。该设置影响集群调度，应在测试环境验证；本文不要求修改全局参数来运行前面的 CPU 示例。
 
 在 **B 先运行、A 后提交**、没有其他负载、Worker 每个只申请 1 GPU 的条件下，目标状态如下：
 

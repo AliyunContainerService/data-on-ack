@@ -1,8 +1,8 @@
-# Queue RayJobs with kube-queue on ACK
+# Queue RayJobs with ACK Koord Queue
 
 English | [简体中文](README_ZH.md)
 
-Use **ack-kube-queue** to admit RayJobs against team quotas before KubeRay creates their RayClusters. This guide covers the following topics in order:
+Use **ACK Koord Queue (formerly ack-kube-queue)** to admit RayJobs against team quotas before KubeRay creates their RayClusters. This guide covers the following topics in order:
 
 - **Component responsibilities**: distinguish queue admission, Pod scheduling by the scheduler, and task execution by Ray.
 - **Basic queuing workflow**: use a CPU RayJob to observe quota-based waiting, admission after a quota increase, result verification, and cleanup. No GPU, custom image, or persistent volume is required.
@@ -13,11 +13,11 @@ Use **ack-kube-queue** to admit RayJobs against team quotas before KubeRay creat
 | Component | Responsibility |
 | --- | --- |
 | ElasticQuotaTree | Defines team quotas and binds namespaces to leaf nodes. `min` is the guaranteed allocation; `max` is the usage ceiling. |
-| ack-kube-queue | Creates Queues from the quota tree and a QueueUnit for each suspended RayJob; sets `spec.suspend` to `false` when admission conditions are met. |
+| ACK Koord Queue | Creates Queues from the quota tree and a QueueUnit for each suspended RayJob; sets `spec.suspend` to `false` when admission conditions are met. |
 | KubeRay Operator | Creates the RayCluster and submitter Job, tracks execution, and cleans up the cluster. |
 | ACK scheduler | Assigns the resulting Pods to nodes. Quota admission does not guarantee that Pods can fit on available nodes. |
 
-This guide uses ACK kube-queue resources: `Queue`, `QueueUnit`, and `ElasticQuotaTree`. It does not use Kubernetes Kueue's `ClusterQueue`, `LocalQueue`, or `kueue.x-k8s.io/queue-name` label. Namespace bindings select the quota queue.
+This guide uses ACK Koord Queue resources: `Queue`, `QueueUnit`, and `ElasticQuotaTree`. It does not use Kubernetes Kueue's `ClusterQueue`, `LocalQueue`, or `kueue.x-k8s.io/queue-name` label. Namespace bindings select the quota queue.
 
 Each RayJob creates its own cluster through `rayClusterSpec`. The example does not use `clusterSelector` to target an existing cluster, whose resources have already been allocated before job submission.
 
@@ -27,8 +27,8 @@ A submitted job passes through these stages. Components cooperate through resour
 
 | Stage | Object and decision | What to observe |
 | --- | --- | --- |
-| 1. Enqueue | kube-queue creates a QueueUnit for a RayJob with `suspend: true` and orders it according to its Queue policy. | QueueUnit and job order in the Queue. |
-| 2. Admit | kube-queue checks admission conditions, including quota, then sets `suspend: false`. The default quota check concerns `max`; configured AdmissionChecks add further conditions. | `spec.suspend`, QueueUnit messages, and admission status. |
+| 1. Enqueue | ACK Koord Queue creates a QueueUnit for a RayJob with `suspend: true` and orders it according to its Queue policy. | QueueUnit and job order in the Queue. |
+| 2. Admit | ACK Koord Queue checks admission conditions, including quota, then sets `suspend: false`. The default quota check concerns `max`; configured AdmissionChecks add further conditions. | `spec.suspend`, QueueUnit messages, and admission status. |
 | 3. Create resources | KubeRay observes the resumed RayJob, creates the RayCluster, and submits the job once the cluster is ready. | RayCluster, Head/Worker Pods, and submitter Job. |
 | 4. Schedule Pods | ACK scheduler checks node capacity, affinity, taints, and quotas. With the appropriate policy enabled, it can reclaim resources borrowed by other quota groups. | Pod `PodScheduled` conditions and scheduling events. |
 | 5. Execute | Ray places tasks, actors, and placement groups on the running Head/Workers. | Ray task state, logical resources, and application logs. |
@@ -40,7 +40,7 @@ Whole-job admission also does not provide Gang Scheduling. If a workload needs a
 ## Prerequisites
 
 - An ACK Pro or ACK Lingjun cluster running Kubernetes 1.24 or later, with KubeRay Operator installed. See the [ACK RayJob scheduling guide](https://help.aliyun.com/en/ack/cloud-native-ai-suite/use-cases/how-to-automate-ray-job-execution-in-ack-cluster) for supported configurations.
-- ack-kube-queue v1.21.4 or later with the RayJob extension enabled. Prepare quota support, including ack-koordinator, as described in the [ElasticQuotaTree and task queue guide](https://help.aliyun.com/en/ack/ack-managed-and-ack-dedicated/user-guide/improve-resource-utilization-with-elasticquotatree-and-task-queues).
+- ACK Koord Queue v1.21.4 or later with the RayJob extension enabled. Prepare quota support, including ack-koordinator, as described in the [ElasticQuotaTree and task queue guide](https://help.aliyun.com/en/ack/ack-managed-and-ack-dedicated/user-guide/improve-resource-utilization-with-elasticquotatree-and-task-queues).
 - Configured `kubectl` and permission to manage namespaces, the quota tree, ConfigMaps, and RayJobs.
 - Available node capacity for the Head, Worker, submitter, and system components. The Head and Worker request **2 CPUs and 4 GiB memory** in total; the submitter additionally requests **100m CPU and 512 MiB memory**.
 - Nodes can pull `rayproject/ray:2.48.0`. If necessary, replace all three image references with an ACR mirror, keeping `rayVersion` consistent with the image. Configure pull credentials in the job namespace for private images.
@@ -49,9 +49,9 @@ Download [elastic-quota-tree.yaml](elastic-quota-tree.yaml) and [rayjob.yaml](ra
 
 ## 1. Install the component and enable RayJob support
 
-In the [ACK console](https://cs.console.aliyun.com/), open your cluster and install ack-kube-queue through **Applications → Cloud-native AI Suite**. Follow the complete [installation guide](https://help.aliyun.com/en/ack/ack-managed-and-ack-dedicated/user-guide/use-ack-kube-queue-to-manage-job-queues).
+In the [ACK console](https://cs.console.aliyun.com/), open your cluster and install ACK Koord Queue through **Applications → Cloud-native AI Suite**. Follow the complete [installation guide](https://help.aliyun.com/en/ack/ack-managed-and-ack-dedicated/user-guide/use-ack-kube-queue-to-manage-job-queues).
 
-Only native Job queuing is enabled by default. Under **Applications → Helm**, update ack-kube-queue, preserve its existing parameters, and enable:
+Only native Job queuing is enabled by default. Under **Applications → Helm**, update the Helm release for ACK Koord Queue, preserve its existing parameters, and enable:
 
 ```yaml
 extension:
@@ -139,7 +139,7 @@ kubectl get queueunit -n ray-queue-demo
 kubectl get rayjob,raycluster,pods -n ray-queue-demo
 ```
 
-For an existing quota tree, update the demo leaf and any necessary ancestors in that tree instead of applying the standalone manifest. Let ack-kube-queue change `suspend` to `false`; do not bypass admission by manually resuming the job.
+For an existing quota tree, update the demo leaf and any necessary ancestors in that tree instead of applying the standalone manifest. Let ACK Koord Queue change `suspend` to `false`; do not bypass admission by manually resuming the job.
 
 KubeRay then creates the Head, Worker, and submitter to execute the job. Reapplying the RayJob manifest containing `suspend: true` requests suspension again and can delete an already-created cluster. Update only the quota file in this step.
 
@@ -271,7 +271,7 @@ For resource accounting, each Head requests 1 CPU, 2 GiB, and no GPU; each Worke
 
 ### Reclamation and acceptance criteria
 
-Before testing, have the administrator verify that ACK scheduler has Capacity Scheduling enabled and configure `preemptionAlgorithm: ElasticQuota` following the [preemption guide](https://help.aliyun.com/en/ack/ack-managed-and-ack-dedicated/user-guide/enable-preemptive-scheduling). Installing kube-queue or increasing job priority alone does not enable these reclamation rules. This is a cluster-wide scheduler setting to validate in a test environment; the earlier CPU example does not require changing it.
+Before testing, have the administrator verify that ACK scheduler has Capacity Scheduling enabled and configure `preemptionAlgorithm: ElasticQuota` following the [preemption guide](https://help.aliyun.com/en/ack/ack-managed-and-ack-dedicated/user-guide/enable-preemptive-scheduling). Installing ACK Koord Queue or increasing job priority alone does not enable these reclamation rules. This is a cluster-wide scheduler setting to validate in a test environment; the earlier CPU example does not require changing it.
 
 With **B running before A submits**, no other workloads, and one GPU requested per Worker, the target progression is:
 

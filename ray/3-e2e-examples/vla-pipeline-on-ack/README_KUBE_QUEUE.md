@@ -1,20 +1,20 @@
-# Manage VLA jobs with ack-kube-queue on ACK
+# Manage VLA jobs with ACK Koord Queue
 
 English | [简体中文](./README_KUBE_QUEUE_ZH.md)
 
-This guide uses a real VLA data processing job that converts egocentric video into a LeRobot dataset. It shows how to queue a RayJob with ack-kube-queue on Alibaba Cloud Container Service for Kubernetes (ACK), admit it by adjusting its quota, and inspect the result. Follow the existing [VLA pipeline guide](./README.md) to prepare the VLA operators, models, container image, and OSS volumes. This guide focuses on job queueing.
+This guide uses a real VLA data processing job that converts egocentric video into a LeRobot dataset. It shows how to queue a RayJob with ACK Koord Queue (formerly ack-kube-queue) on Alibaba Cloud Container Service for Kubernetes (ACK), admit it by adjusting its quota, and inspect the result. Follow the existing [VLA pipeline guide](./README.md) to prepare the VLA operators, models, container image, and OSS volumes. This guide focuses on job queueing.
 
 ## Workflow
 
 1. Prepare an ACK cluster, GPU node, VLA image, models, and input data.
-2. Install ack-kube-queue from **Applications → Cloud-native AI Suite** in the ACK console and enable RayJob queueing.
+2. Install ACK Koord Queue from **Applications → Cloud-native AI Suite** in the ACK console and enable RayJob queueing.
 3. Assign a leaf quota in ElasticQuotaTree to the VLA namespace.
 4. Submit a RayJob with `spec.suspend: true` and observe it waiting in the queue.
 5. Increase the available quota, observe the job dequeue and execute, and verify its LeRobot output.
 
 ## Prerequisites
 
-- An ACK cluster that supports ack-kube-queue, the managed KubeRay Operator, and `kubectl` access. Check the supported cluster types and versions in the [ack-kube-queue component documentation](https://help.aliyun.com/en/ack/cloud-native-ai-suite/product-overview/ack-kube-queue).
+- An ACK cluster that supports ACK Koord Queue, the managed KubeRay Operator, and `kubectl` access. Check the supported cluster types and versions in the [ACK Koord Queue component documentation](https://help.aliyun.com/en/ack/cloud-native-ai-suite/product-overview/ack-kube-queue).
 - At least one schedulable GPU node, plus enough CPU and memory for a Ray head. The sample RayJob requests **8 CPU, 32 GiB of memory, and one GPU** in total. Allow additional capacity for system components.
 - Input video, MoGe, HaWoR, and MANO models, and a container image with Ray, Data-Juicer, and the VLA dependencies, prepared as described in the [VLA pipeline guide](./README.md). The Data-Juicer version in the image must match the version required by the script.
 - An input and code PVC readable by every Ray pod, and a writable output PVC. Use separate OSS prefixes for input and output. Create any private image pull Secret in the VLA job namespace. Do not place AccessKeys or tokens in the RayJob manifest.
@@ -22,12 +22,12 @@ This guide uses a real VLA data processing job that converts egocentric video in
 
 The example uses the `vla-demo` namespace. Replace the image and PVC names with your own. If the cluster already has an ElasticQuotaTree, add a leaf to that tree instead of creating another one. ACK currently supports only one ElasticQuotaTree in the `kube-system` namespace.
 
-## Step 1 — Install ack-kube-queue in the ACK console
+## Step 1 — Install ACK Koord Queue in the ACK console
 
 1. Sign in to the [ACK console](https://cs.console.aliyun.com/), open **Clusters**, and select your cluster.
 2. In the cluster navigation, choose **Applications → Cloud-native AI Suite**.
-3. If the suite is not installed, select **Kube-Queue** on its deployment page. If the suite is already installed, find **ack-kube-queue** in the component list and click **Deploy**. See [Manage AI/ML workloads with ack-kube-queue](https://help.aliyun.com/en/ack/ack-managed-and-ack-dedicated/user-guide/use-ack-kube-queue-to-manage-job-queues) for the console workflow.
-4. Enable **RayJob** queueing in the component parameters. By default, ack-kube-queue enables queueing for native Jobs only. If the component is already installed, update its parameters on the same page.
+3. If the suite is not installed, select **Kube-Queue** on its deployment page. If the suite is already installed, find **ACK Koord Queue** in the component list and click **Deploy**. See [Manage AI/ML workloads with ACK Koord Queue](https://help.aliyun.com/en/ack/ack-managed-and-ack-dedicated/user-guide/use-ack-kube-queue-to-manage-job-queues) for the console workflow.
+4. Enable **RayJob** queueing in the component parameters. By default, ACK Koord Queue enables queueing for native Jobs only. If the component is already installed, update its parameters on the same page.
 
 Confirm that the console shows the component as deployed, then check its workloads and CRD:
 
@@ -81,7 +81,7 @@ kubectl get elasticquotatree -n kube-system
 kubectl get queue -A
 ```
 
-ack-kube-queue creates a queue for each ElasticQuotaTree leaf and routes RayJobs from the associated namespace to that queue. See [ElasticQuotaTree and job queues](https://help.aliyun.com/en/ack/ack-managed-and-ack-dedicated/user-guide/improve-resource-utilization-with-elasticquotatree-and-task-queues).
+ACK Koord Queue creates a queue for each ElasticQuotaTree leaf and routes RayJobs from the associated namespace to that queue. See [ElasticQuotaTree and job queues](https://help.aliyun.com/en/ack/ack-managed-and-ack-dedicated/user-guide/improve-resource-utilization-with-elasticquotatree-and-task-queues).
 
 ## Step 3 — Submit the VLA RayJob
 
@@ -196,7 +196,7 @@ kubectl get rayjob vla-egodex-demo -n vla-demo -w
 kubectl get pods -n vla-demo -o wide
 ```
 
-The QueueUnit should become `Dequeued`. ack-kube-queue then sets the RayJob's `spec.suspend` to `false`, and KubeRay creates the Ray head, GPU worker, and submitter pods. The RayJob should eventually report `jobDeploymentStatus: Complete` and `jobStatus: SUCCEEDED`. If the cluster has only one 8-CPU GPU node, use `headGroupSpec.template.spec.nodeSelector` or node affinity to place the Ray head on a CPU node, leaving enough CPU for the GPU worker.
+The QueueUnit should become `Dequeued`. ACK Koord Queue then sets the RayJob's `spec.suspend` to `false`, and KubeRay creates the Ray head, GPU worker, and submitter pods. The RayJob should eventually report `jobDeploymentStatus: Complete` and `jobStatus: SUCCEEDED`. If the cluster has only one 8-CPU GPU node, use `headGroupSpec.template.spec.nodeSelector` or node affinity to place the Ray head on a CPU node, leaving enough CPU for the GPU worker.
 
 ## Step 5 — Inspect logs and output
 
@@ -221,5 +221,5 @@ On success, the application logs include the input row count, output row count, 
 ## References
 
 - [VLA pipeline demo](./README.md)
-- [Manage AI/ML workloads with ack-kube-queue](https://help.aliyun.com/en/ack/ack-managed-and-ack-dedicated/user-guide/use-ack-kube-queue-to-manage-job-queues)
+- [Manage AI/ML workloads with ACK Koord Queue](https://help.aliyun.com/en/ack/ack-managed-and-ack-dedicated/user-guide/use-ack-kube-queue-to-manage-job-queues)
 - [ElasticQuotaTree](https://help.aliyun.com/en/ack/ack-managed-and-ack-dedicated/user-guide/elasticquotatree)
