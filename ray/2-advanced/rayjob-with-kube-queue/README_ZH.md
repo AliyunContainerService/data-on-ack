@@ -2,7 +2,11 @@
 
 [English](README.md) | 简体中文
 
-多个团队同时提交 RayJob 时，可以使用 ACK 的 **ack-kube-queue**，先按团队配额排队，再由 KubeRay 创建任务所需的 RayCluster。本文先用不依赖 GPU、业务镜像或存储卷的 CPU 示例验证排队，再用两个团队共享 8 GPU 的案例说明资源借用、回收和 Head 保护。
+多个团队同时提交 RayJob 时，可以使用 ACK 的 **ack-kube-queue**，先按团队配额排队，再由 KubeRay 创建任务所需的 RayCluster。下文将依次说明和演示：
+
+- **组件如何配合**：区分队列准入、scheduler 的 Pod 调度与 Ray 的任务执行。
+- **基础排队流程**：用 CPU RayJob 演示配额不足时等待、提高配额后放行，以及结果检查和资源清理，无需 GPU、业务镜像或存储卷。
+- **多团队 GPU 共享**：以两个团队共享 8 GPU 为例，说明最低保障、空闲资源借用与回收，以及队列优先级、Pod 优先级和 Head 保护的配置。
 
 ## 工作原理
 

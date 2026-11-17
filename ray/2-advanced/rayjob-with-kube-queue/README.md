@@ -2,7 +2,11 @@
 
 English | [简体中文](README_ZH.md)
 
-Use **ack-kube-queue** to admit RayJobs against team quotas before KubeRay creates their RayClusters. Start with a CPU example that needs no GPU, custom image, or persistent volume, then explore two teams sharing eight GPUs through resource borrowing, reclamation, and Head protection.
+Use **ack-kube-queue** to admit RayJobs against team quotas before KubeRay creates their RayClusters. This guide covers the following topics in order:
+
+- **Component responsibilities**: distinguish queue admission, Pod scheduling by the scheduler, and task execution by Ray.
+- **Basic queuing workflow**: use a CPU RayJob to observe quota-based waiting, admission after a quota increase, result verification, and cleanup. No GPU, custom image, or persistent volume is required.
+- **GPU sharing across teams**: use two teams sharing eight GPUs to explain guarantees, borrowing and reclamation of idle resources, and configuration of queue priority, Pod priority, and Head protection.
 
 ## How it works
 
