@@ -50,6 +50,12 @@ spec:
             - name: AUTH_NONE_NAMESPACES
               value: "{{ .Values.auth.noneNamespaces }}"
             {{- end }}
+            - name: IMAGE_REWRITES
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "dev-console.fullname" . }}
+                  key: imageRewrites
+                  optional: true
             - name: MY_POD_NAME
               valueFrom:
                 fieldRef:

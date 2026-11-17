@@ -1,0 +1,24 @@
+{{- /*
+Seed platform settings (kubeai-platform-config) on first install so the
+console shows the AC2 default development images out of the box. The lookup
+guard ensures an existing ConfigMap (user-modified settings) is never
+overwritten on upgrade.
+*/ -}}
+{{- if .Values.platformConfig.enabled }}
+{{- if not (lookup "v1" "ConfigMap" .Release.Namespace "kubeai-platform-config") }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kubeai-platform-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "admin-ui.labels" . | nindent 4 }}
+data:
+  cullingEnabled: {{ .Values.platformConfig.cullingEnabled | quote }}
+  cullingIdleTime: {{ .Values.platformConfig.cullingIdleTime | quote }}
+  cullingCheckPeriod: {{ .Values.platformConfig.cullingCheckPeriod | quote }}
+  defaultImages: |-
+    {{- .Values.platformConfig.defaultImages | nindent 4 }}
+  commitRegistry: {{ .Values.platformConfig.commitRegistry | quote }}
+{{- end }}
+{{- end }}

@@ -7,11 +7,11 @@ global:
 dev-console:
   replicaCount: 1
   image:
-    repository: registry-cn-hangzhou.ack.aliyuncs.com/dev/ai-dev-console
-    tag: "v3.1.0"
-    pullPolicy: Always
-    commitAgentImageName: registry-cn-beijing.ack.aliyuncs.com/acs/commit-agent
-    commitAgentImageTag: v0.1.1-9d4e12d-aliyun
+    repository: registry-cn-hangzhou.ack.aliyuncs.com/acs/ai-dev-console
+    tag: "v3.2.0"
+    pullPolicy: IfNotPresent
+    commitAgentImageName: registry-cn-hangzhou.ack.aliyuncs.com/acs/commit-agent
+    commitAgentImageTag: v0.2.0
   commitAgent:
     socketAddress: /host/run/commit-agent/commit-agent.sock
     logLevel: info
@@ -93,13 +93,22 @@ dev-console:
       oidcProviderArn: ""
       oidcTokenFile: "/var/run/secrets/tokens/oidc-token"
 
+  # 镜像仓库前缀映射：把内置 AC2 开发镜像地址重写到集群可达的仓库
+  # （无公网出口 / 跨地域集群同步镜像后使用）。示例：
+  # imageRewrites:
+  #   - from: ac2-registry.cn-hangzhou.cr.aliyuncs.com/ac2/
+  #     to: registry-vpc.cn-beijing.aliyuncs.com/huozx/
+  imageRewrites: []
+
   # 认证与会话配置
   auth:
     # 认证模式:
-    #   aliyun (默认) - 阿里云 RAM OAuth2 SSO 登录
-    #   none          - 免登录，所有请求以内置 admin 身份运行，拥有全部权限；无需配置阿里云凭据
+    #   none (默认)   - 免登录，所有请求以内置 admin 身份运行，拥有全部权限；无需配置阿里云凭据，开箱即用
+    #   aliyun        - 阿里云 RAM OAuth2 SSO 登录（生产推荐，需 AK/SK 与 IMS 权限）
     #   custom        - 接入客户自定义用户系统，信任上游网关注入的身份请求头
-    mode: "aliyun"
+    # ⚠️ none 模式下任何能访问控制台地址的人都拥有全部权限，仅限内网/PoC 或已有外层访问控制的环境；
+    #    生产环境请改用 aliyun 或 custom，或为入口配置访问控制。
+    mode: "none"
     # custom 模式配置 (mode=custom 时生效)
     custom:
       # 上游网关注入的用户名请求头
@@ -129,9 +138,9 @@ dev-console:
 notebook:
   replicaCount: 1
   image:
-    repository: registry-cn-beijing.ack.aliyuncs.com/acs/notebook-controller
-    pullPolicy: Always
-    tag: v1.0.1-2d004d0-aliyun
+    repository: registry-cn-hangzhou.ack.aliyuncs.com/acs/notebook-controller
+    pullPolicy: IfNotPresent
+    tag: v1.1.0
   imagePullSecrets: []
   nameOverride: ""
   fullnameOverride: ""

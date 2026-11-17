@@ -1,68 +1,87 @@
 # ack-ai-dev-console
 
-`ack-ai-dev-console` is a component of the Cloud-Native AI Suite. It is a model development and training console for algorithm engineers, helping users quickly set up a deep learning environment on Kubernetes clusters. Key features include:
-
-- Cluster resource overview
-- Dataset management
-- Code management
-- Single-machine training
-- Distributed training
-- Scheduled jobs
-- Job history
+Model development console for the ACK Cloud-Native AI Suite: interactive
+notebooks (JupyterLab / VS Code), distributed training jobs (PyTorch / TensorFlow
+/ MPI / Ray), inference serving with an API playground, datasets and a model
+registry. Includes the notebook-controller and the commit-agent DaemonSet.
 
 ## Prerequisites
 
-Before installing `ack-ai-dev-console`, ensure the following:
+- ACK Pro cluster (Kubernetes >= 1.20) with `kubectl` / Helm 3 configured.
+- **Nginx Ingress Controller** installed.
+- Cloud-Native AI Suite / `ack-arena` installed (training operators).
+- Install `ack-ai-dashboard` alongside (provides user management and the admin
+  User record); the dev-console provisions the admin ServiceAccount/token used
+  to submit workloads in `none` mode.
 
-- This component cannot work independently. It depends on **ack-arena**.
-- Cluster type: **ACK Pro cluster** or **ACK@Edge cluster**.
+## Quick start (login-free, out of the box)
 
-## Installation
+The default `dev-console.auth.mode` is `none`. The chart provisions the `admin`
+ServiceAccount, token Secret and cluster-admin binding automatically, so
+notebook / training / serving submission works immediately.
 
-`ack-ai-dev-console` supports two installation methods. Choose the one that best fits your needs.
+```bash
+kubectl create namespace kube-ai
 
-### Via ACK Console
+helm install ack-ai-dev-console charts/ack-ai-dev-console -n kube-ai \
+  --set 'dev-console.console.ingress.hosts[0].host=ai-dev.example.com' \
+  --set 'dev-console.console.ingress.hosts[0].paths[0]=/'
+```
 
-1. Log in to Alibaba Cloud and go to the [ACK Console](https://cs.console.aliyun.com/#/k8s/cluster/list).
-2. Select an ACK Pro cluster and navigate to **Applications** → **AI Engineering Acceleration** in the left sidebar.
-3. If this is a fresh installation, click the **One-click Deploy** button to enter the component selection page. If the Cloud-Native AI Suite has been installed before, find `ack-ai-dev-console` in the component list and click **Install**.
-4. Under the interaction mode section, select **Dev Console**. In the pop-up dialog, configure permissions as instructed and select an access method.
-5. Click **Deploy Cloud-Native AI Suite** to complete the installation.
+### Access
 
-### Via Helm
+```bash
+kubectl get svc -n ingress-nginx ingress-nginx-controller \
+  -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
+# <SLB_IP> ai-dev.example.com
+```
 
-1. Log in to Alibaba Cloud and go to the [ACK Console](https://cs.console.aliyun.com/#/k8s/cluster/list).
-2. In the left sidebar, select **Marketplace** → **App Catalog** and choose **ack-ai-dev-console**.
-3. On the **ack-ai-dev-console** page, switch to the **Parameters** tab to review and update the configuration values.
-4. In the **Create** panel on the right, select the target cluster and namespace, then click **Create**.
+Open `http://ai-dev.example.com/`.
 
-#### Configuration Parameters
+> ⚠️ **Security**: `none` mode grants full admin access to anyone who can reach
+> the URL. Use only on intranet / PoC or behind access control; for production
+> use `aliyun` or `custom`, or restrict the Ingress/SLB.
 
-| Parameter                 | Description                                             | Default                                                      |
-| ------------------------- | ------------------------------------------------------- | ------------------------------------------------------------ |
-| replicaCount              | Number of replicas for the deployment                   | 1                                                            |
-| image.repository          | Docker image repository                                 | registry.cn-beijing.aliyuncs.com/acs/kubeai-dev-console      |
-| image.tag                 | Docker image tag                                        | 1.0.0                                                        |
-| image.pullPolicy          | Image pull policy                                       | IfNotPresent                                                 |
-| resources.limits.cpu      | CPU limit                                               | 2000m                                                        |
-| resources.limits.memory   | Memory limit                                            | 500Mi                                                        |
-| resources.requests.cpu    | CPU request                                             | 500m                                                         |
-| resources.requests.memory | Memory request                                          | 100Mi                                                        |
-| service.type              | Kubernetes service type                                 | NodePort                                                     |
-| service.port              | Service port                                            | 80                                                           |
-| service.nodePort          | Node port (when service type is NodePort)               | 31102                                                        |
-| console.host              | Hostname of the dev console                             |                                                              |
-| console.adminUid          | Alibaba Cloud account UID for admin access              |                                                              |
-| console.ingress.enabled   | Whether to enable Ingress                               | false                                                        |
-| nodeSelector              | Node selector for the pod                               | {}                                                           |
-| tolerations               | Tolerations for the pod                                 | []                                                           |
-| affinity                  | Affinity policy for the pod                             | {}                                                           |
+## Development images
 
-## Accessing the Console
+Notebook and training image defaults use the public **AC2 container images**
+(Alibaba Cloud Linux, designed for the ACK AI suite), e.g.
+`ac2-registry.cn-hangzhou.cr.aliyuncs.com/ac2/jupyter`,
+`.../jupyter-pytorch-cuda`, `.../vscode`, `.../pytorch`.
 
-1. Log in to Alibaba Cloud and go to the [ACK Console](https://cs.console.aliyun.com/#/k8s/cluster/list).
-2. Select an ACK Pro cluster and navigate to **Applications** → **AI Engineering Acceleration** in the left sidebar.
-3. Click the **Dev Console** link in the upper-left area of the Cloud-Native AI Suite component list page to open the dev console.
-4. To grant access to other users, create a RAM sub-account and share the console link. Sub-account users can log in with their own credentials.
-5. If deployed via Helm, obtain the service address using `kubectl` or configure an Ingress to access the console.
+### Offline / cross-region clusters
 
+If nodes cannot pull the AC2 registry directly, sync the AC2 images to a
+reachable registry and configure prefix rewrites (applied to the built-in image
+defaults at runtime):
+
+```bash
+helm upgrade ack-ai-dev-console charts/ack-ai-dev-console -n kube-ai --reuse-values \
+  --set 'dev-console.imageRewrites[0].from=ac2-registry.cn-hangzhou.cr.aliyuncs.com/ac2/' \
+  --set 'dev-console.imageRewrites[0].to=registry-vpc.cn-beijing.aliyuncs.com/<ns>/'
+```
+
+The console / notebook-controller / commit-agent images themselves default to
+`registry-cn-hangzhou.ack.aliyuncs.com/acs/` and can be overridden via
+`dev-console.image.repository`, `notebook.image.repository` and
+`dev-console.image.commitAgentImageName`.
+
+## Authentication modes
+
+`none` (default, login-free), `aliyun` (RAM OAuth2 SSO, needs the
+`ai-dev-console-credentials` Secret + IMS permissions), `custom` (trusted gateway
+headers). See `docs/deploy-guide.md`.
+
+## Key values
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `dev-console.image.repository` | `registry-cn-hangzhou.ack.aliyuncs.com/acs/ai-dev-console` | Console image |
+| `dev-console.image.tag` | `v3.2.0` | Console image tag |
+| `dev-console.image.commitAgentImageName` | `registry-cn-hangzhou.ack.aliyuncs.com/acs/commit-agent` | commit-agent image |
+| `dev-console.image.commitAgentImageTag` | `v0.2.0` | commit-agent tag |
+| `notebook.image.repository` | `registry-cn-hangzhou.ack.aliyuncs.com/acs/notebook-controller` | notebook-controller image |
+| `notebook.image.tag` | `v1.1.0` | notebook-controller tag |
+| `dev-console.auth.mode` | `none` | Auth mode |
+| `dev-console.console.ingress.hosts[0].host` | `ai-dev-console.local` | Ingress domain |
+| `dev-console.imageRewrites` | `[]` | AC2 image registry prefix rewrites |

@@ -1,0 +1,41 @@
+{{- /*
+In "none" auth mode the console runs every request as the built-in "admin"
+user and submits workloads through a per-tenant client built from the
+kube-ai/admin-token ServiceAccount token. Provision that identity here so a
+fresh `helm install` works out of the box (no manual SA/Secret/RBAC setup).
+*/ -}}
+{{- if eq (.Values.auth.mode | default "none") "none" }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: admin
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "dev-console.labels" . | nindent 4 }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: admin-token
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    kubernetes.io/service-account.name: admin
+  labels:
+    {{- include "dev-console.labels" . | nindent 4 }}
+type: kubernetes.io/service-account-token
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: admin-cluster-admin
+  labels:
+    {{- include "dev-console.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+  - kind: ServiceAccount
+    name: admin
+    namespace: {{ .Release.Namespace }}
+{{- end }}

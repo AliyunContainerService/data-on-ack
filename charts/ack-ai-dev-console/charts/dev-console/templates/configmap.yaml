@@ -3,6 +3,7 @@ kind: ConfigMap
 metadata:
   name: {{ include "dev-console.fullname" . }}
 data:
+  imageRewrites: {{ .Values.imageRewrites | default list | toJson | quote }}
   aimasterConfig: |-
     {
     }

@@ -63,6 +63,24 @@ rules:
     - create
     - update
     - delete
+  # The console binds platform roles (e.g. admin) to user ServiceAccounts.
+  # K8s RBAC escalation prevention requires escalate/bind on the referenced
+  # roles and bind on the bindings themselves.
+  - apiGroups:
+    - rbac.authorization.k8s.io
+    resources:
+    - clusterroles
+    - roles
+    verbs:
+    - escalate
+    - bind
+  - apiGroups:
+    - rbac.authorization.k8s.io
+    resources:
+    - clusterrolebindings
+    - rolebindings
+    verbs:
+    - bind
   - apiGroups:
     - apiextensions.k8s.io
     resources:
@@ -107,6 +125,7 @@ rules:
     - tfjobs
     - pytorchjobs
     - mpijobs
+    - notebooks
     verbs:
     - get
     - list
@@ -290,6 +309,19 @@ roleRef:
   kind: ClusterRole
   name: kubeai:{{ .Release.Namespace }}:{{ .Release.Name }}
 subjects:
-- kind: ServiceAccount
-  name: {{ include "admin-ui.serviceAccountName" . }}
-  namespace: {{ .Release.Namespace }}
+  - kind: ServiceAccount
+    name: {{ include "admin-ui.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+---
+# ClusterRole bound to platform admin users (User CRD apiRoles: admin).
+# Referenced by service.applyApiRoles via the AdminClusterRole constant.
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: kubeai-admin-clusterrole
+rules:
+  - apiGroups: ["*"]
+    resources: ["*"]
+    verbs: ["*"]
+  - nonResourceURLs: ["*"]
+    verbs: ["*"]

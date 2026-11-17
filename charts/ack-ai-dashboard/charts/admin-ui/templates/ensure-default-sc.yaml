@@ -1,0 +1,79 @@
+{{- /*
+Notebook workspace PVCs are created without an explicit storageClassName and
+rely on the cluster's default StorageClass. ACK clusters may ship none. This
+hook marks alicloud-disk-topology-alltype as default ONLY when no default
+StorageClass exists, so notebooks schedule out of the box without overriding
+a customer's existing choice.
+*/ -}}
+{{- if .Values.ensureDefaultStorageClass }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kubeai-ensure-default-sc
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kubeai-ensure-default-sc
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+rules:
+  - apiGroups: ["storage.k8s.io"]
+    resources: [storageclasses]
+    verbs: [get, list, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kubeai-ensure-default-sc
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kubeai-ensure-default-sc
+subjects:
+  - kind: ServiceAccount
+    name: kubeai-ensure-default-sc
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kubeai-ensure-default-sc
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 2
+  template:
+    spec:
+      serviceAccountName: kubeai-ensure-default-sc
+      restartPolicy: Never
+      containers:
+        - name: ensure
+          image: {{ .Values.ensureDefaultStorageClassImage | quote }}
+          command:
+            - sh
+            - -c
+            - |
+              if kubectl get storageclass -o json | grep -q 'is-default-class": "true"'; then
+                echo "default StorageClass already present; nothing to do"
+              else
+                kubectl annotate storageclass alicloud-disk-topology-alltype \
+                  storageclass.kubernetes.io/is-default-class=true --overwrite \
+                  && echo "marked alicloud-disk-topology-alltype as default" \
+                  || echo "alicloud-disk-topology-alltype not found; skipping"
+              fi
+{{- end }}

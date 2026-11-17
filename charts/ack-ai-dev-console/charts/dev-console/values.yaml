@@ -3,9 +3,11 @@
 replicaCount: 1
 
 image:
-  repository: registry-cn-hangzhou.ack.aliyuncs.com/dev/ai-dev-console
-  tag: "v3.1.0"
-  pullPolicy: Always
+  repository: registry-cn-hangzhou.ack.aliyuncs.com/acs/ai-dev-console
+  tag: "v3.2.0"
+  pullPolicy: IfNotPresent
+  commitAgentImageName: registry-cn-hangzhou.ack.aliyuncs.com/acs/commit-agent
+  commitAgentImageTag: v0.2.0
 
 resources:
   limits:
@@ -67,10 +69,10 @@ console:
 # Authentication and session configuration
 auth:
   # 认证模式:
-  #   aliyun (默认) - 阿里云 RAM OAuth2 SSO 登录
-  #   none          - 免登录，所有请求以内置 admin 身份运行，拥有全部权限；无需配置阿里云凭据
+  #   none (默认)   - 免登录，开箱即用（仅限内网/PoC，生产请改 aliyun/custom）
+  #   aliyun        - 阿里云 RAM OAuth2 SSO 登录
   #   custom        - 接入客户自定义用户系统，信任上游网关注入的身份请求头
-  mode: "aliyun"
+  mode: "none"
   # custom 模式配置 (mode=custom 时生效)
   custom:
     # 上游网关注入的用户名请求头
