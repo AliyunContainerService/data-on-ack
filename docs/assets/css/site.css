@@ -736,6 +736,26 @@ body.mobile-nav-open .mobile-nav { display: flex; }
 .prose pre { position: relative; margin: 22px 0; border-radius: var(--r-md); border: 1px solid var(--border-soft); background: #101823 !important; overflow: hidden; box-shadow: var(--shadow-sm); }
 .prose pre code { display: block; padding: 20px 22px; background: none; border: 0; color: #dde6f3; font-size: 13.5px; line-height: 1.8; white-space: pre; overflow-x: auto; }
 .prose pre code .code-copy-btn { position: absolute; }
+.prose pre.mermaid {
+  display: flex;
+  justify-content: center;
+  margin: 28px 0;
+  padding: 24px;
+  overflow-x: auto;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-md);
+  background: #fff !important;
+  box-shadow: var(--shadow-sm);
+  color: var(--text);
+}
+.prose pre.mermaid svg { display: block; width: 100%; max-width: 100%; height: auto; flex: none; }
+.prose pre.mermaid-loading { justify-content: flex-start; color: var(--muted); }
+.prose pre.mermaid-error {
+  display: block;
+  white-space: pre;
+  color: #b42318;
+  background: #fff7f6 !important;
+}
 .code-copy-btn {
   position: absolute; top: 10px; right: 10px; z-index: 2;
   display: grid; place-items: center; width: 32px; height: 32px;
