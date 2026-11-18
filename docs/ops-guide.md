@@ -1,7 +1,7 @@
 ---
 title: 运维指南
 layout: default
-parent: 云原生AI套件
+parent: AI套件控制台
 nav_order: 3
 ---
 
@@ -9,7 +9,7 @@ nav_order: 3
 
 本文介绍 data-on-ack AI 平台的日常运维操作：组件清单、升级、扩缩容、监控运维、故障排查、安全加固与卸载。
 
-> 本文 Helm 命令统一使用 release 名 `ack-ai-dashboard` 与 `ack-ai-dev-console`、命名空间 `kube-ai`（与[部署指南](deploy-guide)一致）。
+> 本文 Helm 命令统一使用 release 名 `ack-ai-dashboard` 与 `ack-ai-dev-console`、命名空间 `kube-ai`。安装方法分别参见[运维控制台部署指南](operations-console-deploy-guide.html)和[开发控制台部署指南](development-console-deploy-guide.html)。
 
 ## 组件清单
 
@@ -105,7 +105,7 @@ kubectl -n kube-ai exec deploy/prometheus-server -- \
   wget -qO- 'http://localhost:9090/api/v1/query?query=arena_total_gpus_of_cluster'
 ```
 
-**切换到 ARMS Prometheus**：见[部署指南 · 监控配置](deploy-guide.md#monitoring)（`prometheus.enabled=false` + Grafana 数据源 url）。
+**切换到 ARMS Prometheus**：见[运维控制台部署指南中的监控配置](operations-console-deploy-guide.html#监控配置)（`prometheus.enabled=false` + Grafana 数据源 URL）。
 
 ## 故障排查
 
@@ -157,7 +157,7 @@ kubectl logs deploy/notebook-controller-deployment -n notebook-controller-system
 
 默认镜像仓库 `registry-cn-hangzhou.ack.aliyuncs.com/acs/`，开发镜像默认 AC2 公共镜像。无公网出口/跨地域集群：
 
-1. 用 crane 将镜像同步到可达 ACR（见[部署指南 · 离线部署](deploy-guide.md#offline-deploy)）；
+1. 用 crane 将镜像同步到可达 ACR（见[开发控制台部署指南中的离线部署](development-console-deploy-guide.html#offline-deploy)）；
 2. 覆盖控制台镜像仓库（`admin-ui.image.repository`、`dev-console.image.repository`、`dev-console.image.commitAgentImageName`、`grafana.image.repository`、`prometheus.image.repository`），并通过独立 chart 的 `image.repository` 覆盖 Notebook Controller 镜像；
 3. 配置 AC2 开发镜像前缀映射：
 
