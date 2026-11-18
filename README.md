@@ -20,7 +20,11 @@ helm install ai-dashboard charts/ack-ai-dashboard -n kube-ai \
   --set 'admin-ui.dashboard.ingress.hosts[0].paths[0]=/' \
   --set grafana.adminPassword=<PASSWORD>
 
-# 3. 安装开发控制台
+# 3. 安装 Notebook Controller
+helm install notebook-controller charts/notebook-controller \
+  -n notebook-controller-system --create-namespace
+
+# 4. 安装开发控制台（可选）
 helm install ai-dev-console charts/ack-ai-dev-console -n kube-ai \
   --set 'dev-console.console.ingress.hosts[0].host=<YOUR_DOMAIN>' \
   --set 'dev-console.console.ingress.hosts[0].paths[0]=/'
@@ -46,7 +50,8 @@ data-on-ack/
 ├── notebook-controller/   # Notebook CRD Controller
 ├── charts/                # Helm Charts
 │   ├── ack-ai-dashboard/    # 运维控制台 + Grafana
-│   └── ack-ai-dev-console/  # 开发控制台 + Notebook Controller
+│   ├── ack-ai-dev-console/  # 开发控制台
+│   └── notebook-controller/ # 独立 Notebook Controller
 └── docs/                  # 文档
 ```
 

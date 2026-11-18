@@ -64,7 +64,7 @@ roleRef:
   name: notebook-controller-role
 subjects:
 - kind: ServiceAccount
-  name: notebook-controller-service-account
+  name: {{ include "notebook-controller.serviceAccountName" . }}
   namespace: {{ .Release.Namespace }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -117,5 +117,5 @@ roleRef:
   name: notebook-controller-leader-election-role
 subjects:
 - kind: ServiceAccount
-  name: notebook-controller-service-account
+  name: {{ include "notebook-controller.serviceAccountName" . }}
   namespace: {{ .Release.Namespace }}

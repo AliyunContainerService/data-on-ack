@@ -2,6 +2,3 @@ dependencies:
 - name: dev-console
   repository: file://./subcharts/dev-console
   version: 0.1.0
-- name: notebook
-  repository: file://./subcharts/notebook
-  version: 0.1.0
