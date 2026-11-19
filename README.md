@@ -20,20 +20,26 @@ helm install ai-dashboard charts/ack-ai-dashboard -n kube-ai \
   --set 'admin-ui.dashboard.ingress.hosts[0].paths[0]=/' \
   --set grafana.adminPassword=<PASSWORD>
 
-# 3. 安装开发控制台
+# 3. 安装 Notebook Controller
+helm install notebook-controller charts/notebook-controller \
+  -n notebook-controller-system --create-namespace
+
+# 4. 安装开发控制台（可选）
 helm install ai-dev-console charts/ack-ai-dev-console -n kube-ai \
   --set 'dev-console.console.ingress.hosts[0].host=<YOUR_DOMAIN>' \
   --set 'dev-console.console.ingress.hosts[0].paths[0]=/'
 ```
 
-详细步骤请参阅 [部署指南](docs/deploy-guide.md)。
+详细步骤请分别参阅[运维控制台部署指南](docs/operations-console-deploy-guide.md)和[开发控制台部署指南](docs/development-console-deploy-guide.md)。
 
 ## 文档
 
 | 文档 | 说明 |
 |------|------|
-| [部署指南](docs/deploy-guide.md) | 端到端安装配置（RAM 授权、Secret 创建、Helm 安装、域名配置） |
-| [功能使用指南](docs/user-guide.md) | 运维控制台和开发控制台的功能介绍和操作方法 |
+| [运维控制台部署指南](docs/operations-console-deploy-guide.md) | 安装运维控制台、Grafana 并配置 Prometheus 数据源 |
+| [运维控制台功能使用指南](docs/operations-console-user-guide.md) | 用户、配额、节点和工作负载管理 |
+| [开发控制台部署指南](docs/development-console-deploy-guide.md) | 安装开发控制台并配置认证和访问域名 |
+| [开发控制台功能使用指南](docs/development-console-user-guide.md) | Notebook、训练任务、模型推理和数据集管理 |
 | [运维指南](docs/ops-guide.md) | 升级、扩缩容、故障排查、安全加固、卸载 |
 
 ## 项目结构
@@ -46,7 +52,8 @@ data-on-ack/
 ├── notebook-controller/   # Notebook CRD Controller
 ├── charts/                # Helm Charts
 │   ├── ack-ai-dashboard/    # 运维控制台 + Grafana
-│   └── ack-ai-dev-console/  # 开发控制台 + Notebook Controller
+│   ├── ack-ai-dev-console/  # 开发控制台
+│   └── notebook-controller/ # 独立 Notebook Controller
 └── docs/                  # 文档
 ```
 

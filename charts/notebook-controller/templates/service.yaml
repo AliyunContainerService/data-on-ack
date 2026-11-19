@@ -7,7 +7,10 @@ metadata:
     app: notebook-controller
 spec:
   ports:
-  - port: 8081
+  - name: metrics
+    port: 8080
+    targetPort: metrics
+    protocol: TCP
   selector:
     app: notebook-controller
 

@@ -133,21 +133,3 @@ dev-console:
   nodeSelector: {}
   tolerations: []
   affinity: {}
-
-# Notebook Controller
-notebook:
-  replicaCount: 1
-  image:
-    repository: registry-cn-hangzhou.ack.aliyuncs.com/acs/notebook-controller
-    pullPolicy: IfNotPresent
-    tag: v1.1.0
-  imagePullSecrets: []
-  nameOverride: ""
-  fullnameOverride: ""
-  serviceAccount:
-    create: true
-    annotations: {}
-    name: "notebook-controller-service-account"
-
-labels:
-  app: notebook-controller
