@@ -28,7 +28,7 @@
 | 阶段 | 处理对象与决策 | 观察点 |
 | --- | --- | --- |
 | 1. 入队 | ACK Koord Queue 为 `suspend: true` 的 RayJob 创建 QueueUnit，按所属 Queue 的策略排序。 | QueueUnit、Queue 中的任务顺序。 |
-| 2. 准入 | ACK Koord Queue 检查配额等出队条件，满足后更新 RayJob 为 `suspend: false`。默认配额检查关注 `max`，配置 AdmissionCheck 后还需通过额外检查。 | `spec.suspend`、QueueUnit 的消息和准入状态。 |
+| 2. 准入 | ACK Koord Queue 检查配额等出队条件，满足后解除 RayJob 挂起。普通可抢占任务按 `max` 检查；显式标记为不可抢占的任务按 `min` 保障检查。配置 AdmissionCheck 后还需通过额外检查。 | `spec.suspend`、QueueUnit 的消息和准入状态。 |
 | 3. 创建资源 | KubeRay 观察到解除挂起，创建 RayCluster，并在集群就绪后提交任务。 | RayCluster、Head/Worker Pod、提交器 Job。 |
 | 4. 调度 Pod | ACK scheduler 检查节点资源、亲和性、污点和配额约束；启用相应策略时，可回收其他配额组借用的资源。 | Pod 的 `PodScheduled` 条件和调度事件。 |
 | 5. 执行计算 | Ray 在已启动的 Head/Worker 上分配 task、actor 和 placement group。 | Ray 任务状态、逻辑资源和业务日志。 |
@@ -63,10 +63,14 @@ extension:
 
 ```bash
 kubectl -n kube-queue get deploy
+kubectl -n kube-queue rollout status deploy/kube-queue-controller --timeout=300s
+kubectl -n kube-queue rollout status deploy/job-extensions --timeout=300s
 kubectl get crd rayjobs.ray.io \
   elasticquotatrees.scheduling.sigs.k8s.io \
   queues.scheduling.x-k8s.io queueunits.scheduling.x-k8s.io
 ```
+
+确认队列控制器的 `kube-queue-plugin-config` 配置中启用了 `Priority` 和 `ElasticQuota` 插件，再提交新的 RayJob。先提交任务、后启动 RayJob 扩展时，部分版本不会自动接管已经写入 `status.startTime` 的挂起任务；应在组件就绪后重新创建尚未运行的演示任务。
 
 ## 2. 创建演示配额
 
@@ -134,12 +138,14 @@ max:
 ```bash
 kubectl apply -f elastic-quota-tree.yaml
 kubectl wait rayjob/ray-queue-demo -n ray-queue-demo \
-  --for=jsonpath='{.spec.suspend}'=false --timeout=300s
+  --for=jsonpath='{.status.jobDeploymentStatus}'=Running --timeout=600s
 kubectl get queueunit -n ray-queue-demo
 kubectl get rayjob,raycluster,pods -n ray-queue-demo
 ```
 
 使用已有配额树时，在原树中调整演示叶子及必要的父节点配额，不要应用随附的独立配额树。等待 ACK Koord Queue 自行将 `suspend` 改为 `false`，不要手动取消挂起来绕过排队。
+
+`suspend` 为 `false` 时可能从 API 输出中省略，空值也表示未挂起。因此本例等待新建 RayJob 进入 `Running` 部署阶段，并结合 QueueUnit 和 Pod 状态确认放行，避免等待字面值 `false` 导致误报超时。`Running` 仍不代表业务计算成功；若任务已快速进入 `Complete`，直接进行下一节的结果检查。
 
 出队后，KubeRay 创建 Head、Worker 和提交器，任务开始执行。若再次应用含 `suspend: true` 的 RayJob 清单，会重新请求挂起，可能导致已创建的集群被删除；因此本步骤只更新配额文件。
 
@@ -195,17 +201,20 @@ kubectl get queue -n kube-queue -o yaml
 | --- | --- | --- |
 | `scheduling.x-k8s.io/priority: "9"` | RayJob 的 `metadata.annotations` | 同一个 Queue 内的任务排序；本例每个团队单独一个队列，不能用 A 的 9 与 B 的 3 推导跨队列抢占。 |
 | `priorityClassName` | Head/Worker 的 Pod template `spec` | scheduler 使用的 Pod 优先级，参与调度与抢占判断。 |
+| `quota.scheduling.alibabacloud.com/preemptible: "false"` | A 的 RayJob `metadata.labels` | 队列按不可抢占任务的保障额度准入；任务请求及已有受保护用量必须落在叶子和祖先的 `min` 内。B 顶层显式设为 `"true"`，允许按 `max` 借用。 |
 | `quota.scheduling.alibabacloud.com/preemptible: "false"` | Head/Worker 的 Pod template `metadata.labels` | ACK 配额抢占保护；该配额组内所有受保护 Pod 的资源请求总量必须落在 `min` 内。 |
 
 [priority-classes.yaml](priority-classes.yaml) 创建两个集群级 PriorityClass：`ray-protected=10000` 和 `ray-batch-worker=1000`，均不设为集群默认值。创建前确认名称未被其他业务使用。较高的 PriorityClass 本身不是不可抢占保证；`preemptionPolicy: Never` 表示该 Pod 不主动抢占别人，也不是保护该 Pod 不被抢占的开关。
 
-下面是要合并进**完整业务 RayJob**的配置片段，不能单独 `kubectl apply`。保留原有镜像、入口、容器、资源请求和卷配置；标签必须落在 Pod template 上，仅贴到 RayJob 顶层不会自动保护 Pod。
+下面是要合并进**完整业务 RayJob**的配置片段，不能单独 `kubectl apply`。保留原有镜像、入口、容器、资源请求和卷配置。RayJob 顶层标签与 Pod template 标签分别服务于队列准入和 Pod 抢占策略，两层都要配置。只保护 A 的 Pod 而漏掉 RayJob 顶层标签时，队列可能按普通可抢占任务检查父节点 `max`，在 B 已占满 8 GPU 时阻塞 A；此时 scheduler 尚无 A 的 Pod 可用于发起回收。
 
 ```yaml
 # Team A: merge into the complete RayJob manifest.
 metadata:
   name: guaranteed-job
   namespace: ray-guaranteed
+  labels:
+    quota.scheduling.alibabacloud.com/preemptible: "false"
   annotations:
     scheduling.x-k8s.io/priority: "9"
 spec:
@@ -238,6 +247,8 @@ spec:
 metadata:
   name: batch-job
   namespace: ray-batch
+  labels:
+    quota.scheduling.alibabacloud.com/preemptible: "true"
   annotations:
     scheduling.x-k8s.io/priority: "3"
 spec:
@@ -271,7 +282,7 @@ spec:
 
 ### 回收如何发生，如何验收
 
-执行前，由管理员确认 ACK scheduler 已启用 Capacity Scheduling，并按 [抢占配置指南](https://help.aliyun.com/zh/ack/ack-managed-and-ack-dedicated/user-guide/enable-preemptive-scheduling/)将 `preemptionAlgorithm` 配置为 `ElasticQuota`。仅安装 ACK Koord Queue 或提高任务优先级不会开启这套回收规则。该设置影响集群调度，应在测试环境验证；本文不要求修改全局参数来运行前面的 CPU 示例。
+执行前，由管理员确认 ACK scheduler 已启用 Capacity Scheduling，且 `preemptionAlgorithm` 使用 `ElasticQuota`，或使用会优先尝试 ElasticQuota 的 `Auto`。当前默认值为 `Auto`，本例验证时沿用了该配置。参见 [抢占配置指南](https://help.aliyun.com/zh/ack/ack-managed-and-ack-dedicated/user-guide/enable-preemptive-scheduling/)。仅安装 ACK Koord Queue 或提高任务优先级不会开启这套回收规则；若需修改调度器参数，应评估其对整个集群的影响。
 
 在 **B 先运行、A 后提交**、没有其他负载、Worker 每个只申请 1 GPU 的条件下，目标状态如下：
 
@@ -302,6 +313,22 @@ kubectl get events -n ray-batch --sort-by=.metadata.creationTimestamp
 B 的 `replicas: 8` 仍是期望副本数，抢占不会自动把它改成 6。KubeRay 可能补建被回收的 Worker，新增 Pod 在资源不足时保持 Pending。保护 Head 只降低控制面被配额抢占打断的风险，不保证 Worker 上的 actor、训练状态或整个 RayJob 不失败；批处理需支持重试、幂等输出或 checkpoint 恢复。固定 world size 的分布式训练不能直接套用该“8 降到 6 继续运行”的假设。若额外启用 Gang Scheduling，还需遵守同一 PodGroup 的优先级约束，不能直接照搬本例 Head/Worker 的不同优先级。
 
 验证后先清理两个业务 RayJob 及其业务资源，再移除本例新增的配额叶子和命名空间。仅在配额树与 PriorityClass 均为本例独占、且没有其他使用者时，才删除相应整份资源清单。
+
+## 实测范围
+
+2026-11-19 在 ACK 集群验证：Kubernetes `v1.37.1-aliyun.1`、KubeRay `v1.7.0-release.5`、ACK Koord Queue Helm Chart `1.26.10`、Ray `2.48.0`、KWOK `v0.8.0`。ACK scheduler 使用现有的默认 `Auto` 抢占配置。
+
+| 检查项 | 观测结果 |
+| --- | --- |
+| CPU 配额不足 | QueueUnit 报 `request 2, max 1`，RayJob 挂起，未创建 RayCluster。 |
+| 提高 CPU 配额 | 队列自动放行；真实节点执行后输出 `squares: [1, 4, 9, 16, 25]`、`total: 55`，RayJob 为 `Complete / SUCCEEDED`。 |
+| CPU 延迟回收 | 完成后等待配置的 300 秒，RayCluster 自动删除，RayJob 对象保留。 |
+| GPU 借用与回收 | B 的 8 个 Worker 先获调度；A 准入后运行 2 个 Worker，B 保留 6 个运行中的 Worker 和 2 个 Pending 替补，Head UID 不变。删除 A 后，B 恢复到 8 个运行中的 Worker。 |
+| Block 队头阻塞 | 在 B 的队列提交优先级 9、请求 9 GPU 的大任务，以及优先级 1、请求 1 GPU 的小任务。即使节点空闲，小任务仍等待；删除无法满足的队头大任务后，小任务自动出队。 |
+
+CPU 执行时，因一个节点拉取镜像失败，重试清单仅增加了指向已缓存同一镜像的真实节点的 `nodeSelector`。并行验证使用同一棵配额树：保留 CPU 演示叶子，加入两个 GPU 叶子，将根 CPU/内存扩为 36 CPU、72 GiB，GPU 总额仍为 8，两个 GPU 叶子的配置保持不变。
+
+GPU 验证使用一个 32 CPU、64 GiB、8 GPU 的 KWOK 模拟节点，以独立标签、`NoSchedule` 污点及测试 Pod 的选择器和容忍隔离，Head、Worker、提交器均定向到该节点。**KWOK 不执行容器或 Ray 计算**；该部分只验证队列准入、真实 scheduler 的调度/抢占和 KubeRay 的 Pod 重建。模拟的 `Running` 或提交器 `Completed` 不代表 GPU 业务执行成功，也未验证训练状态恢复。由于没有实际 Ray 进程，RayJob 可能随后因无法取得业务终态而标记为 `Failed`，不能以其业务状态验收模拟 GPU 测试。
 
 ## 常见问题
 
