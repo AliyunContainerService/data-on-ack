@@ -1,0 +1,23 @@
+apiVersion: scheduling.sigs.k8s.io/v1beta1
+kind: ElasticQuotaTree
+metadata:
+  name: ray-gpu-teams
+  namespace: kube-system
+spec:
+  root:
+    name: root
+    min: {cpu: "32", memory: 64Gi, nvidia.com/gpu: "8"}
+    max: {cpu: "32", memory: 64Gi, nvidia.com/gpu: "8"}
+    children:
+      - name: guaranteed
+        namespaces: [ray-guaranteed]
+        attributes:
+          kube-queue/queue-policy: Block
+        min: {cpu: "8", memory: 16Gi, nvidia.com/gpu: "2"}
+        max: {cpu: "8", memory: 16Gi, nvidia.com/gpu: "2"}
+      - name: batch
+        namespaces: [ray-batch]
+        attributes:
+          kube-queue/queue-policy: Block
+        min: {cpu: "12", memory: 24Gi, nvidia.com/gpu: "6"}
+        max: {cpu: "24", memory: 48Gi, nvidia.com/gpu: "8"}

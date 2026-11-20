@@ -1,0 +1,17 @@
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: ray-protected
+value: 10000
+globalDefault: false
+preemptionPolicy: PreemptLowerPriority
+description: "Priority for guaranteed Ray workloads and batch head Pods."
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: ray-batch-worker
+value: 1000
+globalDefault: false
+preemptionPolicy: PreemptLowerPriority
+description: "Priority for recoverable batch Ray workers."

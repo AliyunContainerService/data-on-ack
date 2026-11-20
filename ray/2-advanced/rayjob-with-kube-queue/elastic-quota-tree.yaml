@@ -1,0 +1,24 @@
+apiVersion: scheduling.sigs.k8s.io/v1beta1
+kind: ElasticQuotaTree
+metadata:
+  name: ray-queue-demo
+  namespace: kube-system
+spec:
+  root:
+    name: root
+    min:
+      cpu: "4"
+      memory: 8Gi
+    max:
+      cpu: "4"
+      memory: 8Gi
+    children:
+      - name: ray-queue-demo
+        namespaces:
+          - ray-queue-demo
+        min:
+          cpu: "1"
+          memory: 2Gi
+        max:
+          cpu: "1"
+          memory: 2Gi
