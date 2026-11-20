@@ -18,6 +18,7 @@ rollout 管控面。示例采用 **slime + harbor** 技术栈（见
 | # | 指南 | 解决的问题 |
 |---|------|-----------|
 | 3 | [用 RolloutServer 管理轨迹](2-advanced/3-rolloutserver-trajectory-management/README_ZH.md) | 部署 rollout 管控面：带容错/配额地运行 trial、持久化轨迹、提供 RL 训练数据 |
+| 5 | [在 ACS 上运行 Rollout Server 与沙箱](2-advanced/5-rolloutserver-on-acs/README_ZH.md) | 在 ACS 集群中部署、ACK 借用 ACS 算力运行沙箱、使用 ACS Agent Sandbox 预热池的 Helm 配置 |
 
 更多进阶主题（镜像缓存、P2P 加速环境 setup）规划中。
 
