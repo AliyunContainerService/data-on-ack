@@ -4,14 +4,34 @@ Run Harbor tasks on ACK, persist their trajectories to OSS, and send a completio
 callback to Ray. A model actor calls Alibaba Cloud Model Studio (Bailian) to
 analyze the execution trace; a separate writer actor saves the analysis to OSS.
 
-**Why.** Rollout Server owns the environment, agent, verifier, and trial lifecycle.
-Trajectory analysis has its own model and storage requirements. This example
-connects the two through a callback without changing the original verifier reward.
-Failure attribution, quality labeling, and training-data filtering can build on
-this pattern; this example only produces analysis text.
+Rollout Server manages the environment, agent, verifier, and trial lifecycle. On completion, it calls Ray, which runs the analysis model and stores its output separately. The original verifier reward stays unchanged. This example produces analysis text; failure attribution, quality labeling, and training-data filtering require additional evidence and processing logic.
 
-For Rollout Server deployment and persistence, see
-[Manage trajectories with RolloutServer](../3-rolloutserver-trajectory-management/README.md).
+First configure the environment backend, concurrency, and archive using
+[Rollout Server configuration and use](../3-rolloutserver-trajectory-management/USAGE.md).
+
+## Inputs beyond installed operators
+
+Assume `ack-sandbox-controller`, Rollout Server, and KubeRay Operator are already installed. The user primarily chooses the Harbor task range and attempt count, agent, Bailian model and region, and a secure reference to the API-key Secret. Reuse existing dataset manifests, image digests, SandboxSets, and permissions. Record the selected backend, concurrency and timeouts, OSS bucket with fresh input/output prefixes, and the desired output type: profile, evidence-backed failure attribution, or cleaning/SFT export. OSS events additionally require OSS CSI for archives, OSS notification/MNS, and a scoped consumer identity; RRSA is one implementation.
+
+The completion-hook example below generates model analysis text. Auditable failure attribution additionally needs the same run's verifier CTRF, test stdout, reward, exception information, and agent steps; `success` alone cannot justify a root-cause claim. Verify real model calls, native trajectories, verifier results, and postprocessing separately.
+
+An OSS-event alternative is: Rollout Server writes `<run-id>.tar.gz` to a fresh prefix; OSS ObjectCreated/CopyObject notifications deliver the object event to MNS; a scoped consumer extracts trajectory and verifier evidence and submits a Ray attribution task; it acknowledges the message only after a versioned output is stored in a separate prefix. Check the actual event type: renaming an OSS-mounted archive may generate CopyObject. Outputs should carry run ID, source URI/hash, reward, verifier evidence, cited step IDs, conclusions, and uncertainty. An existing output must not silently suppress reprocessing with a new analysis version.
+
+If a consumer only emits `deterministic_trajectory_profile` counts without reading verifier files, it **has not produced failure attribution**. Do not label a profile as attribution. The callback-based Ray Serve example below is a separate path; record implementation and acceptance results for each trigger mode separately.
+
+An attribution output can be checked against this illustrative shape (not a recorded run):
+
+```json
+{
+  "run_id": "<run-id>",
+  "input_uri": "oss://<bucket>/<prefix>/<run-id>.tar.gz",
+  "input_sha256": "<sha256>",
+  "verifier_reward": 0.0,
+  "failed_tests": [{"name": "<test-name>", "evidence_file": "verifier/ctrf.json"}],
+  "findings": [{"step_id": 7, "observation": "<evidence>", "likely_cause": "<hypothesis>", "confidence": "low"}],
+  "analysis_version": "<version>"
+}
+```
 [中文](README_ZH.md).
 
 ## How it works
@@ -91,6 +111,27 @@ kubectl -n "$TRACE_NAMESPACE" get pvc \
   trace-analysis-rollout-pvc trace-analysis-output-pvc
 # Both claims should be Bound.
 ```
+
+### Attribution, deduplication, and quality check example
+
+[postprocess_example.py](./postprocess_example.py) reads `agent/trajectory.json` and `verifier/ctrf.json` from one run archive. It records failed-test evidence and flags empty or malformed traces. Its content hash identifies one record; it does not measure duplication across a batch:
+
+```bash
+python postprocess_example.py ./example-run.tar.gz ./example-analysis.json
+```
+
+In production, check existing outputs by `analysis_version + input hash`, retain the provenance of every run, and acknowledge the message only after the result is stored. Failed-run attribution must inspect verifier assertions and logs together with agent commands and observations; successful runs can report the verifier-backed success conclusion. Quarantine records that fail quality checks before SFT export.
+
+[failure_attribution.py](./failure_attribution.py) shows how the trajectory, CTRF, verifier stdout and reward from one archive feed a Ray attribution function. The example identifies the specific failure pattern of extra files left in a target directory; other failure patterns remain `unknown` until an evidence-backed rule or review is added.
+
+Use [ray_batch_dedup.py](./ray_batch_dedup.py) for batch exact deduplication. Put one completed `oss://<bucket>/<key>.tar.gz` URI on each line of `archives.txt`, then run it where the consumer has `GetObject` permission and Ray Client access:
+
+```bash
+python ray_batch_dedup.py --oss-manifest archives.txt --region <oss-region> \
+  --output duplicate-runs.jsonl --shards 8 --batch-size 32
+```
+
+Normalized agent steps are fingerprinted in bounded batches. Identical fingerprints route to the same Ray actor, which stores run membership in SQLite. The report includes the global duplicate rate `(total - unique) / total` and a manifest mapping each duplicate to a representative run. Archives without a valid trajectory go to a rejected manifest and do not enter the rate denominator. Reading an explicit OSS manifest requires only `GetObject`, not bucket listing. The actor work directory must be durable or rebuildable for production runs. This is exact normalized-content duplication; near duplicates require a separately defined similarity threshold and candidate search.
 
 ## Step 2 — Deploy the Ray analysis service
 
@@ -312,23 +353,19 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from ray import serve
 
-
 INPUT_ROOT = Path(os.getenv("TRACE_INPUT_ROOT", "/mnt/trace-input"))
 OUTPUT_ROOT = Path(os.getenv("TRACE_OUTPUT_ROOT", "/mnt/trace-output/trace-analysis"))
-
 
 class TraceRequest(BaseModel):
     path: str
     success: bool
     trace_id: str = Field(default_factory=lambda: uuid.uuid4().hex)
 
-
 def _next_chunk(generator):
     try:
         return True, ray.get(next(generator))
     except StopIteration:
         return False, None
-
 
 @ray.remote(num_cpus=0.25)
 class ModelActor:
@@ -380,7 +417,6 @@ class ModelActor:
                     if delta:
                         yield delta
 
-
 @ray.remote(num_cpus=0.25)
 class OssWriterActor:
     def write(self, trace_id: str, success: bool, analysis: str, model: str) -> str:
@@ -396,9 +432,7 @@ class OssWriterActor:
         path.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
         return str(path)
 
-
 api = FastAPI()
-
 
 @serve.deployment(num_replicas=1, ray_actor_options={"num_cpus": 0.5})
 @serve.ingress(api)
@@ -438,7 +472,6 @@ class TraceAnalyzer:
                 yield f"event: error\ndata: {json.dumps({'error': type(exc).__name__, 'trace_id': item.trace_id})}\n\n"
 
         return StreamingResponse(events(), media_type="text/event-stream")
-
 
 app = TraceAnalyzer.bind()
 ```

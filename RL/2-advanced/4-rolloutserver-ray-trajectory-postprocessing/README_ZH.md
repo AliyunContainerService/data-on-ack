@@ -3,11 +3,62 @@
 在 ACK 上运行 Harbor 任务，将轨迹持久化到 OSS，并在任务结束后自动交给 Ray 分析：
 模型 Actor 调用百炼生成执行过程分析，写入 Actor 将结果保存到另一个 OSS 目录。
 
-**为什么。** Rollout Server 负责环境、agent、verifier 和任务生命周期；轨迹分析有独立的
-模型调用和存储需求。本例通过完成回调连接两者，Ray 不接管原任务，也不修改 verifier 奖励。
-可以用相同方式扩展失败归因、质量标注或训练数据筛选；这些扩展不包含在本例中。
+Rollout Server 管理环境、agent、verifier 和试次生命周期。任务完成后，它通过回调通知 Ray；Ray 独立调用分析模型并保存结果，原始 verifier 奖励保持不变。本例展示分析文本的生成；失败归因、质量标注和训练样本筛选需要额外的证据与处理逻辑。
 
-Rollout Server 的部署与轨迹持久化配置参见[用 RolloutServer 管理轨迹](../3-rolloutserver-trajectory-management/README_ZH.md)。
+先按[Rollout Server 使用与配置](../3-rolloutserver-trajectory-management/USAGE_ZH.md)选择环境后端、并发和归档，再接入本指南的后处理。
+
+## 从已安装组件到可运行流程，还需要什么
+
+本指南假设 ACK 集群已安装 `ack-sandbox-controller`、Rollout Server 和 KubeRay Operator；这三项是平台前提，不应让每个用户重复填写安装参数。选择 OSS 事件方式时，还需要 OSS CSI（用于 Server 归档）、OSS 事件通知/MNS 和给消费者访问队列及对象前缀的身份。具体实现可以使用 RRSA；现有集群权限先查询复用。
+
+| 信息 | 来源与用途 |
+| --- | --- |
+| Harbor 题目及固定镜像 digest、期望 eval/RL 次数 | 用户指定任务范围；已有 dataset manifest 时直接读取，不让用户手填每个镜像。 |
+| Agent、百炼模型、地域/Base URL、API Key 的 Secret 引用 | 用户提供模型选择与安全交付的凭据；服务端验证 agent 实际拿到的变量名。不要在文档、values 或日志里写密钥值。 |
+| SandboxSet 或 E2B 后端、并发与超时 | 用户选择运行方式和预算；按[Rollout Server 使用与配置](../3-rolloutserver-trajectory-management/USAGE_ZH.md)记录，已有池先复用。 |
+| OSS Bucket、全新输入/输出前缀、PVC/身份 | 由用户确认目标 Bucket；前缀与资源可在授权范围内创建，记录实际地域和权限边界。 |
+| 后处理目标 | 明确是轨迹概况、含 verifier 证据的失败归因，还是清洗/SFT 导出；三者输出和验收不同。 |
+
+本例下文的 Ray Serve 完成回调会生成模型分析文本。若要求**可审计的失败归因**，还须把同一 run 的 `verifier/ctrf.json`、`test-stdout.txt`、reward、异常与 agent 步骤一并传入分析，并在输出中引用具体测试与 step ID；仅传 `success` 布尔值会限制结论。真实 agent 的模型调用、原生轨迹、verifier 结果、后处理输出应分别验收。
+
+完成回调和 OSS 事件是两种触发方式，均不改变原始 verifier reward。OSS 事件方式的运行顺序是：Rollout Server 归档 `<run-id>.tar.gz` 到新前缀；OSS ObjectCreated/CopyObject 规则把对象事件送往 MNS；消费者使用限定范围的身份下载归档、提取同一 run 的轨迹与 verifier 文件，再提交 Ray 归因任务；成功写入独立输出前缀后才确认消息。Rollout Server 通过重命名归档文件时可能产生 CopyObject 事件，应按实际对象事件类型配置规则并用真实完成的 run 验证。输出应有 `run_id`、输入对象 URI/哈希、reward、verifier 证据、关联 step ID、归因结论和不确定性。幂等键应包含分析版本；否则旧输出存在时，新分析代码可能直接跳过。
+
+若消费者只输出 `deterministic_trajectory_profile` 等计数文件，没有读取 verifier 文件，**不算失败归因验收**。不要把概况文件命名或报告为归因结果。下文的完成回调示例是另一条路径；两种触发方式的处理代码和验收结果应分别记录。
+
+### 归因、去重与质检代码示例
+
+[postprocess_example.py](./postprocess_example.py) 给出一个不依赖模型的单条轨迹质检示例：读取同一归档中的 `agent/trajectory.json` 和 `verifier/ctrf.json`；记录失败测试证据引用，并检查空轨迹、异常步骤和缺少失败信息。它计算的内容哈希只用于标识单条记录，不能统计一批轨迹的重复率。示例运行方式：
+
+```bash
+python postprocess_example.py ./example-run.tar.gz ./example-analysis.json
+```
+
+生产环境应按 `analysis_version + 输入哈希` 检查已有输出，并保留每个 run 的来源记录；消息只在结果写入成功后确认。此示例只提出可能相关的步骤，`likely_cause` 保持 `unknown`。失败归因必须读取 verifier 的失败断言、日志和 Agent 工具调用，引用导致失败的步骤；成功轨迹可直接给出 verifier 通过的结论。质检不通过的记录应隔离，不直接进入 SFT 导出。
+
+[failure_attribution.py](./failure_attribution.py) 展示同一归档中的轨迹、CTRF、verifier 标准输出与 reward 如何进入 Ray 归因函数。成功样本输出简明结论；失败样本引用测试断言和相关工具调用。示例只实现了“目标目录多出文件”这一种可确定的失败规则，其他失败保留 `unknown`，不能把未覆盖的错误解释成已查明根因。
+
+批量精确去重使用 [ray_batch_dedup.py](./ray_batch_dedup.py)。先准备一个文件，每行写一份已完成归档的 `oss://<bucket>/<key>.tar.gz` URI；在拥有这些对象 `GetObject` 权限、能连接 Ray Client 的消费者环境执行：
+
+```bash
+python ray_batch_dedup.py --oss-manifest archives.txt --region <oss-region> \
+  --output duplicate-runs.jsonl --shards 8 --batch-size 32
+```
+
+算子按规范化 Agent 步骤计算 SHA-256；时间戳、session ID 和 token 计数不参与比较。指纹确定分片，所有相同指纹进入同一个 Ray Actor；Actor 用本地 SQLite 保存 run→指纹，并在整批输入结束后选字典序最小的 run 作为代表。输出 `total_trajectories`、`unique_trajectories`、`duplicate_trajectories` 和 `duplicate_rate = (total - unique) / total`，以及每条重复轨迹到代表 run 的映射。缺少有效轨迹的归档单独写入拒收清单，不进入重复率分母。OSS 对象按清单逐条读取，Ray 按批处理，避免一次把全部归档放进内存；无需扩大消费者的 Bucket 列举权限。扩大数据量时还需要给 Actor 的 SQLite 文件配置持久化或可重建的工作目录。这里统计的是**规范化内容完全相同**的比例；相似轨迹的近重复率需要另行定义相似度阈值和候选召回方法。
+
+归因任务成功时可按下面的结构验收（字段值仅为示意，不是一次运行的结果）：
+
+```json
+{
+  "run_id": "<run-id>",
+  "input_uri": "oss://<bucket>/<prefix>/<run-id>.tar.gz",
+  "input_sha256": "<sha256>",
+  "verifier_reward": 0.0,
+  "failed_tests": [{"name": "<test-name>", "evidence_file": "verifier/ctrf.json"}],
+  "findings": [{"step_id": 7, "observation": "<evidence>", "likely_cause": "<hypothesis>", "confidence": "low"}],
+  "analysis_version": "<version>"
+}
+```
 
 ## 工作原理
 
@@ -306,23 +357,19 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from ray import serve
 
-
 INPUT_ROOT = Path(os.getenv("TRACE_INPUT_ROOT", "/mnt/trace-input"))
 OUTPUT_ROOT = Path(os.getenv("TRACE_OUTPUT_ROOT", "/mnt/trace-output/trace-analysis"))
-
 
 class TraceRequest(BaseModel):
     path: str
     success: bool
     trace_id: str = Field(default_factory=lambda: uuid.uuid4().hex)
 
-
 def _next_chunk(generator):
     try:
         return True, ray.get(next(generator))
     except StopIteration:
         return False, None
-
 
 @ray.remote(num_cpus=0.25)
 class ModelActor:
@@ -374,7 +421,6 @@ class ModelActor:
                     if delta:
                         yield delta
 
-
 @ray.remote(num_cpus=0.25)
 class OssWriterActor:
     def write(self, trace_id: str, success: bool, analysis: str, model: str) -> str:
@@ -390,9 +436,7 @@ class OssWriterActor:
         path.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
         return str(path)
 
-
 api = FastAPI()
-
 
 @serve.deployment(num_replicas=1, ray_actor_options={"num_cpus": 0.5})
 @serve.ingress(api)
@@ -432,7 +476,6 @@ class TraceAnalyzer:
                 yield f"event: error\ndata: {json.dumps({'error': type(exc).__name__, 'trace_id': item.trace_id})}\n\n"
 
         return StreamingResponse(events(), media_type="text/event-stream")
-
 
 app = TraceAnalyzer.bind()
 ```
