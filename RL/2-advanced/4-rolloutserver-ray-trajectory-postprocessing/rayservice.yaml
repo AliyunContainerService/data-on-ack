@@ -1,0 +1,75 @@
+apiVersion: ray.io/v1
+kind: RayService
+metadata:
+  name: trace-analysis
+spec:
+  serveConfigV2: |
+    applications:
+      - name: trace-analysis
+        route_prefix: /
+        import_path: serve_app:app
+  rayClusterConfig:
+    rayVersion: "2.56.1"
+    headGroupSpec:
+      rayStartParams:
+        dashboard-host: "0.0.0.0"
+      template:
+        spec:
+          containers:
+            - name: ray-head
+              # Must contain Ray Serve, FastAPI, Pydantic, and httpx.
+              image: <RAY_IMAGE>
+              securityContext:
+                runAsUser: 0
+              ports:
+                - name: gcs-server
+                  containerPort: 6379
+                - name: dashboard
+                  containerPort: 8265
+                - name: serve
+                  containerPort: 8000
+              resources:
+                requests:
+                  cpu: "1"
+                  memory: 4Gi
+                limits:
+                  cpu: "2"
+                  memory: 4Gi
+              env:
+                - name: PYTHONPATH
+                  value: /opt/trace-analysis
+                - name: TRACE_INPUT_ROOT
+                  value: /mnt/trace-input
+                - name: TRACE_OUTPUT_ROOT
+                  value: /mnt/trace-output/trace-analysis
+                - name: BAILIAN_MODEL
+                  value: qwen-plus
+                - name: DASHSCOPE_API_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: bailian-api-key
+                      key: DASHSCOPE_API_KEY
+                - name: BAILIAN_BASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: bailian-api-key
+                      key: BAILIAN_BASE_URL
+              volumeMounts:
+                - name: app-code
+                  mountPath: /opt/trace-analysis
+                  readOnly: true
+                - name: trace-input
+                  mountPath: /mnt/trace-input
+                  readOnly: true
+                - name: trace-output
+                  mountPath: /mnt/trace-output
+          volumes:
+            - name: app-code
+              configMap:
+                name: trace-analysis-code
+            - name: trace-input
+              persistentVolumeClaim:
+                claimName: trace-analysis-rollout-pvc
+            - name: trace-output
+              persistentVolumeClaim:
+                claimName: trace-analysis-output-pvc

@@ -1,11 +1,10 @@
 # 用 RolloutServer 管理轨迹
 
+ACK Helm 仓库的现行后端选择（E2B 或 SandboxSet）、并发和 OSS 归档配置，参见[Rollout Server 使用与配置](USAGE_ZH.md)。下面保留 `kube-rl` chart 的入门示例，安装前应按实际 release 版本核对 values。
+
 一步一步在 ACK 上部署 **rollout server**（`kube-rl` Helm 发布），用它运行 trial、持久化轨迹、并提供 RL 训练数据。
 
-**为什么。** 在基础的 [执行 RL 任务](../../1-user-guide/2-run-an-rl-task/README_ZH.md) 流程里，训练框架直接驱动沙箱
-trial，轨迹只是本地文件。规模化后你需要一个管控面来接管 trial 执行与轨迹生命周期：容错（心跳判活、退避重试、
-分阶段超时、attach 续跑恢复）、配额、成本归因，以及一个可查询的全量轨迹存储（`trajectory.json`、逐轮日志、
-`rollout_details` = token_ids/logprobs）外加 Viewer（Job/Task/Trial、时间线、对比网格）。
+在基础的 [执行 RL 任务](../../1-user-guide/2-run-an-rl-task/README_ZH.md) 流程中，训练框架直接驱动沙箱 trial，轨迹保存在本地。Rollout Server 统一管理试次执行和轨迹生命周期，提供心跳检测、失败重试、分阶段超时、续跑恢复及并发配额。它保存 `trajectory.json`、逐轮日志和 `rollout_details`（token IDs、logprobs），并通过 Viewer 查询 Job、Task 和 Trial。
 
 **前置条件**
 
@@ -112,4 +111,4 @@ DEPLOY=colocate ... bash examples/remote_agent/run_swebench.sh
 ## 说明
 
 - 最好与**可恢复的 Environment** 后端 + 持久 results 卷搭配：重启后 re-attach 在途 trial，而不是泄漏沙箱 Pod。
-- **OSS 直写** results 后端可让智能体把输出直接写共享卷，跳过 rollout 结束时经 API server 的产物回传。
+- OSS 有两条写入路径：Server 完成后[归档写 OSS](USAGE_ZH.md#完成归档直写-oss)，以及[agent 在 Sandbox 内直接写 OSS](USAGE_ZH.md#agent-在-sandbox-内直接写-oss)。后者的自定义文件与 Harbor 原生轨迹分开验收。

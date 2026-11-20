@@ -1,14 +1,11 @@
 # Manage Trajectories with RolloutServer
 
+For current ACK Helm backend selection (E2B or SandboxSet), concurrency, and OSS archiving, see [Rollout Server configuration and use](USAGE.md). The `kube-rl` chart below remains an introductory example; inspect the values of the release version you install.
+
 Step-by-step guide to deploy a **rollout server** (the `kube-rl` Helm release) on ACK and use it to
 run trials, persist trajectories, and serve RL training data.
 
-**Why.** In the basic [run an RL task](../../1-user-guide/2-run-an-rl-task/README.md) flow, the
-training framework drives sandbox trials directly and trajectories land as local files. At scale you
-want a control plane that owns trial execution and trajectory lifecycle: fault tolerance (heartbeat
-liveness, backoff retries, per-phase timeouts, attach-and-resume recovery), quota, cost attribution,
-and a queryable store of every trajectory (`trajectory.json`, per-round logs, `rollout_details` =
-token_ids/logprobs) with a Viewer (Job/Task/Trial, timeline, comparison grid).
+In the basic [run an RL task](../../1-user-guide/2-run-an-rl-task/README.md) flow, the training framework drives sandbox trials directly and saves trajectories locally. Rollout Server manages trial execution and trajectory retention, including heartbeat checks, retries, phase timeouts, recovery, and concurrency quotas. It stores `trajectory.json`, per-round logs, and `rollout_details` (token IDs and logprobs); the Viewer makes Jobs, Tasks, and Trials searchable.
 
 **Prerequisites**
 
@@ -121,5 +118,4 @@ TensorBoard + the Viewer together give you training curves and per-trial attribu
 
 - Best combined with a **recoverable environment** backend + persistent results volume: a restart
   re-attaches in-flight trials instead of leaking sandbox pods.
-- An **OSS-direct** results backend lets agents write outputs straight to a shared volume, skipping
-  the end-of-rollout artifact download through the API server.
+- OSS has two write paths: [Server archives after completion](USAGE.md#write-completed-archives-directly-to-oss), and [agent writes inside the Sandbox](USAGE.md#agent-writes-directly-to-oss-inside-the-sandbox). Validate custom agent files separately from Harbor's native trajectory.
