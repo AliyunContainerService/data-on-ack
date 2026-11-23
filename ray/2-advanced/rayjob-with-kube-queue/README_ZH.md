@@ -17,7 +17,7 @@
 | KubeRay Operator | 观察 RayJob，创建 RayCluster 和提交器 Job，跟踪执行状态并清理集群。 |
 | ACK 调度器 | 为已经创建的 Pod 选择实际节点。配额允许出队不代表节点一定能容纳 Pod。 |
 
-本文使用 ACK Koord Queue，资源为 `Queue`、`QueueUnit` 和 `ElasticQuotaTree`，不使用 Kubernetes Kueue 的 `ClusterQueue`、`LocalQueue` 或 `kueue.x-k8s.io/queue-name` 标签。队列关联来自命名空间与配额叶子节点的绑定。
+本文使用 ACK Koord Queue，资源为 `Queue`、`QueueUnit` 和 `ElasticQuotaTree`。队列关联来自命名空间与配额叶子节点的绑定。
 
 本例让每个 RayJob 通过 `rayClusterSpec` 创建独立集群；不使用 `clusterSelector` 向已有集群提交。后者的集群资源在任务提交前就已分配，不适用本文的集群创建前排队流程。
 

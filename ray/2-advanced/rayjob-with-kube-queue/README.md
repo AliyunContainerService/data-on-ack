@@ -17,7 +17,7 @@ Use **ACK Koord Queue (formerly ack-kube-queue)** to admit RayJobs against team 
 | KubeRay Operator | Creates the RayCluster and submitter Job, tracks execution, and cleans up the cluster. |
 | ACK scheduler | Assigns the resulting Pods to nodes. Quota admission does not guarantee that Pods can fit on available nodes. |
 
-This guide uses ACK Koord Queue resources: `Queue`, `QueueUnit`, and `ElasticQuotaTree`. It does not use Kubernetes Kueue's `ClusterQueue`, `LocalQueue`, or `kueue.x-k8s.io/queue-name` label. Namespace bindings select the quota queue.
+This guide uses ACK Koord Queue resources: `Queue`, `QueueUnit`, and `ElasticQuotaTree`. Namespace bindings select the quota queue.
 
 Each RayJob creates its own cluster through `rayClusterSpec`. The example does not use `clusterSelector` to target an existing cluster, whose resources have already been allocated before job submission.
 
