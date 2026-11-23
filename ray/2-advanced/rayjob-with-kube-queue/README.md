@@ -37,6 +37,35 @@ A submitted job passes through these stages. Components cooperate through resour
 
 The queue decides whether to admit a RayJob based on its total resource request. After admission, the Head and individual Workers may still be scheduled at different times. If a job needs at least four Pods working together, scheduling should first confirm that resources can accommodate all four before allowing them through. This avoids starting only part of the group and leaving the job waiting for the remaining resources. Configure and validate Gang Scheduling separately for this requirement. In the shared-GPU example below, Workers process independent batch tasks, so the remaining Workers can continue working while others are reclaimed or replaced.
 
+### Enable Gang Scheduling on ACK
+
+The ACK-managed KubeRay Operator defaults to `batchScheduler: kube-scheduler`, which integrates with ACK Scheduler's Gang Scheduling. For a RayCluster you create directly, add the following label to `metadata.labels`:
+
+```yaml
+# Merge into the RayCluster manifest.
+metadata:
+  labels:
+    ray.io/gang-scheduling-enabled: "true"
+```
+
+In this guide, the RayJob creates the RayCluster. Add the following label to **the RayJob's `metadata.labels`** before submitting it. KubeRay passes the label to the generated RayCluster and adds group labels to the Head and Worker Pods. See the [ACK RayJob configuration guide](https://help.aliyun.com/en/ack/cloud-native-ai-suite/use-cases/how-to-automate-ray-job-execution-in-ack-cluster).
+
+```yaml
+# Merge into the RayJob manifest.
+metadata:
+  labels:
+    ray.io/scheduler-name: kube-scheduler
+```
+
+After the RayJob is admitted, check that its Head and Worker Pods share the same group name and that `min-available` matches the expected count. A cluster with one Head and three fixed Worker replicas should have a group minimum of four Pods. Use the same priority for all Pods in the group. See the [ACK Gang Scheduling guide](https://help.aliyun.com/en/ack/ack-managed-and-ack-dedicated/user-guide/work-with-gang-scheduling).
+
+```bash
+kubectl get pods -n '<namespace>' -l 'ray.io/cluster=<raycluster-name>' \
+  -L pod-group.scheduling.sigs.k8s.io/name,pod-group.scheduling.sigs.k8s.io/min-available
+```
+
+To use another `batchScheduler` with the ACK-managed KubeRay Operator, open an Alibaba Cloud support ticket with the cluster ID and the target scheduler name.
+
 ## Prerequisites
 
 - An ACK Pro or ACK Lingjun cluster running Kubernetes 1.24 or later, with KubeRay Operator installed. See the [ACK RayJob scheduling guide](https://help.aliyun.com/en/ack/cloud-native-ai-suite/use-cases/how-to-automate-ray-job-execution-in-ack-cluster) for supported configurations.

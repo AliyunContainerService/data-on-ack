@@ -37,6 +37,35 @@
 
 队列按整个 RayJob 的资源需求判断是否放行。放行后，Head 和各个 Worker 仍可能在不同时间获得调度。如果一个任务至少需要 4 个 Pod 协同运行，就需要先确认资源足以容纳这 4 个 Pod，再允许它们通过调度，避免只启动部分 Pod、任务却因资源不齐而一直等待。这种成组调度的要求需要另外配置并验证 Gang Scheduling。下面的共享 GPU 案例中，各个 Worker 可以独立处理批任务，部分 Worker 被回收或重建时，其余 Worker 仍可继续工作。
 
+### 在 ACK 上启用 Gang Scheduling
+
+ACK 托管的 KubeRay Operator 默认配置为 `batchScheduler: kube-scheduler`，已对接 ACK 调度器的 Gang Scheduling。对于直接创建的 RayCluster，在清单的 `metadata.labels` 中添加以下标记即可启用：
+
+```yaml
+# 合入 RayCluster 清单
+metadata:
+  labels:
+    ray.io/gang-scheduling-enabled: "true"
+```
+
+本文的 RayCluster 由 RayJob 创建。在提交 RayJob 前，将以下标签加到 **RayJob 的 `metadata.labels`**。KubeRay 会将标签传给生成的 RayCluster，并为 Head 和 Worker Pod 写入分组标签。参见 [ACK RayJob 配置指南](https://help.aliyun.com/zh/ack/cloud-native-ai-suite/use-cases/how-to-automate-ray-job-execution-in-ack-cluster)。
+
+```yaml
+# 合入 RayJob 清单
+metadata:
+  labels:
+    ray.io/scheduler-name: kube-scheduler
+```
+
+RayJob 出队后，用下面的命令检查同一 RayCluster 的 Head 和 Worker 是否具有相同的分组名称，以及 `min-available` 是否符合预期。例如，1 个 Head 和 3 个固定副本的 Worker 应形成一个最少需要 4 个 Pod 的组。同一组内的 Pod 应使用相同的优先级。参见 [ACK Gang Scheduling 指南](https://help.aliyun.com/zh/ack/ack-managed-and-ack-dedicated/user-guide/work-with-gang-scheduling)。
+
+```bash
+kubectl get pods -n '<namespace>' -l 'ray.io/cluster=<raycluster-name>' \
+  -L pod-group.scheduling.sigs.k8s.io/name,pod-group.scheduling.sigs.k8s.io/min-available
+```
+
+如果需要在 ACK 托管的 KubeRay Operator 上改用其他 `batchScheduler`，请提交阿里云工单申请支持，并提供集群 ID 和目标调度器名称。
+
 ## 前提条件
 
 - ACK Pro 或 ACK 灵骏集群，Kubernetes 1.24 或以上，已安装 KubeRay Operator。组件适用范围以 [ACK RayJob 调度文档](https://help.aliyun.com/zh/ack/cloud-native-ai-suite/use-cases/how-to-automate-ray-job-execution-in-ack-cluster)为准。
