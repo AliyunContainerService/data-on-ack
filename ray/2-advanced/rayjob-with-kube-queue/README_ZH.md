@@ -33,9 +33,9 @@
 | 4. 调度 Pod | ACK scheduler 检查节点资源、亲和性、污点和配额约束；启用相应策略时，可回收其他配额组借用的资源。 | Pod 的 `PodScheduled` 条件和调度事件。 |
 | 5. 执行计算 | Ray 在已启动的 Head/Worker 上分配 task、actor 和 placement group。 | Ray 任务状态、逻辑资源和业务日志。 |
 
-**出队只意味着允许进入后续调度流程。** 队列不替代节点选择，也不因出队而预留某块物理 GPU；任务可能已经出队，但 Pod 仍因节点资源或拓扑不匹配而 Pending。反过来，若 RayJob 仍挂起且尚无 Pod，scheduler 无法为这个任务执行 Pod 抢占。参见 [队列准入检查](https://help.aliyun.com/zh/ack/ack-managed-and-ack-dedicated/user-guide/add-custom-admission-checks-to-ack-kube-queue)与 [Capacity Scheduling](https://help.aliyun.com/zh/ack/ack-managed-and-ack-dedicated/user-guide/use-capacity-scheduling/)。
+**出队只意味着允许进入后续调度流程。** 队列不替代节点选择，也不因出队而预留某块物理 GPU；任务可能已经出队，但 Pod 仍因节点资源或拓扑不匹配而 Pending。若 RayJob 仍处于挂起状态且尚未创建 Pod，scheduler 就没有该任务的待调度对象，无法为其发起资源抢占。参见 [队列准入检查](https://help.aliyun.com/zh/ack/ack-managed-and-ack-dedicated/user-guide/add-custom-admission-checks-to-ack-kube-queue)与 [Capacity Scheduling](https://help.aliyun.com/zh/ack/ack-managed-and-ack-dedicated/user-guide/use-capacity-scheduling/)。
 
-队列整体准入也不等于 Gang Scheduling：若业务要求一组 Pod 满足最小成员数后才能启动，还需单独配置并验证 Gang 策略。下面的共享 GPU 案例使用可以独立推进、允许 Worker 重建的批处理任务。
+队列按整个 RayJob 的资源需求判断是否放行。放行后，Head 和各个 Worker 仍可能在不同时间获得调度。如果一个任务至少需要 4 个 Pod 协同运行，就需要先确认资源足以容纳这 4 个 Pod，再允许它们通过调度，避免只启动部分 Pod、任务却因资源不齐而一直等待。这种成组调度的要求需要另外配置并验证 Gang Scheduling。下面的共享 GPU 案例中，各个 Worker 可以独立处理批任务，部分 Worker 被回收或重建时，其余 Worker 仍可继续工作。
 
 ## 前提条件
 
