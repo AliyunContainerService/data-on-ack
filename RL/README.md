@@ -19,6 +19,8 @@ covered in the run guide. Each guide ships an English `README.md` and a Chinese 
 | # | Guide | Problem it solves |
 |---|-------|-------------------|
 | 3 | [Manage trajectories with RolloutServer](2-advanced/3-rolloutserver-trajectory-management/README.md) | Deploy a rollout control plane: run trials with fault tolerance/quota, persist trajectories, serve RL training data |
+| 4 | [Support tens of thousands of concurrent rollouts](2-advanced/4-rolloutserver-high-concurrency/README.md) | Scale RolloutServer to 10k–50k concurrent rollouts: architecture, deployment modes, quota/scheduler/storage tuning, sandbox capacity, verification |
+| 5 | [Serve Evaluation and RL on one RolloutServer](2-advanced/5-rolloutserver-eval-rl/README.md) | Share one server between evaluation and RL: per-request model endpoints/credentials, provider Secret injection, Backend/Queue isolation |
 
 More advanced topics (image caching, P2P-accelerated environment setup) are planned.
 
