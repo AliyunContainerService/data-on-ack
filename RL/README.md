@@ -16,11 +16,19 @@ covered in the run guide. Each guide ships an English `README.md` and a Chinese 
 
 ## 2. Advanced
 
+### RolloutServer
+
+A dedicated guide series for the rollout control plane (`kube-rl`):
+
 | # | Guide | Problem it solves |
 |---|-------|-------------------|
 | 3 | [Manage trajectories with RolloutServer](2-advanced/3-rolloutserver-trajectory-management/README.md) | Deploy a rollout control plane: run trials with fault tolerance/quota, persist trajectories, serve RL training data |
 | 4 | [Support tens of thousands of concurrent rollouts](2-advanced/4-rolloutserver-high-concurrency/README.md) | Scale RolloutServer to 10k–50k concurrent rollouts: architecture, deployment modes, quota/scheduler/storage tuning, sandbox capacity, verification |
 | 5 | [Serve Evaluation and RL on one RolloutServer](2-advanced/5-rolloutserver-eval-rl/README.md) | Share one server between evaluation and RL: per-request model endpoints/credentials, provider Secret injection, Backend/Queue isolation |
+| 6 | [Task management](2-advanced/6-rolloutserver-task-management/README.md) | Full job/run/trial lifecycle: submit, query, cancel, retry, dataset batches, Viewer queries, SDK usage and pitfalls |
+| 7 | [Token management](2-advanced/7-rolloutserver-token-management/README.md) | API authentication: regular/admin tokens, Secret injection, smooth multi-token rotation, batch controller auth |
+
+### Other topics
 
 More advanced topics (image caching, P2P-accelerated environment setup) are planned.
 
